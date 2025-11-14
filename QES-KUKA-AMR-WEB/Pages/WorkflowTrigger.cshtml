@@ -1,0 +1,2072 @@
+@page
+@model QES_KUKA_AMR_WEB.Pages.WorkflowTriggerModel
+@{
+    ViewData["Title"] = "Workflow Trigger";
+    Layout = "_DashboardLayout";
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/workflow-trigger.css" asp-append-version="true" />
+    <style>
+        /* Workflow Scheduler Styles */
+        .modal.schedule-modal .modal-dialog {
+            max-width: 980px;
+        }
+
+        .modal.schedule-modal .schedule-layout {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 1.25rem;
+        }
+
+        .modal.schedule-modal .schedule-layout.form-visible {
+            grid-template-columns: 2fr 1fr;
+        }
+
+        .schedule-panel {
+            border: 1px solid #e2e8f0;
+            border-radius: 0.75rem;
+            padding: 1rem;
+            background-color: #ffffff;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .schedule-panel__header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .schedule-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .schedule-table th,
+        .schedule-table td {
+            padding: 0.5rem;
+            border-bottom: 1px solid #e2e8f0;
+            font-size: 0.85rem;
+        }
+
+        .schedule-table tbody tr:hover {
+            background-color: #f8fafc;
+        }
+
+        .schedule-form {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            margin-top: 0.5rem;
+        }
+
+        .schedule-form .form-check {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .schedule-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            padding: 0.2rem 0.6rem;
+            border-radius: 999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .schedule-badge.active {
+            background-color: #dcfce7;
+            color: #166534;
+        }
+
+        .schedule-badge.paused {
+            background-color: #fee2e2;
+            color: #991b1b;
+        }
+
+        .schedule-badge.once {
+            background-color: #e0f2fe;
+            color: #0369a1;
+        }
+
+        .schedule-badge.recurring {
+            background-color: #ede9fe;
+            color: #5b21b6;
+        }
+
+        .schedule-empty-state {
+            text-align: center;
+            padding: 1.5rem;
+            color: #64748b;
+        }
+
+        .schedule-empty-state span {
+            display: block;
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        @@media (max-width: 992px) {
+            .modal.schedule-modal .schedule-layout {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+}
+
+<!-- Toast Notification Container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<div class="content-header mb-4">
+    <div>
+        <h2 class="mb-1">Workflow Trigger</h2>
+        <p class="text-muted mb-0">Select a workflow and submit it directly to the mission service.</p>
+    </div>
+</div>
+
+@if (!string.IsNullOrEmpty(Model.StatusMessage))
+{
+    var alertClass = Model.StatusType switch
+    {
+        "success" => "alert-success",
+        "warning" => "alert-warning",
+        "danger" => "alert-danger",
+        _ => "alert-info"
+    };
+
+    <div class="alert @alertClass alert-dismissible fade show" role="alert">
+        @Model.StatusMessage
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+<div id="backToAllButton" class="mb-4" style="display:none;">
+    <button type="button" class="btn btn-outline-primary" onclick="exitFocusMode()">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16" style="margin-right: 0.5rem;">
+            <path fill-rule="evenodd" d="M15 8a.5.5 0 0 0-.5-.5H2.707l3.147-3.146a.5.5 0 1 0-.708-.708l-4 4a.5.5 0 0 0 0 .708l4 4a.5.5 0 0 0 .708-.708L2.707 8.5H14.5A.5.5 0 0 0 15 8z"/>
+        </svg>
+        Back to All Workflows
+    </button>
+</div>
+
+@if (Model.GroupedWorkflows.Count == 0)
+{
+    <div class="empty-state">
+        <div class="empty-state-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" fill="currentColor" viewBox="0 0 16 16">
+                <path d="M4 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H4zm0 1h8a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1z"/>
+                <path d="M4.603 12.087a.81.81 0 0 1-.438-.42c-.195-.388-.13-.776.08-1.102.198-.307.526-.568.897-.787a7.68 7.68 0 0 1 1.482-.645 19.701 19.701 0 0 0 1.062-2.227 7.269 7.269 0 0 1-.43-1.295c-.086-.4-.119-.796-.046-1.136.075-.354.274-.672.65-.823.192-.077.4-.12.602-.077a.7.7 0 0 1 .477.365c.088.164.12.356.127.538.007.187-.012.395-.047.614-.084.51-.27 1.134-.52 1.794a10.954 10.954 0 0 0 .98 1.686 5.753 5.753 0 0 1 1.334.05c.364.065.734.195.96.465.12.144.193.32.2.518.007.192-.047.382-.138.563a1.04 1.04 0 0 1-.354.416.856.856 0 0 1-.51.138c-.331-.014-.654-.196-.933-.417a5.716 5.716 0 0 1-.911-.95 11.642 11.642 0 0 0-1.997.406 11.311 11.311 0 0 1-1.021 1.51c-.29.35-.608.655-.926.787a.793.793 0 0 1-.58.029z"/>
+            </svg>
+        </div>
+        <h3>No workflows available</h3>
+        <p>Synchronize workflows from Workflow Management before triggering.</p>
+        <a class="btn btn-primary" href="/WorkflowManagement">Go to Workflow Management</a>
+    </div>
+}
+else
+{
+    <div class="search-container mb-4">
+        <div class="input-group">
+            <span class="input-group-text">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                    <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"/>
+                </svg>
+            </span>
+            <input type="text" id="workflowSearch" class="form-control" placeholder="Search workflows by name, number, code, or layout..." />
+            <button class="btn btn-outline-secondary" type="button" id="clearSearch" style="display:none;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                    <path d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8 2.146 2.854Z"/>
+                </svg>
+            </button>
+        </div>
+        <div class="search-info mt-2">
+            <small class="text-muted" id="searchResultCount"></small>
+        </div>
+    </div>
+
+    <div id="noResultsMessage" class="alert alert-info" style="display:none;">
+        <strong>No workflows found</strong> matching your search criteria. Try different keywords.
+    </div>
+
+    <div class="accordion" id="layoutAccordion">
+        @{
+            var layoutIndex = 0;
+        }
+        @foreach (var layoutGroup in Model.GroupedWorkflows.OrderBy(g => g.Key))
+        {
+            var layoutCode = layoutGroup.Key;
+            var workflows = layoutGroup.Value;
+            var panelId = WorkflowTriggerModel.GetLayoutPanelId(layoutCode);
+            var isFirstPanel = layoutIndex == 0;
+            var collapseClass = isFirstPanel ? "show" : "";
+
+            <div class="accordion-item">
+                <h2 class="accordion-header">
+                    <button class="accordion-button @(isFirstPanel ? "" : "collapsed")"
+                            type="button"
+                            data-bs-toggle="collapse"
+                            data-bs-target="#@panelId"
+                            aria-expanded="@(isFirstPanel ? "true" : "false")"
+                            aria-controls="@panelId">
+                        <span class="layout-title">Layout: @layoutCode</span>
+                        <span class="badge bg-primary ms-2">@workflows.Count</span>
+                    </button>
+                </h2>
+                <div id="@panelId"
+                     class="accordion-collapse collapse @collapseClass"
+                     data-bs-parent="#layoutAccordion">
+                    <div class="accordion-body">
+                        <div class="workflow-grid">
+                            @foreach (var workflow in workflows)
+                            {
+                                var identifier = $"workflow_{workflow.Id}";
+                                var templateCodeValue = string.IsNullOrWhiteSpace(workflow.ExternalCode) ? workflow.Number : workflow.ExternalCode.Trim();
+                                <div class="workflow-card"
+                                     data-workflow-id="@workflow.Id"
+                                     data-template-code="@templateCodeValue">
+                <div class="card-header">
+                    <div class="card-header-content">
+                        <div>
+                            <h4>@workflow.Name</h4>
+                            <div class="metadata">
+                                <span title="Workflow Number">@workflow.Number</span>
+                                <span title="External Code">@workflow.ExternalCode</span>
+                            </div>
+                        </div>
+                        <span class="status @(workflow.Status == 1 ? "status-enabled" : "status-disabled")">
+                            @(workflow.Status == 1 ? "Enabled" : "Disabled")
+                        </span>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-link focus-btn" onclick="enableFocusMode(@workflow.Id)" title="Focus on this workflow">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                            <path d="M1.5 1a.5.5 0 0 0-.5.5v4a.5.5 0 0 1-1 0v-4A1.5 1.5 0 0 1 1.5 0h4a.5.5 0 0 1 0 1h-4zM10 .5a.5.5 0 0 1 .5-.5h4A1.5 1.5 0 0 1 16 1.5v4a.5.5 0 0 1-1 0v-4a.5.5 0 0 0-.5-.5h-4a.5.5 0 0 1-.5-.5zM.5 10a.5.5 0 0 1 .5.5v4a.5.5 0 0 0 .5.5h4a.5.5 0 0 1 0 1h-4A1.5 1.5 0 0 1 0 14.5v-4a.5.5 0 0 1 .5-.5zm15 0a.5.5 0 0 1 .5.5v4a1.5 1.5 0 0 1-1.5 1.5h-4a.5.5 0 0 1 0-1h4a.5.5 0 0 0 .5-.5v-4a.5.5 0 0 1 .5-.5z"/>
+                        </svg>
+                    </button>
+                </div>
+
+                <div class="d-flex gap-2 mb-2">
+                    <form class="trigger-form flex-fill" data-workflow-id="@workflow.Id">
+                        <input type="hidden" name="WorkflowId" value="@workflow.Id" />
+                        <button type="submit" class="btn btn-primary w-100" @(workflow.Status != 1 ? "disabled" : "")>
+                            <span class="btn-icon">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                                    <path d="M11.596 8.697l-6.363 3.692c-.54.313-1.233-.066-1.233-.697V4.308c0-.63.692-1.01 1.233-.696l6.363 3.692a.802.802 0 0 1 0 1.393z"/>
+                                </svg>
+                            </span>
+                            <span class="btn-text">Trigger</span>
+                            <span class="spinner-border spinner-border-sm d-none" role="status"></span>
+                        </button>
+                    </form>
+
+                    <div class="btn-group flex-fill cancel-btn-group" role="group">
+                        <button type="button" class="btn btn-warning dropdown-toggle w-100 cancel-dropdown-btn" data-bs-toggle="dropdown" aria-expanded="false" disabled data-workflow-id="@workflow.Id">
+                            <span class="btn-icon">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                                    <path d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8 2.146 2.854Z"/>
+                                </svg>
+                            </span>
+                            <span class="btn-text">Cancel</span>
+                        </button>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item cancel-action" href="#" data-workflow-id="@workflow.Id" data-cancel-mode="NORMAL">NORMAL</a></li>
+                            <li><a class="dropdown-item cancel-action" href="#" data-workflow-id="@workflow.Id" data-cancel-mode="FORCE">FORCE</a></li>
+                            <li><a class="dropdown-item cancel-action" href="#" data-workflow-id="@workflow.Id" data-cancel-mode="REDIRECT_START">REDIRECT_START</a></li>
+                        </ul>
+                    </div>
+                </div>
+
+                <button type="button" class="btn btn-outline-primary w-100 mb-2 d-flex align-items-center justify-content-center gap-2" onclick="openWorkflowScheduler(@workflow.Id, '@workflow.Name')" @(workflow.Status != 1 ? "disabled" : "")>
+                    <div class="d-flex align-items-center gap-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                            <path d="M3.5 0a.5.5 0 0 1 .5.5V1h8V.5a.5.5 0 0 1 1 0V1h1a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2h1V.5a.5.5 0 0 1 .5-.5zM1 4v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V4H1z"/>
+                        </svg>
+                        <span>Schedule</span>
+                    </div>
+                    @if (workflow.ActiveSchedulesCount > 0)
+                    {
+                        <span class="badge bg-success rounded-pill" title="Active schedules">@workflow.ActiveSchedulesCount</span>
+                    }
+                </button>
+
+                <div class="mission-status-section" style="display:none;" data-mission-code="">
+                    <div class="status-header">
+                        <h5>Mission Status</h5>
+                        <button class="btn btn-sm btn-outline-secondary stop-polling-btn" type="button">Stop Polling</button>
+                    </div>
+                    <div class="status-display">
+                        <span class="status-badge status-created">
+                            <span class="status-icon">⏱</span>
+                            <span class="status-text">Pending</span>
+                        </span>
+                    </div>
+                    <div class="job-details mt-2">
+                        <small class="d-block text-muted">Mission: <strong class="mission-code-display">-</strong></small>
+                        <small class="d-block text-muted">Robot: <strong class="robot-id-display">-</strong></small>
+                        <small class="d-block text-muted">Duration: <strong class="duration-display">-</strong></small>
+                    </div>
+                </div>
+            </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            layoutIndex++;
+        }
+    </div>
+}
+
+<!-- Workflow Schedule Manager Modal -->
+<div class="modal fade schedule-modal" id="workflowScheduleModal" tabindex="-1" aria-labelledby="workflowScheduleModalTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="workflowScheduleModalTitle">Workflow Scheduler</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="schedule-layout">
+                    <div class="schedule-panel" id="wf-scheduleListPanel">
+                        <div class="schedule-panel__header">
+                            <div>
+                                <h6 class="mb-1">Schedules</h6>
+                                <small class="text-muted" id="wf-scheduleListCount">No schedules configured.</small>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-primary" onclick="prepareNewWorkflowSchedule()">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
+                                    <path d="M8 4a.5.5 0 0 1 .5.5V7h2.5a.5.5 0 0 1 0 1H8.5v2.5a.5.5 0 0 1-1 0V8H5a.5.5 0 0 1 0-1h2.5V4.5A.5.5 0 0 1 8 4z"/>
+                                </svg>
+                                New Schedule
+                            </button>
+                        </div>
+                        <div id="wf-scheduleListContainer">
+                            <div class="schedule-empty-state" id="wf-scheduleEmptyState">
+                                <span>🗓️</span>
+                                <p class="mb-0">No schedules yet. Create one to automate this workflow.</p>
+                            </div>
+                            <table class="schedule-table d-none" id="wf-scheduleTable">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 30%;">Schedule</th>
+                                        <th style="width: 25%;">Next Run</th>
+                                        <th style="width: 25%;">Last Run</th>
+                                        <th style="width: 20%;" class="text-end">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="wf-scheduleTableBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="schedule-panel d-none" id="wf-scheduleFormWrapper">
+                        <div class="schedule-panel__header">
+                            <div>
+                                <h6 class="mb-1" id="wf-scheduleFormTitle">New Schedule</h6>
+                                <small class="text-muted" id="wf-scheduleFormSubtitle">Automate workflow execution.</small>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="hideWorkflowScheduleForm()">Cancel</button>
+                        </div>
+
+                        <form class="schedule-form" id="wf-scheduleForm" onsubmit="submitWorkflowScheduleForm(event)">
+                            <input type="hidden" id="wf-scheduleIdInput" />
+
+                            <div>
+                                <label class="form-label fw-semibold">Trigger Type</label>
+                                <div class="d-flex gap-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="wf-triggerType" id="wf-triggerTypeOnce" value="Once" checked onchange="toggleWorkflowScheduleMode()">
+                                        <label class="form-check-label" for="wf-triggerTypeOnce">
+                                            One-time
+                                        </label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="wf-triggerType" id="wf-triggerTypeRecurring" value="Recurring" onchange="toggleWorkflowScheduleMode()">
+                                        <label class="form-check-label" for="wf-triggerTypeRecurring">
+                                            Recurring
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div id="wf-onceFields">
+                                <label for="wf-runAtInput" class="form-label">Run at (your local time)</label>
+                                <input type="datetime-local" id="wf-runAtInput" class="form-control" />
+                                <small class="text-muted">
+                                    Enter time in your local timezone. It will be converted to: <strong id="wf-timezoneHint">UTC</strong>
+                                </small>
+                            </div>
+
+                            <div id="wf-recurringFields" class="d-none">
+                                <div class="mb-3">
+                                    <label for="wf-frequencyType" class="form-label fw-semibold">Frequency</label>
+                                    <select id="wf-frequencyType" class="form-select" onchange="onWorkflowFrequencyChange()">
+                                        <option value="daily">Every day</option>
+                                        <option value="hourly">Every hour</option>
+                                        <option value="every-x-hours">Every X hours</option>
+                                        <option value="every-x-minutes">Every X minutes</option>
+                                    </select>
+                                </div>
+
+                                <div id="wf-dailyTimeControls" class="mb-3">
+                                    <label class="form-label fw-semibold">Run at</label>
+                                    <div class="d-flex gap-2 align-items-center">
+                                        <input type="number" id="wf-dailyHour" class="form-control" style="width: 80px;"
+                                               min="1" max="12" placeholder="HH"
+                                               oninput="validateTimeInput(this, 1, 12)"
+                                               onblur="if(this.value==='')this.value=3"
+                                               onchange="updateWorkflowSchedulePreview()">
+                                        <span>:</span>
+                                        <input type="number" id="wf-dailyMinute" class="form-control" style="width: 80px;"
+                                               min="0" max="59" placeholder="MM"
+                                               oninput="validateTimeInput(this, 0, 59)"
+                                               onblur="if(this.value==='')this.value=0"
+                                               onchange="updateWorkflowSchedulePreview()">
+                                        <select id="wf-dailyAmPm" class="form-select" style="width: 80px;" onchange="updateWorkflowSchedulePreview()">
+                                            <option value="AM">AM</option>
+                                            <option value="PM">PM</option>
+                                        </select>
+                                    </div>
+                                    <small class="text-muted">Enter time in 12-hour format (e.g., 3:00 PM)</small>
+                                </div>
+
+                                <div id="wf-hourlyTimeControls" class="mb-3 d-none">
+                                    <label class="form-label fw-semibold">At minute</label>
+                                    <select id="wf-hourlyMinute" class="form-select" onchange="updateWorkflowSchedulePreview()">
+                                        <option value="0" selected>:00 (on the hour)</option>
+                                        <option value="15">:15 (quarter past)</option>
+                                        <option value="30">:30 (half past)</option>
+                                        <option value="45">:45 (quarter to)</option>
+                                    </select>
+                                </div>
+
+                                <div id="wf-everyXHoursControls" class="mb-3 d-none">
+                                    <label class="form-label fw-semibold">Interval</label>
+                                    <div class="d-flex gap-2 align-items-center">
+                                        <span>Every</span>
+                                        <input type="number" id="wf-hoursInterval" class="form-control" style="width: 80px;" min="1" max="23" value="2" onchange="updateWorkflowSchedulePreview()">
+                                        <span>hour(s)</span>
+                                    </div>
+                                    <small class="text-muted">Will run at 12 AM, then every X hours</small>
+                                </div>
+
+                                <div id="wf-everyXMinutesControls" class="mb-3 d-none">
+                                    <label class="form-label fw-semibold">Interval</label>
+                                    <div class="d-flex gap-2 align-items-center">
+                                        <span>Every</span>
+                                        <select id="wf-minutesInterval" class="form-select" style="width: 100px;" onchange="updateWorkflowSchedulePreview()">
+                                            <option value="5">5</option>
+                                            <option value="10">10</option>
+                                            <option value="15">15</option>
+                                            <option value="30" selected>30</option>
+                                        </select>
+                                        <span>minute(s)</span>
+                                    </div>
+                                </div>
+
+                                <div id="wf-schedulePreview" class="alert alert-info mb-3">
+                                    <strong>📅 Schedule:</strong>
+                                    <div id="wf-schedulePreviewText" class="mt-1">Daily at 3:00 PM</div>
+                                </div>
+
+                                <div class="form-check form-switch mb-2">
+                                    <input class="form-check-input" type="checkbox" id="wf-advancedModeToggle" onchange="toggleWorkflowAdvancedMode()">
+                                    <label class="form-check-label" for="wf-advancedModeToggle">
+                                        <small>Show advanced cron expression</small>
+                                    </label>
+                                </div>
+
+                                <div id="wf-advancedCronSection" class="d-none">
+                                    <label for="wf-cronExpressionInput" class="form-label">Cron expression</label>
+                                    <input type="text" id="wf-cronExpressionInput" class="form-control" placeholder="e.g. 0 15 * * *" readonly>
+                                    <small class="text-muted d-block mt-1">This is auto-generated from your selections above. Format: <code>minute hour * * *</code></small>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label for="wf-timezoneSelect" class="form-label">Timezone</label>
+                                <select id="wf-timezoneSelect" class="form-select"></select>
+                                <small class="text-muted">Times are converted to UTC before scheduling.</small>
+                            </div>
+
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="wf-scheduleEnabledToggle" checked>
+                                <label class="form-check-label" for="wf-scheduleEnabledToggle">Enable schedule</label>
+                            </div>
+
+                            <div class="d-flex justify-content-end gap-2">
+                                <button type="button" class="btn btn-outline-secondary" onclick="resetWorkflowScheduleForm()">Reset</button>
+                                <button type="submit" class="btn btn-primary">
+                                    <span class="btn-icon">💾</span>
+                                    Save Schedule
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        const pollingIntervals = new Map();
+        const POLLING_INTERVAL_MS = @(Model.PollingIntervalSeconds * 1000);
+        const MAX_ATTEMPTS = @Model.MaxPollingAttempts;
+        const BROADCAST_STORAGE_KEY = 'amr-queue-updates-temp';
+        const BROADCAST_SESSION_QUEUE_KEY = 'amrQueueUpdates';
+        const queueBroadcastChannel = ('BroadcastChannel' in window)
+            ? new BroadcastChannel('amr-queue-updates')
+            : null;
+
+        // Queued missions check interval (check every 10 seconds)
+        const QUEUED_CHECK_INTERVAL_MS = 10000;
+        let queuedMissionsCheckInterval = null;
+
+        // Scheduled missions check interval (check every 5 seconds to catch quick missions)
+        const SCHEDULED_CHECK_INTERVAL_MS = 5000;
+        let scheduledMissionsCheckInterval = null;
+
+        // Session storage key for active missions
+        const ACTIVE_MISSIONS_KEY = 'activeMissions';
+        const PRIORITY_COUNTER_KEY = 'missionPriorityCounter';
+
+        // Get next auto-increment priority for mission queue
+        function getNextPriority() {
+            const current = parseInt(sessionStorage.getItem(PRIORITY_COUNTER_KEY) || '0', 10);
+            const next = current + 1;
+            sessionStorage.setItem(PRIORITY_COUNTER_KEY, next.toString());
+            return next;
+        }
+
+        // Save active mission to session storage
+        function saveActiveMission(workflowId, missionCode, isQueued = false) {
+            const activeMissions = getActiveMissions();
+            activeMissions[workflowId] = {
+                missionCode: missionCode,
+                startTime: new Date().toISOString(),
+                isQueued: isQueued,
+                lastChecked: new Date().toISOString()
+            };
+            sessionStorage.setItem(ACTIVE_MISSIONS_KEY, JSON.stringify(activeMissions));
+            console.log(`Saved mission ${missionCode} for workflow ${workflowId} to session storage (queued: ${isQueued})`);
+        }
+
+        // Get all active missions from session storage
+        function getActiveMissions() {
+            const stored = sessionStorage.getItem(ACTIVE_MISSIONS_KEY);
+            return stored ? JSON.parse(stored) : {};
+        }
+
+        // Remove mission from session storage
+        function removeActiveMission(workflowId) {
+            const activeMissions = getActiveMissions();
+            delete activeMissions[workflowId];
+            sessionStorage.setItem(ACTIVE_MISSIONS_KEY, JSON.stringify(activeMissions));
+            console.log(`Removed mission for workflow ${workflowId} from session storage`);
+        }
+
+        // Clear all active missions
+        function clearActiveMissions() {
+            sessionStorage.removeItem(ACTIVE_MISSIONS_KEY);
+        }
+
+        function enableFocusMode(workflowId) {
+            const workflowCards = document.querySelectorAll('.workflow-card');
+            const targetCard = document.querySelector(`[data-workflow-id="${workflowId}"]`);
+            const backButton = document.getElementById('backToAllButton');
+
+            if (!targetCard) return;
+
+            // Hide all other workflow cards
+            workflowCards.forEach(card => {
+                if (parseInt(card.dataset.workflowId) !== workflowId) {
+                    card.classList.add('focus-hidden');
+                } else {
+                    card.classList.add('focused');
+                }
+            });
+
+            // Add focus mode class to body
+            document.body.classList.add('focus-mode-active');
+
+            // Show back button
+            if (backButton) {
+                backButton.style.display = 'block';
+            }
+
+            // Scroll to top
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function exitFocusMode() {
+            const workflowCards = document.querySelectorAll('.workflow-card');
+            const backButton = document.getElementById('backToAllButton');
+
+            // Remove focus classes from all cards
+            workflowCards.forEach(card => {
+                card.classList.remove('focus-hidden', 'focused');
+            });
+
+            // Remove focus mode class from body
+            document.body.classList.remove('focus-mode-active');
+
+            // Hide back button
+            if (backButton) {
+                backButton.style.display = 'none';
+            }
+
+            // Scroll to top
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function initializeSearch() {
+            const searchInput = document.getElementById('workflowSearch');
+            const clearBtn = document.getElementById('clearSearch');
+            const resultCount = document.getElementById('searchResultCount');
+            const noResultsMsg = document.getElementById('noResultsMessage');
+            const accordion = document.getElementById('layoutAccordion');
+
+            if (!searchInput) return;
+
+            let debounceTimer;
+
+            // Search input handler with debounce
+            searchInput.addEventListener('input', (e) => {
+                clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(() => {
+                    performSearch(e.target.value.trim());
+                }, 300);
+            });
+
+            // Clear button handler
+            clearBtn.addEventListener('click', () => {
+                searchInput.value = '';
+                performSearch('');
+                searchInput.focus();
+            });
+
+            // Initial count update
+            updateSearchResults('');
+        }
+
+        function performSearch(searchTerm) {
+            const searchLower = searchTerm.toLowerCase();
+            const workflowCards = document.querySelectorAll('.workflow-card');
+            const accordionItems = document.querySelectorAll('.accordion-item');
+            const clearBtn = document.getElementById('clearSearch');
+
+            let visibleCount = 0;
+            let totalCount = workflowCards.length;
+
+            // Show/hide workflow cards based on search
+            workflowCards.forEach(card => {
+                const workflowName = card.querySelector('h4')?.textContent.toLowerCase() || '';
+                const metadata = card.querySelectorAll('.metadata span');
+                const workflowNumber = metadata[0]?.textContent.toLowerCase() || '';
+                const externalCode = metadata[1]?.textContent.toLowerCase() || '';
+
+                const matches = !searchTerm ||
+                    workflowName.includes(searchLower) ||
+                    workflowNumber.includes(searchLower) ||
+                    externalCode.includes(searchLower);
+
+                if (matches) {
+                    card.classList.remove('search-hidden');
+                    visibleCount++;
+                } else {
+                    card.classList.add('search-hidden');
+                }
+            });
+
+            // Show/hide accordion panels based on visible cards
+            accordionItems.forEach(item => {
+                const layoutTitle = item.querySelector('.accordion-button .layout-title')?.textContent.toLowerCase() || '';
+                const panelCards = item.querySelectorAll('.workflow-card');
+                const visibleCardsInPanel = Array.from(panelCards).filter(card =>
+                    !card.classList.contains('search-hidden')
+                ).length;
+
+                // Also check if layout code matches search
+                const layoutMatches = layoutTitle.includes(searchLower);
+
+                if (visibleCardsInPanel > 0 || layoutMatches) {
+                    item.classList.remove('search-hidden');
+
+                    // Expand panel if it has matching workflows and search is active
+                    if (searchTerm && visibleCardsInPanel > 0) {
+                        const collapseElement = item.querySelector('.accordion-collapse');
+                        if (collapseElement && !collapseElement.classList.contains('show')) {
+                            const bsCollapse = new bootstrap.Collapse(collapseElement, { show: true });
+                        }
+                    }
+                } else {
+                    item.classList.add('search-hidden');
+                }
+            });
+
+            // Update UI
+            updateSearchResults(searchTerm, visibleCount, totalCount);
+
+            // Show/hide clear button
+            if (searchTerm) {
+                clearBtn.style.display = 'block';
+            } else {
+                clearBtn.style.display = 'none';
+            }
+        }
+
+        function updateSearchResults(searchTerm, visibleCount, totalCount) {
+            const resultCount = document.getElementById('searchResultCount');
+            const noResultsMsg = document.getElementById('noResultsMessage');
+            const accordion = document.getElementById('layoutAccordion');
+
+            if (!resultCount) return;
+
+            if (searchTerm && visibleCount === 0) {
+                // No results found
+                noResultsMsg.style.display = 'block';
+                accordion.style.display = 'none';
+                resultCount.textContent = '';
+            } else {
+                noResultsMsg.style.display = 'none';
+                accordion.style.display = 'block';
+
+                if (searchTerm) {
+                    resultCount.textContent = `Showing ${visibleCount} of ${totalCount} workflows`;
+                } else {
+                    resultCount.textContent = `${totalCount} workflows available`;
+                }
+            }
+        }
+
+        async function restoreActiveMissions() {
+            const activeMissions = getActiveMissions();
+
+            console.log('Restoring active missions from session storage:', activeMissions);
+
+            for (const [workflowId, missionInfo] of Object.entries(activeMissions)) {
+                const missionCode = missionInfo.missionCode;
+                const isQueued = missionInfo.isQueued || false;
+
+                console.log(`Attempting to restore mission ${missionCode} for workflow ${workflowId} (queued: ${isQueued})`);
+
+                // Query current status to check if still active
+                try {
+                    const response = await fetch(`?handler=Status&jobCode=${encodeURIComponent(missionCode)}`);
+
+                    if (response.ok) {
+                        const data = await response.json();
+
+                        if (data.success) {
+                            // If not terminal, resume polling
+                            if (!data.isTerminal) {
+                                console.log(`Mission ${missionCode} is active (status: ${data.statusName}). Starting polling.`);
+
+                                // Update mission info to mark it as no longer queued
+                                if (isQueued) {
+                                    saveActiveMission(parseInt(workflowId), missionCode, false);
+                                }
+
+                                startStatusPolling(parseInt(workflowId), missionCode);
+                            } else {
+                                // Terminal status - show final status briefly and clean up
+                                console.log(`Mission ${missionCode} has completed with status: ${data.statusName}. Cleaning up.`);
+                                removeActiveMission(workflowId);
+
+                                // Show the final status
+                                const card = document.querySelector(`[data-workflow-id="${workflowId}"]`);
+                                if (card) {
+                                    const statusSection = card.querySelector('.mission-status-section');
+                                    statusSection.style.display = 'block';
+                                    statusSection.dataset.missionCode = missionCode;
+                                    statusSection.querySelector('.mission-code-display').textContent = missionCode;
+
+                                    // Update status display
+                                    const statusBadge = statusSection.querySelector('.status-badge');
+                                    const statusText = statusSection.querySelector('.status-text');
+                                    statusText.textContent = data.statusName;
+                                    statusBadge.className = `status-badge ${data.cssClass}`;
+
+                                    // Update job details if available
+                                    if (data.robotId) {
+                                        statusSection.querySelector('.robot-id-display').textContent = data.robotId;
+                                    }
+                                    if (data.spendTime) {
+                                        statusSection.querySelector('.duration-display').textContent = data.spendTime + 's';
+                                    }
+                                }
+                            }
+                        } else {
+                            // Mission not found in job status - might still be queued
+                            if (isQueued) {
+                                console.log(`Queued mission ${missionCode} not found in job status yet. Keeping in storage.`);
+                                // Keep it in storage, don't remove yet
+                            } else {
+                                console.log(`Mission ${missionCode} not found. Removing from storage.`);
+                                removeActiveMission(workflowId);
+                            }
+                        }
+                    } else if (response.status === 404) {
+                        // Job not found yet - if queued, keep waiting
+                        if (isQueued) {
+                            console.log(`Queued mission ${missionCode} not in AMR system yet. Keeping in storage.`);
+                        } else {
+                            console.log(`Mission ${missionCode} not found (404). Removing from storage.`);
+                            removeActiveMission(workflowId);
+                        }
+                    } else {
+                        console.error(`Failed to query status for mission ${missionCode}. HTTP ${response.status}`);
+                    }
+                } catch (error) {
+                    console.error(`Error restoring mission ${missionCode}:`, error);
+                }
+            }
+
+            // Start periodic check for queued missions
+            startQueuedMissionsCheck();
+        }
+
+        // Periodic check for queued missions that may have started executing
+        function startQueuedMissionsCheck() {
+            // Check if there are any queued missions first
+            const activeMissions = getActiveMissions();
+            const hasQueuedMissions = Object.values(activeMissions).some(m => m.isQueued);
+
+            if (!hasQueuedMissions) {
+                console.log('No queued missions found. Skipping periodic check.');
+                return;
+            }
+
+            // Clear any existing interval
+            if (queuedMissionsCheckInterval) {
+                clearInterval(queuedMissionsCheckInterval);
+            }
+
+            queuedMissionsCheckInterval = setInterval(async () => {
+                const activeMissions = getActiveMissions();
+                let hasQueuedMissions = false;
+
+                for (const [workflowId, missionInfo] of Object.entries(activeMissions)) {
+                    if (missionInfo.isQueued) {
+                        hasQueuedMissions = true;
+                        const missionCode = missionInfo.missionCode;
+
+                        try {
+                            // Check if mission has started executing
+                            const response = await fetch(`?handler=Status&jobCode=${encodeURIComponent(missionCode)}`);
+
+                            if (response.ok) {
+                                const data = await response.json();
+
+                                if (data.success && !data.isTerminal) {
+                                    console.log(`Queued mission ${missionCode} has started executing (status: ${data.statusName})`);
+
+                                    // Update storage to mark as no longer queued
+                                    saveActiveMission(parseInt(workflowId), missionCode, false);
+
+                                    // Start polling for this mission
+                                    startStatusPolling(parseInt(workflowId), missionCode);
+
+                                    // Show toast notification
+                                    showToast('info', `Mission ${missionCode} has started executing`, 'Queued Mission Started');
+                                } else if (data.success && data.isTerminal) {
+                                    // Mission completed while queued (edge case)
+                                    console.log(`Queued mission ${missionCode} completed with status: ${data.statusName}`);
+                                    removeActiveMission(workflowId);
+                                }
+                            }
+                        } catch (error) {
+                            console.error(`Error checking queued mission ${missionCode}:`, error);
+                        }
+                    }
+                }
+
+                // If no more queued missions, stop the interval
+                if (!hasQueuedMissions) {
+                    console.log('No more queued missions to track. Stopping periodic check.');
+                    clearInterval(queuedMissionsCheckInterval);
+                    queuedMissionsCheckInterval = null;
+                }
+            }, QUEUED_CHECK_INTERVAL_MS);
+
+            console.log('Started periodic check for queued missions (every 10 seconds)');
+        }
+
+        // Check for active missions once
+        async function checkForActiveMissionsOnce() {
+            const workflowCards = document.querySelectorAll('[data-workflow-id]');
+            let foundAnyMission = false;
+
+            for (const card of workflowCards) {
+                const workflowId = parseInt(card.dataset.workflowId);
+                if (!workflowId) continue;
+
+                // Skip if already polling
+                if (pollingIntervals.has(workflowId)) {
+                    continue;
+                }
+
+                try {
+                    const triggerInfo = await checkActiveMissionTriggerSource(workflowId);
+
+                    if (triggerInfo.hasAnyMission && triggerInfo.missionCode) {
+                        const triggerType = triggerInfo.hasScheduledMission ? 'scheduled' : 'manual';
+                        console.log(`Active ${triggerType} mission detected for workflow ${workflowId}: ${triggerInfo.missionCode}`);
+
+                        foundAnyMission = true;
+
+                        // Save to session storage
+                        saveActiveMission(workflowId, triggerInfo.missionCode, false);
+
+                        // Display mission status
+                        startStatusPolling(workflowId, triggerInfo.missionCode);
+                    }
+                } catch (error) {
+                    console.error(`Error checking workflow ${workflowId}:`, error);
+                }
+            }
+
+            return foundAnyMission;
+        }
+
+        // Periodic check for active missions (both scheduled and manual)
+        // This detects missions triggered outside the current page (e.g., by scheduler)
+        async function startScheduledMissionsCheck() {
+            // Clear any existing interval
+            if (scheduledMissionsCheckInterval) {
+                clearInterval(scheduledMissionsCheckInterval);
+            }
+
+            // Immediately check on startup (don't wait 15 seconds)
+            console.log('Performing initial check for active missions...');
+            await checkForActiveMissionsOnce();
+
+            let consecutiveEmptyChecks = 0;
+            const MAX_EMPTY_CHECKS = 36; // Stop after 36 consecutive checks with no new missions (3 minutes at 5-second intervals) - allows time for stuck missions to appear after app restart
+
+            scheduledMissionsCheckInterval = setInterval(async () => {
+                // Get all workflow cards
+                const workflowCards = document.querySelectorAll('[data-workflow-id]');
+                let foundNewMission = false;
+
+                for (const card of workflowCards) {
+                    const workflowId = parseInt(card.dataset.workflowId);
+                    if (!workflowId) continue;
+
+                    // Check if already polling for this workflow
+                    if (pollingIntervals.has(workflowId)) {
+                        continue; // Already monitoring this workflow
+                    }
+
+                    // Check if there's any active mission for this workflow
+                    try {
+                        const triggerInfo = await checkActiveMissionTriggerSource(workflowId);
+
+                        // Display mission status for ANY active mission (scheduled or manual)
+                        if (triggerInfo.hasAnyMission && triggerInfo.missionCode) {
+                            const triggerType = triggerInfo.hasScheduledMission ? 'scheduled' : 'manual';
+                            console.log(`Active ${triggerType} mission detected for workflow ${workflowId}: ${triggerInfo.missionCode}`);
+
+                            foundNewMission = true;
+                            consecutiveEmptyChecks = 0; // Reset counter
+
+                            // Save to session storage
+                            saveActiveMission(workflowId, triggerInfo.missionCode, false);
+
+                            // Display mission status using the same UI flow as manual trigger
+                            // This shows the status section, enables cancel button, expands accordion, etc.
+                            startStatusPolling(workflowId, triggerInfo.missionCode);
+                        }
+                    } catch (error) {
+                        // Silently continue on error
+                        console.error(`Error checking workflow ${workflowId}:`, error);
+                    }
+                }
+
+                // If no new missions found, increment counter
+                if (!foundNewMission) {
+                    consecutiveEmptyChecks++;
+                    if (consecutiveEmptyChecks >= MAX_EMPTY_CHECKS) {
+                        console.log('No new missions detected in last 3 minutes. Pausing background check. Will resume on next page interaction.');
+                        clearInterval(scheduledMissionsCheckInterval);
+                        scheduledMissionsCheckInterval = null;
+                    }
+                }
+            }, SCHEDULED_CHECK_INTERVAL_MS);
+
+            console.log('Started periodic check for active missions (every 5 seconds)');
+        }
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            if (queuedMissionsCheckInterval) {
+                clearInterval(queuedMissionsCheckInterval);
+            }
+            if (scheduledMissionsCheckInterval) {
+                clearInterval(scheduledMissionsCheckInterval);
+            }
+            // Clear all polling intervals
+            pollingIntervals.forEach((intervalId) => clearInterval(intervalId));
+        });
+
+        document.addEventListener('DOMContentLoaded', () => {
+            // Initialize search functionality
+            initializeSearch();
+
+            // Auto-dismiss alerts after 5 seconds
+            setTimeout(() => {
+                document.querySelectorAll('.alert').forEach(alert => {
+                    const bsAlert = bootstrap.Alert.getOrCreateInstance(alert);
+                    bsAlert.close();
+                });
+            }, 5000);
+
+            // Setup stop polling buttons
+            document.querySelectorAll('.stop-polling-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const card = this.closest('[data-workflow-id]');
+                    const workflowId = parseInt(card.dataset.workflowId);
+                    stopPolling(workflowId);
+                });
+            });
+
+            // Setup form submission handlers for AJAX
+            document.querySelectorAll('.trigger-form').forEach(form => {
+                form.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    await handleFormSubmit(form);
+                });
+            });
+
+            // Setup cancel dropdown action handlers
+            document.querySelectorAll('.cancel-action').forEach(item => {
+                item.addEventListener('click', async (e) => {
+                    e.preventDefault();
+                    const workflowId = parseInt(item.dataset.workflowId);
+                    const cancelMode = item.dataset.cancelMode;
+                    await handleCancelAction(workflowId, cancelMode);
+                });
+            });
+
+            // Restore active missions from session storage
+            restoreActiveMissions();
+
+            // Start checking for scheduled missions
+            startScheduledMissionsCheck();
+        });
+
+        function startStatusPolling(workflowId, missionCode) {
+            const card = document.querySelector(`[data-workflow-id="${workflowId}"]`);
+            if (!card) return;
+
+            // Trigger button always stays enabled - users can always manually trigger
+            // Mission status will be displayed for both manual and scheduled triggers
+
+            const cancelBtn = card.querySelector('.cancel-dropdown-btn');
+            if (cancelBtn) {
+                cancelBtn.disabled = false;
+            }
+
+            // Ensure parent accordion panel is expanded
+            const accordionCollapse = card.closest('.accordion-collapse');
+            if (accordionCollapse && !accordionCollapse.classList.contains('show')) {
+                const bsCollapse = new bootstrap.Collapse(accordionCollapse, { show: true });
+            }
+
+            // Scroll card into view
+            setTimeout(() => {
+                card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }, 300);
+
+            const statusSection = card.querySelector('.mission-status-section');
+            statusSection.style.display = 'block';
+            statusSection.dataset.missionCode = missionCode;
+            statusSection.querySelector('.mission-code-display').textContent = missionCode;
+
+            let attempts = 0;
+
+            // Initial query
+            queryJobStatus(workflowId, missionCode);
+
+            // Setup polling interval
+            const intervalId = setInterval(async () => {
+                attempts++;
+                if (attempts > MAX_ATTEMPTS) {
+                    clearInterval(intervalId);
+                    pollingIntervals.delete(workflowId);
+                    showStatusError(statusSection, 'Polling timeout exceeded');
+
+                    // Re-enable trigger button and disable cancel button on timeout
+                    const triggerBtn = card.querySelector('button[type="submit"]');
+                    if (triggerBtn) {
+                        triggerBtn.disabled = false;
+                    }
+
+                    const cancelBtn = card.querySelector('.cancel-dropdown-btn');
+                    if (cancelBtn) {
+                        cancelBtn.disabled = true;
+                    }
+                    return;
+                }
+
+                const isTerminal = await queryJobStatus(workflowId, missionCode);
+                if (isTerminal) {
+                    clearInterval(intervalId);
+                    pollingIntervals.delete(workflowId);
+                    removeActiveMission(workflowId);  // Clean up session storage
+
+                    // Re-enable trigger button and disable cancel button when mission completes
+                    const triggerBtn = card.querySelector('button[type="submit"]');
+                    if (triggerBtn) {
+                        triggerBtn.disabled = false;
+                        const btnText = triggerBtn.querySelector('.btn-text');
+                        if (btnText) {
+                            btnText.textContent = 'Trigger';
+                        }
+                        const spinner = triggerBtn.querySelector('.spinner-border');
+                        if (spinner) {
+                            spinner.classList.add('d-none');
+                        }
+                    }
+
+                    const cancelBtn = card.querySelector('.cancel-dropdown-btn');
+                    if (cancelBtn) {
+                        cancelBtn.disabled = true;
+                    }
+                }
+            }, POLLING_INTERVAL_MS);
+
+            pollingIntervals.set(workflowId, intervalId);
+        }
+
+        async function queryJobStatus(workflowId, missionCode) {
+            const card = document.querySelector(`[data-workflow-id="${workflowId}"]`);
+            if (!card) return false;
+
+            const statusSection = card.querySelector('.mission-status-section');
+
+            try {
+                const response = await fetch(`?handler=Status&jobCode=${encodeURIComponent(missionCode)}`);
+
+                if (!response.ok) {
+                    if (response.status === 404) {
+                        // Job not found yet, keep polling
+                        return false;
+                    }
+                    showStatusError(statusSection, `HTTP error: ${response.status}`);
+                    return false;
+                }
+
+                const data = await response.json();
+
+                if (data.success) {
+                    updateStatusDisplay(statusSection, data);
+                    return data.isTerminal;
+                } else {
+                    showStatusError(statusSection, data.message || 'Unknown error');
+                    return false;
+                }
+            } catch (error) {
+                console.error('Polling error:', error);
+                showStatusError(statusSection, `Network error: ${error.message}`);
+                return false;
+            }
+        }
+
+        async function checkActiveMissionTriggerSource(workflowId) {
+            try {
+                const response = await fetch(`?handler=ActiveMission&workflowId=${workflowId}`);
+                if (!response.ok) {
+                    return { hasScheduledMission: false, hasAnyMission: false, missionCode: null };
+                }
+                const result = await response.json();
+
+                if (result.success && result.data) {
+                    const mission = result.data;
+                    // Check if mission is Queued (0) or Processing (1)
+                    const isActive = mission.status === 0 || mission.status === 1;
+                    const isScheduled = mission.triggerSource === 1 || mission.triggerSource === 'Scheduled';
+
+                    // Only log when an active mission is actually found to reduce console spam
+                    if (isActive) {
+                        console.log(`Workflow ${workflowId} active mission found:`, {
+                            missionCode: mission.missionCode,
+                            status: mission.status,
+                            triggerSource: mission.triggerSource,
+                            isScheduled
+                        });
+                    }
+
+                    return {
+                        hasScheduledMission: isActive && isScheduled,
+                        hasAnyMission: isActive,
+                        missionCode: mission.missionCode
+                    };
+                }
+
+                return { hasScheduledMission: false, hasAnyMission: false, missionCode: null };
+            } catch (error) {
+                // Only log actual errors, not network cancellations
+                if (error.name !== 'AbortError') {
+                    console.error(`Error checking active mission for workflow ${workflowId}:`, error);
+                }
+                return { hasScheduledMission: false, hasAnyMission: false, missionCode: null };
+            }
+        }
+
+        function updateStatusDisplay(statusSection, data) {
+            const statusBadge = statusSection.querySelector('.status-badge');
+            const statusText = statusSection.querySelector('.status-text');
+            const statusIcon = statusSection.querySelector('.status-icon');
+            const robotDisplay = statusSection.querySelector('.robot-id-display');
+            const durationDisplay = statusSection.querySelector('.duration-display');
+
+            // Update status text and CSS class
+            statusText.textContent = data.statusName;
+            statusBadge.className = `status-badge ${data.cssClass}`;
+
+            // Update icon based on status (handled by CSS ::before)
+            statusIcon.textContent = '';
+
+            // Update job details
+            robotDisplay.textContent = data.robotId || 'N/A';
+
+            if (data.spendTime) {
+                durationDisplay.textContent = `${data.spendTime}s`;
+            } else {
+                durationDisplay.textContent = '-';
+            }
+
+            if (data.isTerminal) {
+                const statusContainer = statusSection;
+                const currentStatusKey = String(data.status ?? data.statusName ?? '');
+                if (statusContainer.dataset.lastBroadcastStatus !== currentStatusKey) {
+                    statusContainer.dataset.lastBroadcastStatus = currentStatusKey;
+                    broadcastQueueUpdate({
+                        missionCode: statusSection.dataset.missionCode || data.missionCode || data.jobCode || '',
+                        workflowId: parseInt(statusSection.closest('[data-workflow-id]')?.dataset?.workflowId ?? '0', 10) || null,
+                        status: data.status,
+                        statusName: data.statusName,
+                        timestamp: new Date().toISOString()
+                    });
+                }
+            } else {
+                delete statusSection.dataset.lastBroadcastStatus;
+            }
+
+            // Clear any error messages
+            const errorMsg = statusSection.querySelector('.status-error-msg');
+            if (errorMsg) {
+                errorMsg.remove();
+            }
+        }
+
+        function showStatusError(statusSection, message) {
+            let errorMsg = statusSection.querySelector('.status-error-msg');
+            if (!errorMsg) {
+                errorMsg = document.createElement('div');
+                errorMsg.className = 'alert alert-danger alert-sm status-error-msg mt-2';
+                statusSection.appendChild(errorMsg);
+            }
+            errorMsg.textContent = message;
+        }
+
+        function stopPolling(workflowId) {
+            const intervalId = pollingIntervals.get(workflowId);
+            if (intervalId) {
+                clearInterval(intervalId);
+                pollingIntervals.delete(workflowId);
+                removeActiveMission(workflowId);  // Clean up session storage
+
+                const card = document.querySelector(`[data-workflow-id="${workflowId}"]`);
+                if (card) {
+                    const statusSection = card.querySelector('.mission-status-section');
+                    showStatusError(statusSection, 'Polling stopped by user');
+
+                    // Re-enable trigger button and disable cancel button when polling stops
+                    const triggerBtn = card.querySelector('button[type="submit"]');
+                    if (triggerBtn) {
+                        triggerBtn.disabled = false;
+                    }
+
+                    const cancelBtn = card.querySelector('.cancel-dropdown-btn');
+                    if (cancelBtn) {
+                        cancelBtn.disabled = true;
+                    }
+                }
+            }
+        }
+
+        async function handleFormSubmit(form) {
+            const workflowId = parseInt(form.dataset.workflowId);
+            const submitBtn = form.querySelector('button[type="submit"]');
+            const btnText = submitBtn.querySelector('.btn-text');
+            const spinner = submitBtn.querySelector('.spinner-border');
+
+            // Disable button and show spinner
+            submitBtn.disabled = true;
+            btnText.textContent = 'Submitting...';
+            spinner.classList.remove('d-none');
+
+            try {
+                // Auto-generate form values
+                const now = new Date();
+                const year = now.getUTCFullYear();
+                const month = String(now.getUTCMonth() + 1).padStart(2, '0');
+                const day = String(now.getUTCDate()).padStart(2, '0');
+                const hour = String(now.getUTCHours()).padStart(2, '0');
+                const minute = String(now.getUTCMinutes()).padStart(2, '0');
+                const second = String(now.getUTCSeconds()).padStart(2, '0');
+                const millisecond = String(now.getUTCMilliseconds()).padStart(3, '0');
+                const timestamp = `${year}${month}${day}${hour}${minute}${second}${millisecond}`;
+
+                // Get workflow template code from card with multiple fallbacks
+                const card = form.closest('.workflow-card');
+                const workflowMetadata = card?.querySelector('.metadata');
+
+                // DEBUG: Log all possible sources
+                console.log('=== JavaScript DEBUG - handleFormSubmit ===');
+                console.log('WorkflowId:', workflowId);
+                console.log('data-template-code attribute:', card?.dataset?.templateCode);
+                console.log('Metadata span [1]:', workflowMetadata?.children?.[1]?.textContent);
+                console.log('Metadata span [0]:', workflowMetadata?.children?.[0]?.textContent);
+
+                const templateCode =
+                    (card?.dataset?.templateCode ?? '').trim() ||
+                    (workflowMetadata?.children?.[1]?.textContent ?? '').trim() ||
+                    (workflowMetadata?.children?.[0]?.textContent ?? '').trim() ||
+                    'DEFAULT';
+
+                console.log('Final templateCode to send:', templateCode);
+                console.log('=== END JavaScript DEBUG ===');
+
+                const data = {
+                    workflowId: workflowId,
+                    missionCode: `mission${timestamp}`,
+                    templateCode,
+                    priority: getNextPriority(),
+                    requestId: `request${timestamp}`
+                };
+
+                // Submit via AJAX
+                const response = await fetch('?handler=TriggerAjax', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    // Show success or queue message based on response
+                    if (result.executeImmediately) {
+                        showInlineMessage(form, 'success', `Workflow executing now. Mission: ${data.missionCode}`);
+
+                        // Save to session storage for persistence across page navigation
+                        saveActiveMission(workflowId, data.missionCode, false);
+
+                        // Start status polling
+                        startStatusPolling(workflowId, data.missionCode);
+                    } else if (result.queued) {
+                        showInlineMessage(form, 'info', `Workflow queued at position ${result.queuePosition}. Mission: ${data.missionCode}`);
+
+                        // Save queued mission to session storage so we can track when it starts executing
+                        saveActiveMission(workflowId, data.missionCode, true);
+
+                        // Start periodic check for queued missions if not already running
+                        if (!queuedMissionsCheckInterval) {
+                            startQueuedMissionsCheck();
+                        }
+                    } else {
+                        // Fallback for backward compatibility
+                        showInlineMessage(form, 'success', `Workflow triggered. Mission: ${data.missionCode}`);
+                        saveActiveMission(workflowId, data.missionCode, false);
+                        startStatusPolling(workflowId, data.missionCode);
+                    }
+                } else {
+                    showInlineMessage(form, 'danger', result.message || 'Failed to trigger workflow');
+                }
+            } catch (error) {
+                console.error('Error submitting workflow:', error);
+                showInlineMessage(form, 'danger', 'Network error. Please try again.');
+            } finally {
+                // Re-enable button
+                submitBtn.disabled = false;
+                btnText.textContent = 'Trigger';
+                spinner.classList.add('d-none');
+
+                // Restart background check in case it was paused
+                if (!scheduledMissionsCheckInterval) {
+                    startScheduledMissionsCheck();
+                }
+            }
+        }
+
+        // Toast notification system
+        function showToast(type, message, title = null) {
+            const container = document.getElementById('toastContainer');
+            if (!container) return;
+
+            const toastId = `toast-${Date.now()}`;
+            const icons = {
+                success: '✓',
+                danger: '✕',
+                warning: '⚠',
+                info: 'ℹ'
+            };
+
+            const titles = {
+                success: title || 'Success',
+                danger: title || 'Error',
+                warning: title || 'Warning',
+                info: title || 'Info'
+            };
+
+            const toast = document.createElement('div');
+            toast.id = toastId;
+            toast.className = `toast-notification toast-${type}`;
+            toast.innerHTML = `
+                <div class="toast-icon">${icons[type] || 'ℹ'}</div>
+                <div class="toast-content">
+                    <p class="toast-title">${titles[type]}</p>
+                    <p class="toast-message">${message}</p>
+                </div>
+                <button class="toast-close" onclick="closeToast('${toastId}')">&times;</button>
+            `;
+
+            container.appendChild(toast);
+
+            // Auto-dismiss after 5 seconds
+            setTimeout(() => {
+                closeToast(toastId);
+            }, 5000);
+        }
+
+        function closeToast(toastId) {
+            const toast = document.getElementById(toastId);
+            if (!toast) return;
+
+            toast.classList.add('toast-fade-out');
+            setTimeout(() => {
+                toast.remove();
+            }, 300);
+        }
+
+        // Backward compatibility - old inline message function now uses toasts
+        function showInlineMessage(form, type, message) {
+            showToast(type, message);
+        }
+
+        async function handleCancelAction(workflowId, cancelMode) {
+            const card = document.querySelector(`[data-workflow-id="${workflowId}"]`);
+            if (!card) return;
+
+            const statusSection = card.querySelector('.mission-status-section');
+            const missionCode = statusSection.dataset.missionCode;
+
+            if (!missionCode) {
+                const triggerForm = card.querySelector('.trigger-form');
+                showInlineMessage(triggerForm, 'warning', 'No active mission to cancel. Please trigger a workflow first.');
+                return;
+            }
+
+            const cancelBtn = card.querySelector('.btn-warning');
+            const btnText = cancelBtn.querySelector('.btn-text');
+
+            // Show loading state
+            const originalText = btnText.textContent;
+            btnText.textContent = 'Cancelling...';
+            cancelBtn.disabled = true;
+
+            try {
+                const data = {
+                    missionCode: missionCode,
+                    cancelMode: cancelMode,
+                    reason: ''
+                };
+
+                // Submit via AJAX
+                const response = await fetch('?handler=CancelAjax', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    // Show success message - polling will continue and detect status 31 (Cancelled)
+                    const triggerForm = card.querySelector('.trigger-form');
+                    showInlineMessage(triggerForm, 'success', `Cancellation requested for ${missionCode}. Waiting for status update...`);
+                } else {
+                    const triggerForm = card.querySelector('.trigger-form');
+                    showInlineMessage(triggerForm, 'danger', result.message || 'Failed to cancel mission');
+                }
+            } catch (error) {
+                console.error('Error cancelling mission:', error);
+                const triggerForm = card.querySelector('.trigger-form');
+                showInlineMessage(triggerForm, 'danger', 'Network error. Please try again.');
+            } finally {
+                // Re-enable button
+                btnText.textContent = 'Cancel';
+                cancelBtn.disabled = false;
+            }
+        }
+
+        function broadcastQueueUpdate(payload) {
+            const message = {
+                type: 'queue:mission-updated',
+                origin: 'workflow-trigger',
+                payload
+            };
+
+            if (queueBroadcastChannel) {
+                queueBroadcastChannel.postMessage(message);
+            } else {
+                try {
+                    const nonce = (window.crypto && window.crypto.randomUUID)
+                        ? window.crypto.randomUUID()
+                        : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+                    localStorage.setItem(BROADCAST_STORAGE_KEY, JSON.stringify({ ...message, nonce }));
+                    localStorage.removeItem(BROADCAST_STORAGE_KEY);
+                } catch (error) {
+                    console.warn('Queue broadcast fallback failed', error);
+                }
+            }
+
+            enqueuePendingQueueUpdate(payload);
+        }
+
+        function enqueuePendingQueueUpdate(payload) {
+            if (!payload || !payload.missionCode) {
+                return;
+            }
+
+            try {
+                const stored = sessionStorage.getItem(BROADCAST_SESSION_QUEUE_KEY);
+                const queue = stored ? JSON.parse(stored) : [];
+
+                queue.push(payload);
+
+                // Keep queue bounded to avoid runaway growth
+                const MAX_QUEUE_ENTRIES = 20;
+                while (queue.length > MAX_QUEUE_ENTRIES) {
+                    queue.shift();
+                }
+
+                sessionStorage.setItem(BROADCAST_SESSION_QUEUE_KEY, JSON.stringify(queue));
+            } catch (error) {
+                console.warn('Failed to persist queue update in session storage', error);
+            }
+        }
+
+        // ===== WORKFLOW SCHEDULER JAVASCRIPT =====
+        let currentWorkflowIdForSchedule = null;
+        let currentWorkflowNameForSchedule = '';
+        let workflowScheduleModalInstance = null;
+        let workflowSchedules = [];
+        let timezoneOptionsLoadedForWorkflow = false;
+
+        function openWorkflowScheduler(workflowId, workflowName) {
+            currentWorkflowIdForSchedule = workflowId;
+            currentWorkflowNameForSchedule = workflowName;
+
+            const modalElement = document.getElementById('workflowScheduleModal');
+            if (!workflowScheduleModalInstance) {
+                workflowScheduleModalInstance = new bootstrap.Modal(modalElement);
+            }
+
+            document.getElementById('workflowScheduleModalTitle').textContent = `Workflow Scheduler — ${workflowName}`;
+            resetWorkflowScheduleForm();
+            hideWorkflowScheduleForm();
+
+            if (!timezoneOptionsLoadedForWorkflow) {
+                populateWorkflowTimezones();
+                timezoneOptionsLoadedForWorkflow = true;
+            }
+
+            loadWorkflowSchedules();
+            // loadWorkflowScheduleLogs(); // Removed: Execution History UI section removed
+            workflowScheduleModalInstance.show();
+        }
+
+        function populateWorkflowTimezones() {
+            const select = document.getElementById('wf-timezoneSelect');
+            if (!select) return;
+
+            const resolvedZone = Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC';
+            const zones = new Set(['UTC', resolvedZone]);
+
+            if (typeof Intl.supportedValuesOf === 'function') {
+                try {
+                    Intl.supportedValuesOf('timeZone').slice(0, 200).forEach(z => zones.add(z));
+                } catch (err) {}
+            }
+
+            select.innerHTML = '';
+            Array.from(zones).sort().forEach(zone => {
+                const option = document.createElement('option');
+                option.value = zone;
+                option.textContent = zone;
+                if (zone === resolvedZone) option.selected = true;
+                select.appendChild(option);
+            });
+
+            select.addEventListener('change', function() {
+                const hint = document.getElementById('wf-timezoneHint');
+                if (hint) hint.textContent = this.value || 'UTC';
+            });
+
+            const hint = document.getElementById('wf-timezoneHint');
+            if (hint) hint.textContent = select.value || 'UTC';
+        }
+
+        function updateScheduleCountBadge(workflowId, schedules) {
+            // Count only enabled schedules
+            const activeCount = schedules.filter(s => s.isEnabled).length;
+
+            // Find the workflow card
+            const workflowCard = document.querySelector(`[data-workflow-id="${workflowId}"]`);
+            if (!workflowCard) return;
+
+            // Find the schedule button
+            const scheduleButton = workflowCard.querySelector('.btn-outline-primary[onclick*="openWorkflowScheduler"]');
+            if (!scheduleButton) return;
+
+            // Remove existing badge if present
+            const existingBadge = scheduleButton.querySelector('.badge');
+            if (existingBadge) {
+                existingBadge.remove();
+            }
+
+            // Add new badge if count > 0
+            if (activeCount > 0) {
+                const badge = document.createElement('span');
+                badge.className = 'badge bg-success rounded-pill';
+                badge.title = 'Active schedules';
+                badge.textContent = activeCount;
+                scheduleButton.appendChild(badge);
+            }
+        }
+
+        async function loadWorkflowSchedules() {
+            if (!currentWorkflowIdForSchedule) return;
+            try {
+                const response = await fetch(`?handler=WorkflowSchedules&workflowId=${currentWorkflowIdForSchedule}`, {
+                    cache: 'no-cache'
+                });
+                const payload = await response.json();
+
+                if (payload.success && payload.data) {
+                    workflowSchedules = payload.data;
+                    renderWorkflowScheduleList(workflowSchedules);
+                    // Update the badge count in the workflow card
+                    updateScheduleCountBadge(currentWorkflowIdForSchedule, workflowSchedules);
+                } else {
+                    document.getElementById('wf-scheduleListCount').textContent = 'Failed to load schedules.';
+                }
+            } catch (error) {
+                console.error('Failed to load workflow schedules', error);
+                document.getElementById('wf-scheduleListCount').textContent = 'Unable to load schedules.';
+            }
+        }
+
+        function renderWorkflowScheduleList(schedules) {
+            const listCount = document.getElementById('wf-scheduleListCount');
+            const table = document.getElementById('wf-scheduleTable');
+            const tbody = document.getElementById('wf-scheduleTableBody');
+            const emptyState = document.getElementById('wf-scheduleEmptyState');
+
+            if (!schedules.length) {
+                listCount.textContent = 'No schedules configured.';
+                table.classList.add('d-none');
+                emptyState.classList.remove('d-none');
+                tbody.innerHTML = '';
+                return;
+            }
+
+            listCount.textContent = `${schedules.length} schedule${schedules.length > 1 ? 's' : ''}`;
+            table.classList.remove('d-none');
+            emptyState.classList.add('d-none');
+
+            tbody.innerHTML = schedules.map(s => {
+                // Handle both string and int triggerType
+                const isOnce = s.triggerType === 'Once' || s.triggerType === 0 || s.triggerType === '0';
+                const typeBadge = isOnce
+                    ? '<span class="schedule-badge once">One-time</span>'
+                    : '<span class="schedule-badge recurring">Recurring</span>';
+                const stateBadge = s.isEnabled
+                    ? '<span class="schedule-badge active">Active</span>'
+                    : '<span class="schedule-badge paused">Paused</span>';
+
+                const nextRun = s.nextRunUtc ? new Date(s.nextRunUtc + (s.nextRunUtc.endsWith('Z') ? '' : 'Z')).toLocaleString() : '—';
+                const lastRun = s.lastRunUtc ? new Date(s.lastRunUtc + (s.lastRunUtc.endsWith('Z') ? '' : 'Z')).toLocaleString() : '—';
+
+                const actions = `
+                    <button type="button" class="btn btn-outline-secondary btn-sm" title="Edit" onclick="editWorkflowSchedule(${s.id})">✏️</button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" title="${s.isEnabled ? 'Disable' : 'Enable'}" onclick="toggleWorkflowScheduleEnabled(${s.id}, ${s.isEnabled})">${s.isEnabled ? '⏸️' : '▶️'}</button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" title="Run now" onclick="runWorkflowScheduleNow(${s.id})">⚡</button>
+                    <button type="button" class="btn btn-outline-danger btn-sm" title="Delete" onclick="deleteWorkflowSchedule(${s.id})">🗑️</button>
+                `;
+
+                return `
+                    <tr>
+                        <td><div>${typeBadge} ${stateBadge}</div><small class="text-muted">${s.cronExpression || 'One-time'}</small></td>
+                        <td>${nextRun}</td>
+                        <td>${lastRun}</td>
+                        <td class="text-end"><div class="btn-group btn-group-sm">${actions}</div></td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function prepareNewWorkflowSchedule() {
+            resetWorkflowScheduleForm();
+            document.getElementById('wf-scheduleFormWrapper').classList.remove('d-none');
+            document.querySelector('.schedule-layout').classList.add('form-visible');
+            document.getElementById('wf-scheduleFormTitle').textContent = 'New Schedule';
+        }
+
+        function hideWorkflowScheduleForm() {
+            document.getElementById('wf-scheduleFormWrapper').classList.add('d-none');
+            document.querySelector('.schedule-layout').classList.remove('form-visible');
+        }
+
+        function resetWorkflowScheduleForm() {
+            const scheduleIdInput = document.getElementById('wf-scheduleIdInput');
+            if (!scheduleIdInput) return; // Modal not yet loaded
+
+            scheduleIdInput.value = '';
+            document.getElementById('wf-triggerTypeOnce').checked = true;
+            document.getElementById('wf-runAtInput').value = '';
+
+            const freqType = document.getElementById('wf-frequencyType');
+            if (freqType) freqType.value = 'daily';
+
+            const dailyHour = document.getElementById('wf-dailyHour');
+            if (dailyHour) dailyHour.value = '12';
+
+            const dailyMinute = document.getElementById('wf-dailyMinute');
+            if (dailyMinute) dailyMinute.value = '0';
+
+            const dailyAmPm = document.getElementById('wf-dailyAmPm');
+            if (dailyAmPm) dailyAmPm.value = 'PM';
+
+            const enableToggle = document.getElementById('wf-scheduleEnabledToggle');
+            if (enableToggle) enableToggle.checked = true;
+
+            toggleWorkflowScheduleMode();
+            updateWorkflowSchedulePreview();
+        }
+
+        function toggleWorkflowScheduleMode() {
+            const isOnce = document.getElementById('wf-triggerTypeOnce').checked;
+            document.getElementById('wf-onceFields').classList.toggle('d-none', !isOnce);
+            document.getElementById('wf-recurringFields').classList.toggle('d-none', isOnce);
+            if (!isOnce) updateWorkflowSchedulePreview();
+        }
+
+        function onWorkflowFrequencyChange() {
+            const freq = document.getElementById('wf-frequencyType').value;
+            document.getElementById('wf-dailyTimeControls').classList.toggle('d-none', freq !== 'daily');
+            document.getElementById('wf-hourlyTimeControls').classList.toggle('d-none', freq !== 'hourly');
+            document.getElementById('wf-everyXHoursControls').classList.toggle('d-none', freq !== 'every-x-hours');
+            document.getElementById('wf-everyXMinutesControls').classList.toggle('d-none', freq !== 'every-x-minutes');
+            updateWorkflowSchedulePreview();
+        }
+
+        function updateWorkflowSchedulePreview() {
+            const freqElement = document.getElementById('wf-frequencyType');
+            const previewElement = document.getElementById('wf-schedulePreviewText');
+            const cronElement = document.getElementById('wf-cronExpressionInput');
+
+            // We only need freq and cron elements - preview is optional
+            if (!freqElement || !cronElement) {
+                return;
+            }
+
+            const freq = freqElement.value;
+            let preview = '';
+            let cron = '';
+
+            if (freq === 'daily') {
+                const hourElement = document.getElementById('wf-dailyHour');
+                const minuteElement = document.getElementById('wf-dailyMinute');
+                const ampmElement = document.getElementById('wf-dailyAmPm');
+
+                if (!hourElement || !minuteElement || !ampmElement) {
+                    return;
+                }
+
+                const hour = parseInt(hourElement.value) || 3;
+                const minute = parseInt(minuteElement.value) || 0;
+                const ampm = ampmElement.value;
+
+                // Convert 12-hour to 24-hour format
+                let hour24;
+                if (ampm === 'PM') {
+                    hour24 = hour === 12 ? 12 : hour + 12;
+                } else { // AM
+                    hour24 = hour === 12 ? 0 : hour;
+                }
+
+                preview = `Daily at ${hour}:${minute.toString().padStart(2, '0')} ${ampm}`;
+                cron = `${minute} ${hour24} * * *`;
+            } else if (freq === 'hourly') {
+                const minuteElement = document.getElementById('wf-hourlyMinute');
+                if (!minuteElement) return;
+
+                const minute = minuteElement.value;
+                preview = `Every hour at :${minute.padStart(2, '0')}`;
+                cron = `${minute} * * * *`;
+            } else if (freq === 'every-x-hours') {
+                const hoursElement = document.getElementById('wf-hoursInterval');
+                if (!hoursElement) return;
+
+                const hours = hoursElement.value;
+                preview = `Every ${hours} hour(s)`;
+                cron = `0 */${hours} * * *`;
+            } else if (freq === 'every-x-minutes') {
+                const minutesElement = document.getElementById('wf-minutesInterval');
+                if (!minutesElement) return;
+
+                const minutes = minutesElement.value;
+                preview = `Every ${minutes} minute(s)`;
+                cron = `*/${minutes} * * * *`;
+            }
+
+            if (previewElement) {
+                previewElement.textContent = preview;
+            }
+            cronElement.value = cron;
+        }
+
+        function toggleWorkflowAdvancedMode() {
+            const isAdvanced = document.getElementById('wf-advancedModeToggle').checked;
+            document.getElementById('wf-advancedCronSection').classList.toggle('d-none', !isAdvanced);
+        }
+
+        async function submitWorkflowScheduleForm(event) {
+            event.preventDefault();
+
+            const scheduleId = document.getElementById('wf-scheduleIdInput').value;
+            const isOnce = document.getElementById('wf-triggerTypeOnce').checked;
+            const isEnabled = document.getElementById('wf-scheduleEnabledToggle').checked;
+            const timezoneId = document.getElementById('wf-timezoneSelect').value;
+
+            let payload = {
+                triggerType: isOnce ? 0 : 1, // 0 = Once, 1 = Recurring
+                isEnabled,
+                timezoneId
+            };
+
+            if (isOnce) {
+                const runAtLocal = document.getElementById('wf-runAtInput').value;
+                if (!runAtLocal) {
+                    alert('Please select a date and time');
+                    return;
+                }
+                payload.runAtLocalTime = runAtLocal;
+            } else {
+                // Force update the cron expression from current form values before submitting
+                // This ensures we capture the latest time inputs even if onchange didn't fire
+                updateWorkflowSchedulePreview();
+
+                const cronExpr = document.getElementById('wf-cronExpressionInput').value;
+
+                // Validate cron expression exists
+                if (!cronExpr || cronExpr.trim() === '') {
+                    alert('Please enter a valid schedule time');
+                    return;
+                }
+
+                payload.cronExpression = cronExpr;
+            }
+
+            try {
+                const response = await fetch('?handler=WorkflowScheduleUpsert', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        workflowId: currentWorkflowIdForSchedule,
+                        scheduleId: scheduleId ? parseInt(scheduleId) : null,
+                        schedule: payload
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success || response.ok) {
+                    hideWorkflowScheduleForm();
+                    await loadWorkflowSchedules();
+                    // await loadWorkflowScheduleLogs(); // Removed: Execution History UI section removed
+                } else {
+                    const errorMsg = result.message || result.errors || JSON.stringify(result);
+                    alert('Failed to save schedule: ' + errorMsg);
+                }
+            } catch (error) {
+                alert('Error saving schedule: ' + error.message);
+            }
+        }
+
+        async function editWorkflowSchedule(scheduleId) {
+            const schedule = workflowSchedules.find(s => s.id === scheduleId);
+            if (!schedule) return;
+
+            document.getElementById('wf-scheduleIdInput').value = scheduleId;
+            document.getElementById('wf-scheduleEnabledToggle').checked = schedule.isEnabled;
+
+            // TriggerType can be string "Once"/"Recurring" or int 0/1
+            const isOnce = schedule.triggerType === 'Once' || schedule.triggerType === 0 || schedule.triggerType === '0';
+
+            if (isOnce) {
+                document.getElementById('wf-triggerTypeOnce').checked = true;
+                if (schedule.oneTimeRunUtc) {
+                    const date = new Date(schedule.oneTimeRunUtc + (schedule.oneTimeRunUtc.endsWith('Z') ? '' : 'Z'));
+                    const year = date.getFullYear();
+                    const month = String(date.getMonth() + 1).padStart(2, '0');
+                    const day = String(date.getDate()).padStart(2, '0');
+                    const hours = String(date.getHours()).padStart(2, '0');
+                    const minutes = String(date.getMinutes()).padStart(2, '0');
+                    const localStr = `${year}-${month}-${day}T${hours}:${minutes}`;
+                    document.getElementById('wf-runAtInput').value = localStr;
+                }
+            } else {
+                document.getElementById('wf-triggerTypeRecurring').checked = true;
+                document.getElementById('wf-cronExpressionInput').value = schedule.cronExpression || '';
+
+                // Parse cron expression to populate time picker inputs
+                if (schedule.cronExpression) {
+                    const parts = schedule.cronExpression.trim().split(/\s+/);
+                    if (parts.length >= 2) {
+                        const minute = parseInt(parts[0]) || 0;
+                        const hour24 = parseInt(parts[1]) || 0;
+
+                        // Convert 24-hour to 12-hour format
+                        let hour12 = hour24 % 12;
+                        if (hour12 === 0) hour12 = 12;
+                        const ampm = hour24 >= 12 ? 'PM' : 'AM';
+
+                        // Populate the time picker inputs
+                        document.getElementById('wf-dailyHour').value = hour12.toString();
+                        document.getElementById('wf-dailyMinute').value = minute.toString();
+                        document.getElementById('wf-dailyAmPm').value = ampm;
+                    }
+                }
+            }
+
+            document.getElementById('wf-timezoneSelect').value = schedule.timezoneId || 'UTC';
+            toggleWorkflowScheduleMode();
+            document.getElementById('wf-scheduleFormWrapper').classList.remove('d-none');
+            document.querySelector('.schedule-layout').classList.add('form-visible');
+            document.getElementById('wf-scheduleFormTitle').textContent = 'Edit Schedule';
+        }
+
+        async function deleteWorkflowSchedule(scheduleId) {
+            if (!confirm('Delete this schedule?')) return;
+
+            try {
+                const response = await fetch('?handler=WorkflowScheduleDelete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        workflowId: currentWorkflowIdForSchedule,
+                        scheduleId
+                    })
+                });
+
+                if (response.ok) {
+                    await loadWorkflowSchedules();
+                    // await loadWorkflowScheduleLogs(); // Removed: Execution History UI section removed
+                }
+            } catch (error) {
+                console.error('Error deleting schedule', error);
+            }
+        }
+
+        async function toggleWorkflowScheduleEnabled(scheduleId, currentlyEnabled) {
+            const schedule = workflowSchedules.find(s => s.id === scheduleId);
+            if (!schedule) return;
+
+            schedule.isEnabled = !currentlyEnabled;
+
+            // Convert triggerType to int if it's a string
+            let triggerTypeInt = schedule.triggerType;
+            if (schedule.triggerType === 'Once' || schedule.triggerType === '0') triggerTypeInt = 0;
+            else if (schedule.triggerType === 'Recurring' || schedule.triggerType === '1') triggerTypeInt = 1;
+
+            try {
+                const response = await fetch('?handler=WorkflowScheduleUpsert', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        workflowId: currentWorkflowIdForSchedule,
+                        scheduleId,
+                        schedule: {
+                            triggerType: triggerTypeInt,
+                            cronExpression: schedule.cronExpression,
+                            runAtLocalTime: schedule.oneTimeRunUtc,
+                            timezoneId: schedule.timezoneId,
+                            isEnabled: !currentlyEnabled
+                        }
+                    })
+                });
+
+                if (response.ok) {
+                    await loadWorkflowSchedules();
+                }
+            } catch (error) {
+                console.error('Error toggling schedule', error);
+            }
+        }
+
+        async function runWorkflowScheduleNow(scheduleId) {
+            if (!confirm('Run this schedule now?')) return;
+
+            try {
+                const response = await fetch('?handler=WorkflowScheduleRun', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        workflowId: currentWorkflowIdForSchedule,
+                        scheduleId
+                    })
+                });
+
+                if (response.ok) {
+                    alert('Schedule triggered successfully!');
+                    // await loadWorkflowScheduleLogs(); // Removed: Execution History UI section removed
+                }
+            } catch (error) {
+                console.error('Error running schedule', error);
+            }
+        }
+
+        function validateTimeInput(input, min, max) {
+            // Allow empty value for easier editing
+            if (input.value === '') {
+                return;
+            }
+
+            let value = parseInt(input.value);
+            if (isNaN(value) || value < min) {
+                input.value = min;
+            } else if (value > max) {
+                input.value = max;
+            }
+        }
+    </script>
+}

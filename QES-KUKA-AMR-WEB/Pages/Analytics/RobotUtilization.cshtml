@@ -1,0 +1,672 @@
+@page "/Analytics/RobotUtilization"
+@model QES_KUKA_AMR_WEB.Pages.Analytics.RobotUtilizationModel
+@{
+    ViewData["Title"] = "Robot Utilization";
+    Layout = "~/Pages/Shared/_DashboardLayout.cshtml";
+}
+
+<div class="container-fluid robot-utilization" id="robotUtilizationRoot">
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+        <div>
+            <h2 class="mb-1">Robot Utilization</h2>
+            <p class="text-muted mb-0" style="font-size: 14px;">
+                Track how automation time is spent across workflows and manual interventions.
+            </p>
+        </div>
+        <div class="d-flex flex-wrap gap-2 align-items-center filter-actions">
+            <button class="btn btn-outline-secondary btn-sm" type="button" id="refreshButton">
+                Refresh
+            </button>
+        </div>
+    </div>
+
+    <section class="filter-panel" aria-label="Utilization filters">
+        <div class="filter-item">
+            <label for="robotIdInput" class="form-label">Robot ID</label>
+            <select id="robotIdInput" class="form-select">
+                <option value="">Loading robots...</option>
+            </select>
+            <div id="robotIdHelp" class="form-text">Select a robot to view utilization.</div>
+        </div>
+        <div class="filter-item">
+            <label for="startDate" class="form-label">Start date</label>
+            <input type="date" id="startDate" class="form-control" />
+        </div>
+        <div class="filter-item">
+            <label for="endDate" class="form-label">End date</label>
+            <input type="date" id="endDate" class="form-control" />
+        </div>
+        <div class="filter-item">
+            <label for="groupBy" class="form-label">Group by</label>
+            <select id="groupBy" class="form-select">
+                <option value="day" selected>Day</option>
+                <option value="hour">Hour</option>
+            </select>
+        </div>
+        <div class="filter-item">
+            <label for="triggerSource" class="form-label">Mission Source</label>
+            <select id="triggerSource" class="form-select">
+                <option value="all" selected>All Sources</option>
+                <option value="Manual">Manual</option>
+                <option value="Scheduled">Scheduled</option>
+                <option value="Workflow">Workflow</option>
+                <option value="API">API</option>
+                <option value="Direct">Direct</option>
+            </select>
+        </div>
+    </section>
+
+    <div id="statusBanner" class="alert d-none" role="alert"></div>
+
+    <section class="utilization-summary" aria-live="polite">
+        <div class="summary-card" id="utilizationPercentCard">
+            <p>Utilization</p>
+            <h3 id="utilizationPercent">--%</h3>
+        </div>
+        <div class="summary-card" id="workingMinutesCard">
+            <p>Working Minutes</p>
+            <h3 id="workingMinutes">--</h3>
+        </div>
+        <div class="summary-card" id="chargingMinutesCard">
+            <p>Charging Minutes</p>
+            <h3 id="chargingMinutes">--</h3>
+        </div>
+        <div class="summary-card" id="idleMinutesCard">
+            <p>Idle Minutes</p>
+            <h3 id="idleMinutes">--</h3>
+        </div>
+    </section>
+
+    <section class="chart-section" aria-labelledby="chartTitle">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <h3 id="chartTitle" class="h6 mb-0">Utilization trend</h3>
+            <span class="text-muted small" id="chartRangeLabel"></span>
+        </div>
+        <div class="chart-container" id="chartContainer" aria-live="polite">
+            <div class="chart-empty" id="chartEmptyState">
+                <span aria-hidden="true">📊</span>
+                <p>No trend data yet. Adjust the filters to view utilization.</p>
+            </div>
+            <svg id="utilizationChart" role="img" aria-label="Robot utilization trend" focusable="false"></svg>
+        </div>
+    </section>
+
+    <section class="table-section" aria-labelledby="missionsTitle">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <h3 id="missionsTitle" class="h6 mb-0">Mission completions</h3>
+            <span class="badge bg-light text-dark" id="missionCountBadge">0 missions</span>
+        </div>
+
+        <div class="table-responsive utilization-table">
+            <table class="data-table">
+                <thead>
+                <tr>
+                    <th scope="col">Mission</th>
+                    <th scope="col">Workflow</th>
+                    <th scope="col">Source</th>
+                    <th scope="col">Saved Mission</th>
+                    <th scope="col">Started</th>
+                    <th scope="col">Completed</th>
+                    <th scope="col">Duration (min)</th>
+                    <th scope="col">Manual pause (min)</th>
+                </tr>
+                </thead>
+                <tbody id="missionsTableBody">
+                <tr class="skeleton-row">
+                    <td colspan="8">
+                        <div class="skeleton-line"></div>
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="table-section" aria-labelledby="chargingTitle">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <h3 id="chargingTitle" class="h6 mb-0">Charging Sessions</h3>
+            <span class="badge bg-light text-dark" id="chargingCountBadge">0 sessions</span>
+        </div>
+
+        <div class="table-responsive utilization-table">
+            <table class="data-table">
+                <thead>
+                <tr>
+                    <th scope="col">Mission Code</th>
+                    <th scope="col">Type</th>
+                    <th scope="col">Template Name</th>
+                    <th scope="col">Started</th>
+                    <th scope="col">Ended</th>
+                    <th scope="col">Duration (min)</th>
+                    <th scope="col">Status</th>
+                </tr>
+                </thead>
+                <tbody id="chargingTableBody">
+                <tr class="skeleton-row">
+                    <td colspan="7">
+                        <div class="skeleton-line"></div>
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+</div>
+
+@section Scripts
+{
+    <script>
+        (() => {
+            const utilizationEndpoint = '@Url.Page(null, null, new { handler = "Utilization" })';
+
+            const state = {
+                isLoading: false,
+                error: null,
+                data: null
+            };
+
+            // Load robot list from API
+            async function loadRobotList() {
+                const robotIdSelect = document.getElementById('robotIdInput');
+
+                try {
+                    const response = await fetch('/Analytics/RobotUtilization?handler=RobotList');
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+
+                    const robots = await response.json();
+
+                    // Clear and populate dropdown
+                    robotIdSelect.innerHTML = '<option value="">-- Select a Robot --</option>';
+
+                    robots.forEach(robot => {
+                        const option = document.createElement('option');
+                        option.value = robot.robotId;
+                        option.textContent = `${robot.robotId} (Battery: ${robot.batteryLevel}%, Status: ${robot.status})`;
+                        robotIdSelect.appendChild(option);
+                    });
+
+                    // Auto-select first robot if available
+                    if (robots.length > 0) {
+                        robotIdSelect.value = robots[0].robotId;
+                        fetchUtilization(); // Load data for first robot
+                    }
+
+                    console.log(`Loaded ${robots.length} robots`);
+                } catch (error) {
+                    console.error('Error loading robot list:', error);
+                    robotIdSelect.innerHTML = '<option value="">Error loading robots</option>';
+                }
+            }
+
+            const robotIdInput = document.getElementById('robotIdInput');
+            const startDateInput = document.getElementById('startDate');
+            const endDateInput = document.getElementById('endDate');
+            const groupBySelect = document.getElementById('groupBy');
+            const refreshButton = document.getElementById('refreshButton');
+            const utilizationPercent = document.getElementById('utilizationPercent');
+            const workingMinutes = document.getElementById('workingMinutes');
+            const chargingMinutes = document.getElementById('chargingMinutes');
+            const idleMinutes = document.getElementById('idleMinutes');
+            const missionCountBadge = document.getElementById('missionCountBadge');
+            const missionsTableBody = document.getElementById('missionsTableBody');
+            const chargingCountBadge = document.getElementById('chargingCountBadge');
+            const chargingTableBody = document.getElementById('chargingTableBody');
+            const statusBanner = document.getElementById('statusBanner');
+            const chartContainer = document.getElementById('chartContainer');
+            const chartSvg = document.getElementById('utilizationChart');
+            const chartEmptyState = document.getElementById('chartEmptyState');
+            const chartRangeLabel = document.getElementById('chartRangeLabel');
+
+            function initDateInputs() {
+                const today = new Date();
+                const sevenDaysAgo = new Date(today);
+                sevenDaysAgo.setDate(today.getDate() - 6);
+
+                startDateInput.value = sevenDaysAgo.toISOString().slice(0, 10);
+                endDateInput.value = today.toISOString().slice(0, 10);
+            }
+
+            async function fetchUtilization() {
+                const robotId = robotIdInput.value.trim();
+                if (!robotId) {
+                    state.error = 'Please enter a Robot ID';
+                    updateStatusBanner();
+                    return;
+                }
+
+                state.isLoading = true;
+                updateLoadingState(true);
+                updateStatusBanner();
+
+                const params = new URLSearchParams();
+                params.append('robotId', robotId);
+
+                if (startDateInput.value) {
+                    // Parse date in local timezone and convert to UTC midnight
+                    const startDate = new Date(startDateInput.value);
+                    const startUtc = new Date(Date.UTC(startDate.getFullYear(), startDate.getMonth(), startDate.getDate(), 0, 0, 0));
+                    params.append('start', startUtc.toISOString());
+                }
+                if (endDateInput.value) {
+                    // Parse date in local timezone and convert to UTC end-of-day
+                    const endDate = new Date(endDateInput.value);
+                    const endUtc = new Date(Date.UTC(endDate.getFullYear(), endDate.getMonth(), endDate.getDate(), 23, 59, 59));
+                    params.append('end', endUtc.toISOString());
+                }
+                params.append('groupBy', groupBySelect.value);
+
+                try {
+                    console.log('Fetching from:', `${utilizationEndpoint}&${params.toString()}`);
+                    const response = await fetch(`${utilizationEndpoint}&${params.toString()}`, { credentials: 'include' });
+
+                    console.log('Response status:', response.status);
+                    console.log('Response content-type:', response.headers.get('content-type'));
+
+                    // Check if response is JSON
+                    const contentType = response.headers.get('content-type');
+                    if (!contentType || !contentType.includes('application/json')) {
+                        const text = await response.text();
+                        console.error('Non-JSON response received:', text.substring(0, 200));
+                        throw new Error('Server returned HTML instead of JSON. Please ensure you are logged in and try refreshing the page.');
+                    }
+
+                    const payload = await response.json();
+
+                    if (!response.ok || payload.success === false) {
+                        const message = payload?.title || payload?.message || 'Unable to retrieve utilization data.';
+                        throw new Error(message);
+                    }
+
+                    state.data = payload.data;
+                    state.error = null;
+                    renderSummary();
+                    renderMissions();
+                    renderChargingSessions();
+                    renderChart();
+                    updateStatusBanner();
+                } catch (error) {
+                    console.error('Utilization fetch failed', error);
+                    state.data = null;
+                    state.error = error instanceof Error ? error.message : 'Unable to retrieve utilization data.';
+                    renderSummary();
+                    renderMissions();
+                    renderChargingSessions();
+                    renderChart();
+                    updateStatusBanner();
+                } finally {
+                    state.isLoading = false;
+                    updateLoadingState(false);
+                }
+            }
+
+            function updateLoadingState(isLoading) {
+                const root = document.getElementById('robotUtilizationRoot');
+                if (isLoading) {
+                    root.setAttribute('aria-busy', 'true');
+                    missionsTableBody.innerHTML = `<tr class="skeleton-row"><td colspan="8"><div class="skeleton-line"></div></td></tr>`;
+                } else {
+                    root.removeAttribute('aria-busy');
+                }
+            }
+
+            function updateStatusBanner() {
+                if (state.error) {
+                    statusBanner.classList.remove('d-none', 'alert-success');
+                    statusBanner.classList.add('alert-danger');
+                    statusBanner.textContent = state.error;
+                } else if (state.data) {
+                    statusBanner.classList.add('d-none');
+                    statusBanner.textContent = '';
+                } else {
+                    statusBanner.classList.add('d-none');
+                    statusBanner.textContent = '';
+                }
+            }
+
+            function renderSummary() {
+                if (!state.data) {
+                    utilizationPercent.textContent = '--%';
+                    workingMinutes.textContent = '--';
+                    chargingMinutes.textContent = '--';
+                    idleMinutes.textContent = '--';
+                    missionCountBadge.textContent = '0 missions';
+                    chartRangeLabel.textContent = '';
+                    return;
+                }
+
+                const {
+                    utilizationPercent: percent,
+                    totalWorkingMinutes: working,
+                    totalChargingMinutes: charging,
+                    totalIdleMinutes: idle,
+                    missions
+                } = state.data;
+
+                utilizationPercent.textContent = `${(percent ?? 0).toFixed(2)}%`;
+                workingMinutes.textContent = (working ?? 0).toFixed(1);
+                chargingMinutes.textContent = (charging ?? 0).toFixed(1);
+                idleMinutes.textContent = (idle ?? 0).toFixed(1);
+                missionCountBadge.textContent = `${missions?.length ?? 0} mission${(missions?.length ?? 0) === 1 ? '' : 's'}`;
+
+                const formatRange = (isoString) => new Date(isoString).toLocaleString();
+                chartRangeLabel.textContent = `${formatRange(state.data.periodStartUtc)} – ${formatRange(state.data.periodEndUtc)}`;
+            }
+
+            function renderMissions() {
+                missionsTableBody.innerHTML = '';
+
+                if (!state.data || !state.data.missions || state.data.missions.length === 0) {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `<td colspan="8" class="text-center py-4 text-muted">No missions completed in this period.</td>`;
+                    missionsTableBody.appendChild(row);
+                    return;
+                }
+
+                // Filter by trigger source if selected
+                let missions = state.data.missions;
+                const filterValue = document.getElementById('triggerSource')?.value;
+                if (filterValue && filterValue !== 'all') {
+                    missions = missions.filter(m => m.triggerSource === filterValue);
+                }
+
+                if (missions.length === 0) {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `<td colspan="8" class="text-center py-4 text-muted">No missions match the selected filter.</td>`;
+                    missionsTableBody.appendChild(row);
+                    return;
+                }
+
+                missions.forEach(mission => {
+                    const row = document.createElement('tr');
+                    const triggerBadge = getTriggerSourceBadge(mission.triggerSource);
+                    const savedMissionLink = mission.savedMissionId
+                        ? `<a href="/SavedMissions/Details/${mission.savedMissionId}">#${mission.savedMissionId}</a>`
+                        : '—';
+
+                    row.innerHTML = `
+                        <td><code>${mission.missionCode}</code></td>
+                        <td>${mission.workflowName ?? '—'}</td>
+                        <td>${triggerBadge}</td>
+                        <td>${savedMissionLink}</td>
+                        <td>${formatDateTime(mission.startTimeUtc)}</td>
+                        <td>${formatDateTime(mission.completedTimeUtc)}</td>
+                        <td>${(mission.durationMinutes ?? 0).toFixed(1)}</td>
+                        <td>${(mission.manualPauseMinutes ?? 0).toFixed(1)}</td>`;
+                    missionsTableBody.appendChild(row);
+                });
+            }
+
+            function renderChargingSessions() {
+                chargingTableBody.innerHTML = '';
+
+                if (!state.data || !state.data.chargingSessions || state.data.chargingSessions.length === 0) {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `<td colspan="7" class="text-center py-4 text-muted">No charging sessions in this period.</td>`;
+                    chargingTableBody.appendChild(row);
+                    chargingCountBadge.textContent = '0 sessions';
+                    return;
+                }
+
+                const sessions = state.data.chargingSessions;
+                chargingCountBadge.textContent = `${sessions.length} session${sessions.length === 1 ? '' : 's'}`;
+
+                sessions.forEach(session => {
+                    const row = document.createElement('tr');
+                    const typeClass = session.templateCode === 'manualCharging' ? 'badge bg-warning text-dark' : 'badge bg-info';
+                    const typeLabel = session.templateCode === 'manualCharging' ? '🔌 Manual' : '⚡ Auto';
+
+                    row.innerHTML = `
+                        <td><code>${session.missionCode}</code></td>
+                        <td><span class="${typeClass}">${typeLabel}</span></td>
+                        <td>${session.templateName}</td>
+                        <td>${formatDateTime(session.beginTimeUtc)}</td>
+                        <td>${formatDateTime(session.endTimeUtc)}</td>
+                        <td>${(session.durationMinutes ?? 0).toFixed(1)}</td>
+                        <td><span class="badge bg-success">✓ ${session.status}</span></td>`;
+                    chargingTableBody.appendChild(row);
+                });
+            }
+
+            function getTriggerSourceBadge(triggerSource) {
+                const badgeMap = {
+                    'Manual': { icon: '👤', class: 'badge bg-primary', text: 'Manual' },
+                    'Scheduled': { icon: '⏰', class: 'badge bg-info', text: 'Scheduled' },
+                    'Workflow': { icon: '🔄', class: 'badge bg-success', text: 'Workflow' },
+                    'API': { icon: '🔌', class: 'badge bg-warning text-dark', text: 'API' },
+                    'Direct': { icon: '⚡', class: 'badge bg-secondary', text: 'Direct' }
+                };
+
+                const badge = badgeMap[triggerSource] || badgeMap['Manual'];
+                return `<span class="${badge.class}">${badge.icon} ${badge.text}</span>`;
+            }
+
+            function renderChart() {
+                chartSvg.innerHTML = '';
+
+                if (!state.data || !state.data.breakdown || state.data.breakdown.length === 0) {
+                    chartEmptyState.classList.remove('d-none');
+                    chartSvg.setAttribute('aria-hidden', 'true');
+                    return;
+                }
+
+                chartEmptyState.classList.add('d-none');
+                chartSvg.removeAttribute('aria-hidden');
+
+                const breakdown = state.data.breakdown;
+                const width = chartContainer.clientWidth || 600;
+                const height = 300;
+                const paddingLeft = 60;
+                const paddingRight = 120;
+                const paddingTop = 40;
+                const paddingBottom = 60;
+
+                chartSvg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+                chartSvg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+
+                // Calculate working, charging, and idle percentages for each point
+                const dataPoints = breakdown.map(item => {
+                    const available = item.totalAvailableMinutes ?? 60;
+                    const working = item.workingMinutes ?? 0;
+                    const charging = item.chargingMinutes ?? 0;
+                    const idle = item.idleMinutes ?? 0;
+
+                    return {
+                        ...item,
+                        workingPercent: available > 0 ? (working / available) * 100 : 0,
+                        chargingPercent: available > 0 ? (charging / available) * 100 : 0,
+                        idlePercent: available > 0 ? (idle / available) * 100 : 0
+                    };
+                });
+
+                const maxPercentage = 100; // Always use 100% as max
+                const chartWidth = width - paddingLeft - paddingRight;
+                const chartHeight = height - paddingTop - paddingBottom;
+
+                // Draw Y-axis grid lines and labels (percentages)
+                const ySteps = 5;
+                for (let i = 0; i <= ySteps; i++) {
+                    const percent = (maxPercentage / ySteps) * i;
+                    const y = paddingTop + chartHeight - (i / ySteps) * chartHeight;
+
+                    // Grid line
+                    const gridLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                    gridLine.setAttribute('x1', paddingLeft.toString());
+                    gridLine.setAttribute('y1', y.toString());
+                    gridLine.setAttribute('x2', (width - paddingRight).toString());
+                    gridLine.setAttribute('y2', y.toString());
+                    gridLine.setAttribute('stroke', i === 0 ? '#999' : '#e0e0e0');
+                    gridLine.setAttribute('stroke-width', i === 0 ? '2' : '1');
+                    chartSvg.appendChild(gridLine);
+
+                    // Y-axis label
+                    const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                    label.setAttribute('x', (paddingLeft - 10).toString());
+                    label.setAttribute('y', (y + 4).toString());
+                    label.setAttribute('text-anchor', 'end');
+                    label.setAttribute('font-size', '12');
+                    label.setAttribute('fill', '#666');
+                    label.textContent = `${percent.toFixed(1)}%`;
+                    chartSvg.appendChild(label);
+                }
+
+                // Calculate X positions for all points
+                const xPositions = dataPoints.map((item, index) =>
+                    paddingLeft + (index / Math.max(dataPoints.length - 1, 1)) * chartWidth
+                );
+
+                // Define the 3 series
+                const series = [
+                    { name: 'Working', color: '#2e86de', key: 'workingPercent' },
+                    { name: 'Charging', color: '#f39c12', key: 'chargingPercent' },
+                    { name: 'Idle', color: '#95a5a6', key: 'idlePercent' }
+                ];
+
+                // Draw each series
+                series.forEach((serie) => {
+                    const points = dataPoints.map((item, index) => {
+                        const x = xPositions[index];
+                        const y = paddingTop + chartHeight - (item[serie.key] / maxPercentage) * chartHeight;
+                        return { x, y, data: item };
+                    });
+
+                    // Draw the line
+                    const linePoints = points.map(p => `${p.x},${p.y}`).join(' ');
+                    const polyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+                    polyline.setAttribute('points', linePoints);
+                    polyline.setAttribute('fill', 'none');
+                    polyline.setAttribute('stroke', serie.color);
+                    polyline.setAttribute('stroke-width', '2');
+                    polyline.setAttribute('stroke-linejoin', 'round');
+                    polyline.setAttribute('stroke-linecap', 'round');
+                    chartSvg.appendChild(polyline);
+
+                    // Draw data points
+                    points.forEach((point) => {
+                        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                        circle.setAttribute('cx', point.x.toString());
+                        circle.setAttribute('cy', point.y.toString());
+                        circle.setAttribute('r', '4');
+                        circle.setAttribute('fill', serie.color);
+                        circle.setAttribute('stroke', 'white');
+                        circle.setAttribute('stroke-width', '2');
+                        chartSvg.appendChild(circle);
+                    });
+                });
+
+                // Draw X-axis labels and interactive hover areas
+                dataPoints.forEach((dataPoint, index) => {
+                    const x = xPositions[index];
+
+                    // Add invisible hover area for tooltip
+                    const hoverRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                    hoverRect.setAttribute('x', (x - 15).toString());
+                    hoverRect.setAttribute('y', paddingTop.toString());
+                    hoverRect.setAttribute('width', '30');
+                    hoverRect.setAttribute('height', chartHeight.toString());
+                    hoverRect.setAttribute('fill', 'transparent');
+                    hoverRect.setAttribute('cursor', 'pointer');
+
+                    // Add tooltip
+                    const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+                    const date = new Date(dataPoint.bucketStartUtc);
+                    const dateStr = groupBySelect.value === 'hour'
+                        ? date.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', hour12: true })
+                        : date.toLocaleString('en-US', { month: 'short', day: 'numeric' });
+                    title.textContent = `${dateStr}\nWorking: ${dataPoint.workingPercent.toFixed(1)}%\nCharging: ${dataPoint.chargingPercent.toFixed(1)}%\nIdle: ${dataPoint.idlePercent.toFixed(1)}%`;
+                    hoverRect.appendChild(title);
+                    chartSvg.appendChild(hoverRect);
+
+                    // X-axis labels (dates)
+                    const showLabel = dataPoints.length <= 10 || index % Math.ceil(dataPoints.length / 8) === 0 || index === dataPoints.length - 1;
+                    if (showLabel) {
+                        const xLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                        xLabel.setAttribute('x', x.toString());
+                        xLabel.setAttribute('y', (paddingTop + chartHeight + 20).toString());
+                        xLabel.setAttribute('text-anchor', 'middle');
+                        xLabel.setAttribute('font-size', '11');
+                        xLabel.setAttribute('fill', '#666');
+
+                        const date = new Date(dataPoint.bucketStartUtc);
+                        const labelText = groupBySelect.value === 'hour'
+                            ? date.toLocaleString('en-US', { hour: 'numeric', hour12: true })
+                            : date.toLocaleString('en-US', { month: 'short', day: 'numeric' });
+                        xLabel.textContent = labelText;
+                        chartSvg.appendChild(xLabel);
+
+                        // Second line for date if hourly
+                        if (groupBySelect.value === 'hour' && (index === 0 || index === dataPoints.length - 1)) {
+                            const dateLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                            dateLabel.setAttribute('x', x.toString());
+                            dateLabel.setAttribute('y', (paddingTop + chartHeight + 35).toString());
+                            dateLabel.setAttribute('text-anchor', 'middle');
+                            dateLabel.setAttribute('font-size', '10');
+                            dateLabel.setAttribute('fill', '#999');
+                            dateLabel.textContent = date.toLocaleString('en-US', { month: 'short', day: 'numeric' });
+                            chartSvg.appendChild(dateLabel);
+                        }
+                    }
+                });
+
+                // Draw legend
+                const legendX = width - paddingRight + 10;
+                const legendY = paddingTop;
+                series.forEach((serie, index) => {
+                    const y = legendY + index * 25;
+
+                    // Legend line
+                    const legendLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                    legendLine.setAttribute('x1', legendX.toString());
+                    legendLine.setAttribute('y1', y.toString());
+                    legendLine.setAttribute('x2', (legendX + 20).toString());
+                    legendLine.setAttribute('y2', y.toString());
+                    legendLine.setAttribute('stroke', serie.color);
+                    legendLine.setAttribute('stroke-width', '3');
+                    chartSvg.appendChild(legendLine);
+
+                    // Legend text
+                    const legendText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                    legendText.setAttribute('x', (legendX + 25).toString());
+                    legendText.setAttribute('y', (y + 4).toString());
+                    legendText.setAttribute('font-size', '12');
+                    legendText.setAttribute('fill', '#666');
+                    legendText.textContent = serie.name;
+                    chartSvg.appendChild(legendText);
+                });
+
+                // Y-axis label
+                const yAxisLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                yAxisLabel.setAttribute('x', '15');
+                yAxisLabel.setAttribute('y', (paddingTop + chartHeight / 2).toString());
+                yAxisLabel.setAttribute('text-anchor', 'middle');
+                yAxisLabel.setAttribute('font-size', '12');
+                yAxisLabel.setAttribute('font-weight', '600');
+                yAxisLabel.setAttribute('fill', '#666');
+                yAxisLabel.setAttribute('transform', `rotate(-90, 15, ${paddingTop + chartHeight / 2})`);
+                yAxisLabel.textContent = 'Utilization %';
+                chartSvg.appendChild(yAxisLabel);
+            }
+
+            function formatDateTime(value) {
+                if (!value) {
+                    return '—';
+                }
+                return new Date(value).toLocaleString();
+            }
+
+            robotIdInput.addEventListener('change', fetchUtilization);
+            startDateInput.addEventListener('change', fetchUtilization);
+            endDateInput.addEventListener('change', fetchUtilization);
+            groupBySelect.addEventListener('change', fetchUtilization);
+            refreshButton.addEventListener('click', fetchUtilization);
+            document.getElementById('triggerSource').addEventListener('change', () => {
+                renderMissions(); // Re-render missions with filter (doesn't need to refetch from API)
+            });
+
+            // Initialize page
+            initDateInputs();
+            loadRobotList(); // Load robots on page load
+        })();
+    </script>
+}

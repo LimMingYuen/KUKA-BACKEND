@@ -1,0 +1,415 @@
+﻿@page
+@model QES_KUKA_AMR_WEB.Pages.RolePermissionConfigModel
+@inject IConfiguration Configuration
+@{
+    ViewData["Title"] = "Role Permission Configuration";
+    Layout = "_DashboardLayout";
+}
+
+@{
+    string SortClass(string column)
+    {
+        if (!string.Equals(Model.SortColumn, column, StringComparison.OrdinalIgnoreCase))
+        {
+            return "sort-icon";
+        }
+
+        return Model.SortDirection.Equals("desc", StringComparison.OrdinalIgnoreCase)
+            ? "sort-icon desc"
+            : "sort-icon asc";
+    }
+
+    string NextDirection(string column) =>
+        string.Equals(Model.SortColumn, column, StringComparison.OrdinalIgnoreCase) &&
+        Model.SortDirection.Equals("asc", StringComparison.OrdinalIgnoreCase)
+            ? "desc"
+            : "asc";
+}
+
+<div class="content-header mb-3">
+    <h2 class="mb-1">Role Permission Management</h2>
+    <p class="text-muted mb-0" style="font-size: 14px;">Manage role permission configurations</p>
+</div>
+
+@if (!string.IsNullOrEmpty(Model.StatusMessage))
+{
+    var alertClass = Model.StatusType switch
+    {
+        "success" => "alert-success",
+        "warning" => "alert-warning",
+        "danger" => "alert-danger",
+        _ => "alert-info"
+    };
+
+    <div id="statusAlert" class="alert @alertClass alert-dismissible fade show" role="alert">
+        @Model.StatusMessage
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+<div class="d-flex justify-content-end mb-3">
+    <form method="post" asp-page-handler="Sync" class="mb-0">
+        <input type="hidden" name="SortColumn" value="@Model.SortColumn" />
+        <input type="hidden" name="SortDirection" value="@Model.SortDirection" />
+        <input type="hidden" name="CurrentPage" value="@Model.CurrentPage" />
+        <input type="hidden" name="PageSize" value="@Model.PageSize" />
+        <input type="hidden" name="SearchTerm" value="@Model.SearchTerm" />
+        <button type="button" class="btn-sync" data-bs-toggle="modal" data-bs-target="#addPermissionModal">
+            <span class="sync-icon">+</span> Add Permission
+        </button>
+    </form>
+</div>
+
+<!-- Add Permission Modal -->
+<div class="modal fade" id="addPermissionModal" tabindex="-1" aria-labelledby="addPermissionLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content rounded-3 shadow">
+            <div class="modal-header">
+                <h5 class="modal-title" id="addPermissionLabel">Add New Role Permission</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="post" asp-page-handler="Add">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Select Role</label>
+                        <select name="NewPermission.RoleId" class="form-select" required>
+                            <option value="">-- Select Role --</option>
+                            @foreach (var role in Model.Roles)
+                            {
+                                <option value="@role.Id">@role.Name</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Select Page(s)</label>
+                        <select name="NewPermission.PageIds" class="form-select" multiple required size="6">
+                            @foreach (var perm in Model.Pages)
+                            {
+                                <option value="@perm.Id">@perm.PageName</option>
+                            }
+                        </select>
+                        <small class="text-muted">Hold Ctrl (Windows) or ⌘ (Mac) to select multiple.</small>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Permission</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Permission Modal -->
+<div class="modal fade" id="editPermissionModal" tabindex="-1" aria-labelledby="editPermissionLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content rounded-3 shadow">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editPermissionLabel">Edit Role Permission</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="post" asp-page-handler="Update" id="editPermissionForm">
+                <div class="modal-body">
+                    <input type="hidden" name="EditPermission.RoleId" id="editRoleId" />
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Role</label>
+                        <input type="text" id="editRoleName" class="form-control" readonly />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Select Page(s)</label>
+                        <select name="EditPermission.PageIds" id="editPageIds" class="form-select" multiple required size="6">
+                            @foreach (var perm in Model.Pages)
+                            {
+                                <option value="@perm.Id">@perm.PageName</option>
+                            }
+                        </select>
+                        <small class="text-muted">Hold Ctrl (Windows) or ⌘ (Mac) to select multiple.</small>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Update Permission</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteConfirmModal" tabindex="-1" aria-labelledby="deleteConfirmLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content rounded-3 shadow">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="deleteConfirmLabel">Confirm Delete</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="post" asp-page-handler="Delete" id="deletePermissionForm">
+                <div class="modal-body">
+                    <input type="hidden" name="DeleteRoleId" id="deleteRoleId" />
+                    <p>Are you sure you want to delete all permissions for role <strong id="deleteRoleName"></strong>?</p>
+                    <p class="text-danger mb-0">This action cannot be undone.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-danger">Delete</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Section -->
+<div class="filter-section mb-3">
+    <form id="searchForm" method="get" class="d-flex gap-2 align-items-center flex-wrap">
+        <input type="hidden" name="SortColumn" value="@Model.SortColumn" />
+        <input type="hidden" name="SortDirection" value="@Model.SortDirection" />
+        <input type="hidden" name="CurrentPage" value="1" />
+        <input type="hidden" name="PageSize" value="@Model.PageSize" />
+
+        <div class="search-group flex-grow-1">
+            <input type="text" id="searchInput" name="SearchTerm" value="@Model.SearchTerm" placeholder="Search by role or page..." class="search-input" />
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(Model.SearchTerm))
+        {
+            <a asp-page="./RolePermissionConfig"
+               asp-route-SortColumn="@Model.SortColumn"
+               asp-route-SortDirection="@Model.SortDirection"
+               asp-route-PageSize="@Model.PageSize"
+               class="btn-clear">
+                <span>&#10005;</span> Clear
+            </a>
+        }
+    </form>
+
+    @if (!string.IsNullOrWhiteSpace(Model.SearchTerm))
+    {
+        <div class="filter-indicator mt-2">
+            <span class="badge bg-info">
+                <span>&#128269;</span> Filtering: "@Model.SearchTerm"
+            </span>
+        </div>
+    }
+</div>
+
+<!-- Table -->
+<div class="table-container table-scroll-workflow">
+    <div class="table-responsive">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>
+                        <a asp-page="./RolePermissionConfig" asp-route-SortColumn="Role" asp-route-SortDirection="@NextDirection("Role")" asp-route-CurrentPage="@Model.CurrentPage" asp-route-PageSize="@Model.PageSize" asp-route-SearchTerm="@Model.SearchTerm" class="sortable-column">
+                            Role <span class="@SortClass("Role")"></span>
+                        </a>
+                    </th>
+                    <th>
+                        <a asp-page="./RolePermissionConfig" asp-route-SortColumn="PageName" asp-route-SortDirection="@NextDirection("PageName")" asp-route-CurrentPage="@Model.CurrentPage" asp-route-PageSize="@Model.PageSize" asp-route-SearchTerm="@Model.SearchTerm" class="sortable-column">
+                            Accessible To <span class="@SortClass("PageName")"></span>
+                        </a>
+                    </th>
+                    <th style="width: 150px; text-align: center;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (Model.TotalRecords == 0)
+                {
+                    <tr>
+                        <td colspan="3" class="text-center text-muted">No role permissions found.</td>
+                    </tr>
+                }
+                else
+                {
+                    foreach (var permission in Model.RolePermissions)
+                    {
+                        <tr>
+                            <td>@permission.RoleName</td>
+                            <td>@string.Join(" | ", permission.PageNames)</td>
+                            <td style="text-align: center;">
+                                <button type="button" class="btn btn-sm btn-primary me-1" 
+                                        onclick="editPermission(@permission.RoleId)" title="Edit">
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+                                <button type="button" class="btn btn-sm btn-danger" 
+                                        onclick="confirmDelete(@permission.RoleId, '@permission.RoleName')" title="Delete">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Pagination Footer -->
+@if (Model.TotalRecords > 0)
+{
+    <div class="pagination-section">
+        <div class="pagination-info">
+            <span class="page-info">
+                Showing @Model.DisplayStart-@Model.DisplayEnd of @Model.TotalRecords records
+            </span>
+        </div>
+
+        <div class="pagination-controls">
+            @if (Model.CurrentPage > 1)
+            {
+                <a asp-page="./RolePermissionConfig"
+                   asp-route-SortColumn="@Model.SortColumn"
+                   asp-route-SortDirection="@Model.SortDirection"
+                   asp-route-CurrentPage="@(Model.CurrentPage - 1)"
+                   asp-route-PageSize="@Model.PageSize"
+                   asp-route-SearchTerm="@Model.SearchTerm"
+                   class="btn-page">
+                    &laquo; Previous
+                </a>
+            }
+            else
+            {
+                <button class="btn-page" disabled>&laquo; Previous</button>
+            }
+
+            <div class="page-numbers">
+                @{
+                    int startPage = Math.Max(1, Model.CurrentPage - 2);
+                    int endPage = Math.Min(Model.TotalPages, Model.CurrentPage + 2);
+
+                    if (startPage > 1)
+                    {
+                        <a asp-page="./RolePermissionConfig" asp-route-SortColumn="@Model.SortColumn" asp-route-SortDirection="@Model.SortDirection" asp-route-CurrentPage="1" asp-route-PageSize="@Model.PageSize" asp-route-SearchTerm="@Model.SearchTerm" class="btn-page">1</a>
+                        if (startPage > 2)
+                        {
+                            <span class="page-ellipsis">...</span>
+                        }
+                    }
+
+                    for (int i = startPage; i <= endPage; i++)
+                    {
+                        if (i == Model.CurrentPage)
+                        {
+                            <button class="btn-page active">@i</button>
+                        }
+                        else
+                        {
+                            <a asp-page="./RolePermissionConfig" asp-route-SortColumn="@Model.SortColumn" asp-route-SortDirection="@Model.SortDirection" asp-route-CurrentPage="@i" asp-route-PageSize="@Model.PageSize" asp-route-SearchTerm="@Model.SearchTerm" class="btn-page">@i</a>
+                        }
+                    }
+
+                    if (endPage < Model.TotalPages)
+                    {
+                        if (endPage < Model.TotalPages - 1)
+                        {
+                            <span class="page-ellipsis">...</span>
+                        }
+                        <a asp-page="./RolePermissionConfig" asp-route-SortColumn="@Model.SortColumn" asp-route-SortDirection="@Model.SortDirection" asp-route-CurrentPage="@Model.TotalPages" asp-route-PageSize="@Model.PageSize" asp-route-SearchTerm="@Model.SearchTerm" class="btn-page">@Model.TotalPages</a>
+                    }
+                }
+            </div>
+
+            @if (Model.CurrentPage < Model.TotalPages)
+            {
+                <a asp-page="./RolePermissionConfig" asp-route-SortColumn="@Model.SortColumn" asp-route-SortDirection="@Model.SortDirection" asp-route-CurrentPage="@(Model.CurrentPage + 1)" asp-route-PageSize="@Model.PageSize" asp-route-SearchTerm="@Model.SearchTerm" class="btn-page">
+                    Next &raquo;
+                </a>
+            }
+            else
+            {
+                <button class="btn-page" disabled>Next &raquo;</button>
+            }
+        </div>
+
+        <div class="page-size-selector">
+            <form method="get" class="d-inline">
+                <input type="hidden" name="SortColumn" value="@Model.SortColumn" />
+                <input type="hidden" name="SortDirection" value="@Model.SortDirection" />
+                <input type="hidden" name="CurrentPage" value="1" />
+                <input type="hidden" name="SearchTerm" value="@Model.SearchTerm" />
+                <label class="items-label">Items per page:</label>
+                <select name="PageSize" class="items-per-page" onchange="this.form.submit()">
+                    <option value="10" selected="@(Model.PageSize == 10)">10</option>
+                    <option value="20" selected="@(Model.PageSize == 20)">20</option>
+                    <option value="50" selected="@(Model.PageSize == 50)">50</option>
+                    <option value="100" selected="@(Model.PageSize == 100)">100</option>
+                </select>
+            </form>
+        </div>
+    </div>
+}
+
+@section Scripts {
+<script>
+const apiBaseUrl = '@(Configuration["ApiSettings:BaseUrl"] ?? "https://localhost:7255")';
+const jwtToken = '@HttpContext.Session.GetString("JwtToken")';
+
+document.addEventListener('DOMContentLoaded', function () {
+    const statusAlert = document.getElementById('statusAlert');
+    if (statusAlert) {
+        setTimeout(() => { new bootstrap.Alert(statusAlert).close(); }, 5000);
+    }
+
+    const searchInput = document.getElementById('searchInput');
+    const searchForm = document.getElementById('searchForm');
+    let searchDebounceTimer;
+
+    if (searchInput && searchForm) {
+        searchInput.addEventListener('input', function () {
+            clearTimeout(searchDebounceTimer);
+            searchDebounceTimer = setTimeout(() => searchForm.submit(), 300);
+        });
+
+        searchInput.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') {
+                clearTimeout(searchDebounceTimer);
+                searchForm.submit();
+            }
+        });
+    }
+});
+
+async function editPermission(roleId) {
+    try {
+        const response = await fetch(`${apiBaseUrl}/api/RolePermission/${roleId}`, {
+            headers: {
+                'Authorization': `Bearer ${jwtToken}`
+            }
+        });
+
+        if (!response.ok) {
+            alert('Failed to load permission details');
+            return;
+        }
+
+        const data = await response.json();
+        
+        document.getElementById('editRoleId').value = data.roleId;
+        document.getElementById('editRoleName').value = data.roleName;
+        
+        const selectElement = document.getElementById('editPageIds');
+        for (let option of selectElement.options) {
+            option.selected = data.pageIds.includes(parseInt(option.value));
+        }
+
+        const modal = new bootstrap.Modal(document.getElementById('editPermissionModal'));
+        modal.show();
+    } catch (error) {
+        console.error('Error loading permission:', error);
+        alert('Error loading permission details');
+    }
+}
+
+function confirmDelete(roleId, roleName) {
+    document.getElementById('deleteRoleId').value = roleId;
+    document.getElementById('deleteRoleName').textContent = roleName;
+    
+    const modal = new bootstrap.Modal(document.getElementById('deleteConfirmModal'));
+    modal.show();
+}
+</script>
+}

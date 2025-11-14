@@ -1,0 +1,3035 @@
+@page
+@model QES_KUKA_AMR_WEB.Pages.SavedCustomMissionsModel
+@{
+    ViewData["Title"] = "Saved Custom Missions";
+    Layout = "_DashboardLayout";
+}
+
+@section Styles {
+    <style>
+        .saved-missions {
+            padding: 2rem;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .saved-missions__header {
+            margin-bottom: 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .saved-missions__title {
+            font-size: 2rem;
+            font-weight: 600;
+            color: #1a1a1a;
+            margin: 0 0 0.5rem 0;
+        }
+
+        .saved-missions__subtitle {
+            color: #6b7280;
+            margin: 0;
+        }
+
+        .btn {
+            padding: 0.5rem 1rem;
+            border-radius: 0.375rem;
+            font-weight: 500;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-success {
+            background-color: #10b981;
+            color: white;
+            padding: 0.375rem 0.75rem;
+            font-size: 0.875rem;
+        }
+
+        .btn-success:hover {
+            background-color: #059669;
+        }
+
+        .btn-danger {
+            background-color: #ef4444;
+            color: white;
+            padding: 0.375rem 0.75rem;
+            font-size: 0.875rem;
+        }
+
+        .btn-danger:hover {
+            background-color: #dc2626;
+        }
+
+        .alert {
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1.5rem;
+            border: 1px solid transparent;
+        }
+
+        .alert-success {
+            background-color: #d1fae5;
+            color: #065f46;
+            border-left: 4px solid #10b981;
+        }
+
+        .alert-error {
+            background-color: #fee2e2;
+            color: #991b1b;
+            border-left: 4px solid #ef4444;
+        }
+
+        .alert-warning {
+            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+            color: #92400e;
+            border: 1px solid #fbbf24;
+            border-left: 4px solid #f59e0b;
+            font-size: 0.875rem;
+            margin-top: 1rem;
+        }
+
+        .alert-warning strong {
+            color: #78350f;
+        }
+
+        /* Mission Cards Grid */
+        .missions-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .mission-card {
+            background: white;
+            border-radius: 12px;
+            border: 1px solid #e5e7eb;
+            padding: 2rem;
+            transition: all 0.2s ease;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+
+        .mission-card:hover {
+            box-shadow: 0 8px 24px rgba(102, 126, 234, 0.12);
+            transform: translateY(-2px);
+            border-color: #c7d2fe;
+        }
+
+        .mission-flow-preview {
+            margin: 1rem 0;
+            padding: 1rem 1.25rem;
+            background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%);
+            border-radius: 8px;
+            border-left: 3px solid #667eea;
+        }
+
+        .flow-preview-title {
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: #6b7280;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 0.5rem;
+        }
+
+        .flow-preview-path {
+            font-family: 'SF Mono', 'Monaco', 'Consolas', 'Courier New', monospace;
+            font-size: 0.875rem;
+            color: #374151;
+            font-weight: 500;
+            white-space: nowrap;
+            overflow-x: auto;
+            padding: 0.25rem 0;
+        }
+
+        .flow-preview-path::-webkit-scrollbar {
+            height: 4px;
+        }
+
+        .flow-preview-path::-webkit-scrollbar-track {
+            background: #e2e8f0;
+            border-radius: 2px;
+        }
+
+        .flow-preview-path::-webkit-scrollbar-thumb {
+            background: #cbd5e0;
+            border-radius: 2px;
+        }
+
+        .flow-preview-path::-webkit-scrollbar-thumb:hover {
+            background: #a0aec0;
+        }
+
+        .mission-card .card-header {
+            margin-bottom: 1rem;
+        }
+
+        .mission-card-title {
+            font-size: 1.375rem;
+            font-weight: 700;
+            color: #111827;
+            margin: 0 0 0.5rem 0;
+            line-height: 1.3;
+            letter-spacing: -0.025em;
+        }
+
+        .mission-card-description {
+            color: #6b7280;
+            font-size: 0.9375rem;
+            margin: 0 0 0.75rem 0;
+            line-height: 1.6;
+        }
+
+        .mission-metadata {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-top: 0.75rem;
+        }
+
+        /* Modern Badge Styling */
+        .badge {
+            padding: 0.375rem 0.75rem;
+            border-radius: 6px;
+            font-size: 0.8125rem;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        .badge.bg-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+        }
+
+        .badge.bg-secondary {
+            background: #e5e7eb;
+            color: #4b5563;
+            border: 1px solid #d1d5db;
+        }
+
+        .badge.bg-info {
+            background: #dbeafe;
+            color: #1e40af;
+            border: 1px solid #bfdbfe;
+        }
+
+        .badge.bg-warning {
+            background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+            color: #78350f;
+            border: none;
+        }
+
+        .mission-card-meta {
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid #f3f4f6;
+        }
+
+        .mission-card-meta small {
+            color: #9ca3af;
+            font-size: 0.8125rem;
+            line-height: 1.5;
+        }
+
+        .card-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-top: 1.5rem;
+        }
+
+        .card-actions .btn {
+            width: 100%;
+            min-height: 48px;
+            border-radius: 8px;
+            font-weight: 600;
+            transition: all 0.2s ease;
+        }
+
+        .card-actions .btn-success {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+            border: none;
+            font-size: 1rem;
+            box-shadow: 0 1px 3px rgba(16, 185, 129, 0.3);
+        }
+
+        .card-actions .btn-success:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+        }
+
+        .card-actions .btn-schedule {
+            background: white;
+            border: 1.5px solid #e5e7eb;
+            color: #4b5563;
+            font-size: 0.9375rem;
+        }
+
+        .card-actions .btn-schedule:hover {
+            background: #f9fafb;
+            border-color: #c7d2fe;
+            color: #667eea;
+        }
+
+        .card-actions .btn-group {
+            width: 100%;
+        }
+
+        .card-actions .btn-danger,
+        .card-actions .cancel-dropdown-btn {
+            background: #ef4444;
+            border: none;
+            color: white;
+            font-size: 1rem;
+            box-shadow: 0 1px 3px rgba(239, 68, 68, 0.3);
+        }
+
+        .card-actions .btn-danger:hover:not(:disabled),
+        .card-actions .cancel-dropdown-btn:hover:not(:disabled) {
+            background: #dc2626;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+        }
+
+        .card-actions .btn-warning {
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            color: white;
+            border: none;
+            font-size: 1rem;
+            box-shadow: 0 1px 3px rgba(245, 158, 11, 0.3);
+        }
+
+        .card-actions .btn-warning:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 4rem 2rem;
+        }
+
+        .empty-state__icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+            opacity: 0.3;
+        }
+
+        .empty-state__title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #1a1a1a;
+            margin-bottom: 0.5rem;
+        }
+
+        .empty-state__description {
+            color: #6b7280;
+            margin-bottom: 1.5rem;
+        }
+
+        .delete-form {
+            display: inline;
+        }
+
+        /* Toast Notification */
+        .toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 9999;
+        }
+
+        .toast {
+            min-width: 300px;
+            background: white;
+            border-radius: 0.5rem;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+            padding: 1rem 1.5rem;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        .toast.toast-success {
+            border-left: 4px solid #10b981;
+        }
+
+        .toast.toast-error {
+            border-left: 4px solid #ef4444;
+        }
+
+        @@keyframes slideIn {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        /* Search Bar */
+        .search-container {
+            margin-bottom: 1.5rem;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border: 1px solid #cbd5e0;
+            border-radius: 0.5rem;
+            font-size: 14px;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .search-info {
+            margin-top: 0.5rem;
+            font-size: 13px;
+            color: #6b7280;
+        }
+
+        /* Cancel Button Styles */
+        .cancel-btn-group {
+            position: relative;
+        }
+
+        .cancel-dropdown-btn {
+            background-color: #f59e0b;
+            border-color: #f59e0b;
+            color: white;
+        }
+
+        .cancel-dropdown-btn:hover:not(:disabled) {
+            background-color: #d97706;
+            border-color: #d97706;
+        }
+
+        .cancel-dropdown-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Mission Status Section */
+        .mission-status-section {
+            margin-top: 1.5rem;
+            padding: 1.5rem;
+            border-top: 2px solid #f3f4f6;
+            background: #f9fafb;
+            border-radius: 8px;
+        }
+
+        .status-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .status-header h5 {
+            margin: 0;
+            font-size: 0.875rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #6b7280;
+        }
+
+        .stop-polling-btn {
+            font-size: 0.75rem;
+            padding: 0.375rem 0.75rem;
+            border-radius: 6px;
+            background: white;
+            border: 1px solid #e5e7eb;
+            color: #6b7280;
+            transition: all 0.2s;
+        }
+
+        .stop-polling-btn:hover {
+            background: #fef2f2;
+            color: #ef4444;
+            border-color: #fecaca;
+        }
+
+        .status-display {
+            margin-bottom: 1rem;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.625rem 1.25rem;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.875rem;
+            width: 100%;
+            justify-content: center;
+            margin-bottom: 1rem;
+        }
+
+        .status-icon {
+            font-size: 1.25rem;
+        }
+
+        .status-created { background-color: #e0e7ff; color: #3730a3; }
+        .status-executing {
+            background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+            color: #1e40af;
+            animation: pulse 2s ease-in-out infinite;
+        }
+        .status-waiting { background-color: #fef3c7; color: #92400e; }
+        .status-cancelling { background-color: #fed7aa; color: #9a3412; }
+        .status-complete { background-color: #d1fae5; color: #065f46; }
+        .status-cancelled { background-color: #fee2e2; color: #991b1b; }
+        .status-warning { background-color: #fef3c7; color: #92400e; }
+        .status-error { background-color: #fee2e2; color: #991b1b; }
+        .status-unknown { background-color: #f3f4f6; color: #374151; }
+
+        @@keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.85; }
+        }
+
+        /* Status Metrics Grid */
+        .status-metrics {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.75rem;
+            margin-top: 1rem;
+        }
+
+        .status-metric {
+            background: white;
+            padding: 1rem;
+            border-radius: 8px;
+            border: 1px solid #e5e7eb;
+        }
+
+        .status-metric-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #6b7280;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 0.5rem;
+        }
+
+        .status-metric-value {
+            font-size: 1rem;
+            font-weight: 700;
+            color: #1f2937;
+        }
+
+        /* Progress Bar */
+        .progress-container {
+            grid-column: 1 / -1;
+        }
+
+        .progress-bar-wrapper {
+            background: #e5e7eb;
+            height: 8px;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 0.5rem;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #10b981 0%, #059669 100%);
+            transition: width 0.3s ease;
+            border-radius: 4px;
+        }
+
+        /* Battery Bar */
+        .battery-bar-wrapper {
+            background: #e5e7eb;
+            height: 6px;
+            border-radius: 3px;
+            overflow: hidden;
+            margin-top: 0.5rem;
+        }
+
+        .battery-bar-fill {
+            height: 100%;
+            transition: width 0.3s ease, background-color 0.3s ease;
+            border-radius: 3px;
+        }
+
+        .battery-high {
+            background: linear-gradient(90deg, #10b981 0%, #059669 100%);
+        }
+
+        .battery-medium {
+            background: linear-gradient(90deg, #f59e0b 0%, #d97706 100%);
+        }
+
+        .battery-low {
+            background: linear-gradient(90deg, #ef4444 0%, #dc2626 100%);
+        }
+
+        .spinner-border-sm {
+            width: 1rem;
+            height: 1rem;
+            border-width: 0.2rem;
+        }
+
+        .d-none {
+            display: none !important;
+        }
+
+        .btn-icon {
+            display: inline-block;
+            vertical-align: middle;
+            margin-right: 0.25rem;
+        }
+
+        .schedule-summary {
+            margin-top: 0.75rem;
+            padding: 0.75rem;
+            border: 1px dashed #e2e8f0;
+            border-radius: 0.5rem;
+            background: #f8fafc;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .schedule-summary .badge {
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 0.4rem 0.6rem;
+            border-radius: 999px;
+        }
+
+        .schedule-summary .summary-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #475569;
+            margin-right: 0.5rem;
+        }
+
+        .schedule-summary .next-run {
+            font-size: 0.75rem;
+            color: #0f172a;
+        }
+
+        .schedule-summary .empty-state {
+            margin: 0;
+            padding: 0;
+            border: none;
+            background: none;
+        }
+
+        .schedule-summary .empty-state__title {
+            font-size: 0.85rem;
+            margin: 0;
+        }
+
+        .btn-schedule {
+            background-color: #f8fafc;
+            border: 1px solid #cbd5f5;
+            color: #334155;
+        }
+
+        .btn-schedule:hover {
+            background-color: #e0e7ff;
+            color: #1e293b;
+        }
+
+        .modal.schedule-modal .modal-dialog {
+            max-width: 980px;
+        }
+
+        .modal.schedule-modal .schedule-layout {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 1.25rem;
+        }
+
+        .schedule-panel {
+            border: 1px solid #e2e8f0;
+            border-radius: 0.75rem;
+            padding: 1rem;
+            background-color: #ffffff;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .schedule-panel__header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .schedule-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .schedule-table th,
+        .schedule-table td {
+            padding: 0.5rem;
+            border-bottom: 1px solid #e2e8f0;
+            font-size: 0.85rem;
+        }
+
+        .schedule-table tbody tr:hover {
+            background-color: #f8fafc;
+        }
+
+        .schedule-form {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            margin-top: 0.5rem;
+        }
+
+        .schedule-form .form-check {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .schedule-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            padding: 0.2rem 0.6rem;
+            border-radius: 999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .schedule-badge.active {
+            background-color: #dcfce7;
+            color: #166534;
+        }
+
+        .schedule-badge.paused {
+            background-color: #fee2e2;
+            color: #991b1b;
+        }
+
+        .schedule-badge.once {
+            background-color: #e0f2fe;
+            color: #0369a1;
+        }
+
+        .schedule-badge.recurring {
+            background-color: #ede9fe;
+            color: #5b21b6;
+        }
+
+        .schedule-logs {
+            max-height: 260px;
+            overflow-y: auto;
+            border-radius: 0.5rem;
+            border: 1px solid #e2e8f0;
+        }
+
+        .schedule-logs table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .schedule-logs th,
+        .schedule-logs td {
+            font-size: 0.75rem;
+            padding: 0.5rem 0.75rem;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .schedule-empty-state {
+            text-align: center;
+            padding: 1.5rem;
+            color: #64748b;
+        }
+
+        .schedule-empty-state span {
+            display: block;
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        @@media (max-width: 992px) {
+            .modal.schedule-modal .schedule-layout {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Responsive Design for Mobile */
+        @@media (max-width: 768px) {
+            .missions-grid {
+                grid-template-columns: 1fr;
+                gap: 1.25rem;
+            }
+
+            .mission-card {
+                padding: 1.5rem;
+            }
+
+            .mission-card-title {
+                font-size: 1.25rem;
+            }
+
+            .status-metrics {
+                grid-template-columns: 1fr;
+                gap: 0.75rem;
+            }
+
+            .progress-container {
+                grid-column: 1;
+            }
+
+            .saved-missions {
+                padding: 1.5rem 1rem;
+            }
+
+            .saved-missions__title {
+                font-size: 1.5rem;
+            }
+
+            .saved-missions__header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 1rem;
+            }
+
+            .saved-missions__header .btn {
+                width: 100%;
+            }
+        }
+
+        @@media (max-width: 480px) {
+            .mission-card {
+                padding: 1.25rem;
+            }
+
+            .mission-card-title {
+                font-size: 1.125rem;
+            }
+
+            .mission-metadata {
+                gap: 0.375rem;
+            }
+
+            .badge {
+                font-size: 0.75rem;
+                padding: 0.3125rem 0.625rem;
+            }
+
+            .card-actions .btn {
+                min-height: 44px;
+                font-size: 0.9375rem;
+            }
+
+            .status-metric {
+                padding: 0.875rem;
+            }
+
+            .status-metric-label {
+                font-size: 0.6875rem;
+            }
+
+            .status-metric-value {
+                font-size: 0.9375rem;
+            }
+        }
+    </style>
+}
+
+<!-- Toast Notification Container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- Debug Panel -->
+<div class="debug-panel" id="debugPanel" style="position: fixed; bottom: 20px; right: 20px; background: white; border: 2px solid #667eea; border-radius: 8px; padding: 15px; max-width: 400px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); font-size: 12px; z-index: 9998; display: none;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+        <strong style="color: #667eea;">🔍 Manual Waypoint Debug</strong>
+        <button onclick="toggleDebugPanel()" style="background: none; border: none; cursor: pointer; font-size: 18px;">&times;</button>
+    </div>
+    <div style="border-top: 1px solid #e5e7eb; padding-top: 10px;">
+        <div style="margin-bottom: 8px;">
+            <span style="color: #6b7280;">Status:</span>
+            <strong id="debugStatus" style="color: #10b981;">Monitoring</strong>
+        </div>
+        <div style="margin-bottom: 8px;">
+            <span style="color: #6b7280;">Last Check:</span>
+            <strong id="debugLastCheck">Never</strong>
+        </div>
+        <div style="margin-bottom: 8px;">
+            <span style="color: #6b7280;">Waiting Missions:</span>
+            <strong id="debugWaitingCount">0</strong>
+        </div>
+        <div style="margin-bottom: 8px;">
+            <span style="color: #6b7280;">Current Mission:</span>
+            <strong id="debugCurrentMission">None</strong>
+        </div>
+        <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #e5e7eb;">
+            <div id="debugLog" style="max-height: 150px; overflow-y: auto; font-family: monospace; font-size: 10px; color: #374151;"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Debug Toggle Button -->
+<button onclick="toggleDebugPanel()" style="position: fixed; bottom: 20px; right: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 50%; width: 50px; height: 50px; cursor: pointer; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4); z-index: 9997; font-size: 20px;" title="Toggle Debug Panel">
+    🐛
+</button>
+
+<!-- Schedule Manager Modal -->
+<div class="modal fade schedule-modal" id="scheduleManagerModal" tabindex="-1" aria-labelledby="scheduleModalTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="scheduleModalTitle">Mission Scheduler</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="scheduleSummaryBanner" class="alert alert-info d-none"></div>
+                <div class="schedule-layout">
+                    <div class="schedule-panel" id="scheduleListPanel">
+                        <div class="schedule-panel__header">
+                            <div>
+                                <h6 class="mb-1">Schedules</h6>
+                                <small class="text-muted" id="scheduleListCount">No schedules configured.</small>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-primary" onclick="prepareNewSchedule()">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
+                                    <path d="M8 4a.5.5 0 0 1 .5.5V7h2.5a.5.5 0 0 1 0 1H8.5v2.5a.5.5 0 0 1-1 0V8H5a.5.5 0 0 1 0-1h2.5V4.5A.5.5 0 0 1 8 4z"/>
+                                </svg>
+                                New Schedule
+                            </button>
+                        </div>
+                        <div id="scheduleListContainer">
+                            <div class="schedule-empty-state" id="scheduleEmptyState">
+                                <span>🗓️</span>
+                                <p class="mb-0">No schedules yet. Create one to automate this workflow.</p>
+                            </div>
+                            <table class="schedule-table d-none" id="scheduleTable">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 30%;">Schedule</th>
+                                        <th style="width: 25%;">Next Run</th>
+                                        <th style="width: 25%;">Last Run</th>
+                                        <th style="width: 20%;" class="text-end">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="scheduleTableBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="schedule-panel d-none" id="scheduleFormWrapper">
+                        <div class="schedule-panel__header">
+                            <div>
+                                <h6 class="mb-1" id="scheduleFormTitle">New Schedule</h6>
+                                <small class="text-muted" id="scheduleFormSubtitle">Automate workflow execution.</small>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="hideScheduleForm()">Cancel</button>
+                        </div>
+
+                        <form class="schedule-form" id="scheduleForm" onsubmit="submitScheduleForm(event)">
+                            <input type="hidden" id="scheduleIdInput" />
+
+                            <div>
+                                <label class="form-label fw-semibold">Trigger Type</label>
+                                <div class="d-flex gap-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="triggerType" id="triggerTypeOnce" value="Once" checked onchange="toggleScheduleMode()">
+                                        <label class="form-check-label" for="triggerTypeOnce">
+                                            One-time
+                                        </label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="triggerType" id="triggerTypeRecurring" value="Recurring" onchange="toggleScheduleMode()">
+                                        <label class="form-check-label" for="triggerTypeRecurring">
+                                            Recurring
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div id="onceFields">
+                                <label for="runAtInput" class="form-label">Run at (your local time) <span class="badge bg-success">v3-UTC-FIX</span></label>
+                                <input type="datetime-local" id="runAtInput" class="form-control" />
+                                <small class="text-muted">
+                                    Enter time in your local timezone. It will be converted to: <strong id="timezoneHint">UTC</strong>
+                                </small>
+                            </div>
+
+                            <div id="recurringFields" class="d-none">
+                                <!-- Frequency Selector -->
+                                <div class="mb-3">
+                                    <label for="frequencyType" class="form-label fw-semibold">Frequency</label>
+                                    <select id="frequencyType" class="form-select" onchange="onFrequencyChange()">
+                                        <option value="daily">Every day</option>
+                                        <option value="hourly">Every hour</option>
+                                        <option value="every-x-hours">Every X hours</option>
+                                        <option value="every-x-minutes">Every X minutes</option>
+                                    </select>
+                                </div>
+
+                                <!-- Time Controls for "Every day" -->
+                                <div id="dailyTimeControls" class="mb-3">
+                                    <label class="form-label fw-semibold">Run at</label>
+                                    <div class="d-flex gap-2 align-items-center">
+                                        <input type="number" id="dailyHour" class="form-control" style="width: 80px;"
+                                               min="1" max="12" value="3" placeholder="HH"
+                                               oninput="validateTimeInput(this, 1, 12)"
+                                               onchange="updateSchedulePreview()">
+                                        <span>:</span>
+                                        <input type="number" id="dailyMinute" class="form-control" style="width: 80px;"
+                                               min="0" max="59" value="0" placeholder="MM"
+                                               oninput="validateTimeInput(this, 0, 59)"
+                                               onchange="updateSchedulePreview()">
+                                        <select id="dailyAmPm" class="form-select" style="width: 80px;" onchange="updateSchedulePreview()">
+                                            <option value="AM">AM</option>
+                                            <option value="PM" selected>PM</option>
+                                        </select>
+                                    </div>
+                                    <small class="text-muted">Enter time in 12-hour format (e.g., 3:00 PM)</small>
+                                </div>
+
+                                <!-- Time Controls for "Every hour" -->
+                                <div id="hourlyTimeControls" class="mb-3 d-none">
+                                    <label class="form-label fw-semibold">At minute</label>
+                                    <select id="hourlyMinute" class="form-select" onchange="updateSchedulePreview()">
+                                        <option value="0" selected>:00 (on the hour)</option>
+                                        <option value="15">:15 (quarter past)</option>
+                                        <option value="30">:30 (half past)</option>
+                                        <option value="45">:45 (quarter to)</option>
+                                    </select>
+                                </div>
+
+                                <!-- Time Controls for "Every X hours" -->
+                                <div id="everyXHoursControls" class="mb-3 d-none">
+                                    <label class="form-label fw-semibold">Interval</label>
+                                    <div class="d-flex gap-2 align-items-center">
+                                        <span>Every</span>
+                                        <input type="number" id="hoursInterval" class="form-control" style="width: 80px;" min="1" max="23" value="2" onchange="updateSchedulePreview()">
+                                        <span>hour(s)</span>
+                                    </div>
+                                    <small class="text-muted">Will run at 12 AM, then every X hours</small>
+                                </div>
+
+                                <!-- Time Controls for "Every X minutes" -->
+                                <div id="everyXMinutesControls" class="mb-3 d-none">
+                                    <label class="form-label fw-semibold">Interval</label>
+                                    <div class="d-flex gap-2 align-items-center">
+                                        <span>Every</span>
+                                        <select id="minutesInterval" class="form-select" style="width: 100px;" onchange="updateSchedulePreview()">
+                                            <option value="5">5</option>
+                                            <option value="10">10</option>
+                                            <option value="15">15</option>
+                                            <option value="30" selected>30</option>
+                                        </select>
+                                        <span>minute(s)</span>
+                                    </div>
+                                </div>
+
+                                <!-- Schedule Preview -->
+                                <div id="schedulePreview" class="alert alert-info mb-3">
+                                    <strong>📅 Schedule:</strong>
+                                    <div id="schedulePreviewText" class="mt-1">Daily at 3:00 PM</div>
+                                    <div id="nextRunsPreview" class="mt-2 small"></div>
+                                </div>
+
+                                <!-- Advanced Mode Toggle -->
+                                <div class="form-check form-switch mb-2">
+                                    <input class="form-check-input" type="checkbox" id="advancedModeToggle" onchange="toggleAdvancedMode()">
+                                    <label class="form-check-label" for="advancedModeToggle">
+                                        <small>Show advanced cron expression</small>
+                                    </label>
+                                </div>
+
+                                <!-- Advanced Cron Input (Hidden by default) -->
+                                <div id="advancedCronSection" class="d-none">
+                                    <label for="cronExpressionInput" class="form-label">Cron expression</label>
+                                    <input type="text" id="cronExpressionInput" class="form-control" placeholder="e.g. 0 15 * * *" readonly>
+                                    <small class="text-muted d-block mt-1">This is auto-generated from your selections above. Format: <code>minute hour * * *</code></small>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label for="timezoneSelect" class="form-label">Timezone</label>
+                                <select id="timezoneSelect" class="form-select"></select>
+                                <small class="text-muted">Times are converted to UTC before scheduling.</small>
+                            </div>
+
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="scheduleEnabledToggle" checked>
+                                <label class="form-check-label" for="scheduleEnabledToggle">Enable schedule</label>
+                            </div>
+
+                            <div class="d-flex justify-content-end gap-2">
+                                <button type="button" class="btn btn-outline-secondary" onclick="resetScheduleForm()">Reset</button>
+                                <button type="submit" class="btn btn-primary">
+                                    <span class="btn-icon">💾</span>
+                                    Save Schedule
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <div class="schedule-panel mt-3">
+                    <div class="schedule-panel__header">
+                        <div>
+                            <h6 class="mb-1">Execution History</h6>
+                            <small class="text-muted">Most recent 25 runs.</small>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="refreshScheduleLogs()">
+                            Refresh
+                        </button>
+                    </div>
+                    <div class="schedule-logs" id="scheduleLogsContainer">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th style="width: 24%;">Scheduled For</th>
+                                    <th style="width: 22%;">Enqueued</th>
+                                    <th style="width: 15%;">Queue ID</th>
+                                    <th style="width: 15%;">Status</th>
+                                    <th style="width: 24%;">Message</th>
+                                </tr>
+                            </thead>
+                            <tbody id="scheduleLogsBody">
+                                <tr>
+                                    <td colspan="5" class="text-center text-muted py-3">
+                                        No logs yet. Scheduled runs will appear here.
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="saved-missions">
+    <div class="saved-missions__header">
+        <div>
+            <h2 class="saved-missions__title">Workflow Monitor & Control</h2>
+            <p class="saved-missions__subtitle">Select a workflow to monitor and control mission execution</p>
+        </div>
+        <a href="/CustomMission" class="btn btn-primary">
+            ➕ Create New Workflow
+        </a>
+    </div>
+
+    @if (!string.IsNullOrEmpty(Model.SuccessMessage))
+    {
+        <div class="alert alert-success">@Model.SuccessMessage</div>
+    }
+
+    @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+    {
+        <div class="alert alert-error">@Model.ErrorMessage</div>
+    }
+
+    @if (Model.SavedMissions.Any())
+    {
+        <!-- Search Bar -->
+        <div class="search-container mb-4">
+            <div class="input-group">
+                <span class="input-group-text">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                        <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"/>
+                    </svg>
+                </span>
+                <input type="text"
+                       id="missionSearch"
+                       class="form-control"
+                       placeholder="Search missions by name, type, or description..."
+                       oninput="filterMissions()" />
+                <button class="btn btn-outline-secondary" type="button" id="clearSearch" onclick="clearSearch()" style="display:none;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                        <path d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8 2.146 2.854Z"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="search-info mt-2">
+                <small class="text-muted" id="searchResultCount">Showing @Model.SavedMissions.Count mission(s)</small>
+            </div>
+        </div>
+
+        <!-- Mission Cards Grid -->
+        <div class="missions-grid" id="missionsGrid">
+            @foreach (var mission in Model.SavedMissions)
+            {
+                var stepsJson = System.Text.Json.JsonSerializer.Deserialize<List<System.Text.Json.JsonElement>>(mission.MissionStepsJson);
+                var missionNameJson = System.Text.Json.JsonSerializer.Serialize(mission.MissionName);
+                var miniFlow = "";
+                if (stepsJson != null && stepsJson.Any())
+                {
+                    var firstStep = stepsJson.First().GetProperty("position").GetString();
+                    var lastStep = stepsJson.Last().GetProperty("position").GetString();
+                    if (stepsJson.Count == 1)
+                    {
+                        miniFlow = $"🤖 → {firstStep} → 🎯";
+                    }
+                    else if (stepsJson.Count <= 3)
+                    {
+                        miniFlow = "🤖 → " + string.Join(" → ", stepsJson.Select(s => s.GetProperty("position").GetString())) + " → 🎯";
+                    }
+                    else
+                    {
+                        miniFlow = $"🤖 → {firstStep} → ... ({stepsJson.Count} steps) ... → {lastStep} → 🎯";
+                    }
+                }
+
+                <div class="mission-card workflow-card" data-mission-name="@mission.MissionName.ToLower()" data-mission-type="@mission.MissionType.ToLower()" data-robot-type="@mission.RobotType.ToLower()">
+                    <div class="card-header">
+                        <div class="card-header-content">
+                            <div>
+                                <h4 class="mission-card-title">@mission.MissionName</h4>
+                                @if (!string.IsNullOrEmpty(mission.Description))
+                                {
+                                    <p class="mission-card-description">@mission.Description</p>
+                                }
+                                <div class="mission-metadata">
+                                    <span class="badge bg-primary">@mission.MissionType</span>
+                                    <span class="badge bg-secondary">@mission.RobotType</span>
+                                    <span class="badge bg-info">@mission.StepCount step@(mission.StepCount != 1 ? "s" : "")</span>
+                                    <span class="badge bg-warning text-dark">Priority: @mission.Priority</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        @if (!string.IsNullOrEmpty(miniFlow))
+                        {
+                            <div class="mission-flow-preview">
+                                <div class="flow-preview-title">Mission Flow:</div>
+                                <div class="flow-preview-path">@miniFlow</div>
+                            </div>
+                        }
+
+                        <div class="mission-card-meta">
+                            <small class="text-muted d-block">Created by @mission.CreatedBy</small>
+                            <small class="text-muted d-block">@mission.CreatedUtc.ToString("yyyy-MM-dd HH:mm")</small>
+                        </div>
+
+                        <div class="schedule-summary" id="mission-schedule-summary-@mission.Id">
+                            <span class="summary-label">Scheduler</span>
+                            <span class="badge bg-light text-dark border">@mission.ScheduleSummary.TotalSchedules total</span>
+                            <span class="badge bg-success-subtle text-success border border-success-subtle">@mission.ScheduleSummary.ActiveSchedules active</span>
+                            @if (mission.ScheduleSummary.NextRunUtc.HasValue)
+                            {
+                                <span class="next-run">
+                                    Next run: @mission.ScheduleSummary.NextRunUtc.Value.ToLocalTime().ToString("MMM dd yyyy HH:mm")
+                                </span>
+                            }
+                            else
+                            {
+                                <span class="next-run text-muted">No upcoming runs</span>
+                            }
+                        </div>
+                    </div>
+
+                    <!-- Inline Mission Control -->
+                    <div class="mission-status-section d-none" id="status-section-@mission.Id" data-mission-id="@mission.Id">
+                        <div class="status-header">
+                            <h5>Status</h5>
+                            <button type="button" class="btn btn-outline-secondary btn-sm stop-polling-btn" onclick="stopPollingMission(@mission.Id)">Stop</button>
+                        </div>
+                        <div class="status-display">
+                            <div class="status-badge status-created" id="status-badge-@mission.Id">
+                                <span class="status-icon">⏹</span>
+                                <span id="status-text-@mission.Id">Queued</span>
+                            </div>
+
+                            <div class="status-metrics">
+                                <!-- Robot ID -->
+                                <div class="status-metric">
+                                    <div class="status-metric-label">Robot ID</div>
+                                    <div class="status-metric-value" id="robot-id-@mission.Id">-</div>
+                                </div>
+
+                                <!-- Robot Position -->
+                                <div class="status-metric">
+                                    <div class="status-metric-label">Position</div>
+                                    <div class="status-metric-value" id="robot-position-@mission.Id">-</div>
+                                </div>
+
+                                <!-- Step Progress with Bar -->
+                                <div class="status-metric progress-container">
+                                    <div class="status-metric-label">Step Progress</div>
+                                    <div class="status-metric-value" id="step-progress-text-@mission.Id">-</div>
+                                    <div class="progress-bar-wrapper">
+                                        <div class="progress-bar-fill" id="step-progress-bar-@mission.Id" style="width: 0%"></div>
+                                    </div>
+                                </div>
+
+                                <!-- Battery with Bar -->
+                                <div class="status-metric">
+                                    <div class="status-metric-label">Battery</div>
+                                    <div class="status-metric-value" id="battery-level-text-@mission.Id">-</div>
+                                    <div class="battery-bar-wrapper">
+                                        <div class="battery-bar-fill battery-high" id="battery-level-bar-@mission.Id" style="width: 0%"></div>
+                                    </div>
+                                </div>
+
+                                <!-- Duration -->
+                                <div class="status-metric">
+                                    <div class="status-metric-label">Duration</div>
+                                    <div class="status-metric-value" id="duration-@mission.Id">-</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="manual-waypoint-alert-@mission.Id" class="alert alert-warning d-none mt-2" role="alert">
+                            🛑 <strong>Manual Waypoint</strong><br/>
+                            Robot is waiting for manual confirmation at <span id="waypoint-position-@mission.Id"></span>.
+                        </div>
+                    </div>
+
+                    <div class="card-actions">
+                        <button type="button"
+                                class="btn btn-success flex-fill"
+                                id="start-btn-@mission.Id"
+                                onclick="startMission(@mission.Id)">
+                            ▶️ Start
+                        </button>
+
+                        <div class="btn-group flex-fill" id="cancel-group-@mission.Id" style="display:none;">
+                            <button type="button" class="btn btn-danger dropdown-toggle cancel-dropdown-btn" data-bs-toggle="dropdown" aria-expanded="false" id="cancel-btn-@mission.Id">
+                                ⏹ Cancel
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li><a class="dropdown-item" href="#" onclick="cancelMission(@mission.Id, 'NORMAL'); return false;">
+                                    <strong>Normal</strong><br/>
+                                    <small>Cancel and return to idle position</small>
+                                </a></li>
+                                <li><a class="dropdown-item" href="#" onclick="cancelMission(@mission.Id, 'FORCE'); return false;">
+                                    <strong>Force</strong><br/>
+                                    <small>Force stop immediately</small>
+                                </a></li>
+                                <li><a class="dropdown-item" href="#" onclick="cancelMission(@mission.Id, 'REDIRECT_START'); return false;">
+                                    <strong>Redirect Start</strong><br/>
+                                    <small>Cancel and redirect to start position</small>
+                                </a></li>
+                            </ul>
+                        </div>
+
+                        <button type="button"
+                                class="btn btn-warning flex-fill d-none"
+                                id="resume-btn-@mission.Id"
+                                onclick="resumeManualWaypoint(@mission.Id)">
+                            ▶️ Resume
+                        </button>
+
+                        <button type="button"
+                                class="btn btn-schedule flex-fill"
+                                onclick='openScheduleManager(@mission.Id, @Html.Raw(missionNameJson))'>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                                <path d="M3.5 0a.5.5 0 0 1 .5.5V1h8V.5a.5.5 0 0 1 1 0V1h1a1 1 0 0 1 1 1v1H0V2a1 1 0 0 1 1-1h1V.5a.5.5 0 0 1 .5-.5z"/>
+                                <path d="M16 14V4H0v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2zm-11-7.5a.5.5 0 0 1 .5-.5h1.5a.5.5 0 0 1 .5.5V8H8v1h-.5v1h-1V9H5V8h1V6.5zm6 3a.5.5 0 0 1 .5-.5h1.5a.5.5 0 0 1 .5.5V11h-.5v1h-1v-1H11v-1h1V9.5z"/>
+                            </svg>
+                            Scheduler
+                        </button>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <div id="noResultsMessage" class="alert alert-info" style="display:none;">
+            <strong>No missions found</strong> matching your search criteria. Try different keywords.
+        </div>
+    }
+    else
+    {
+        <div class="empty-state">
+            <div class="empty-state__icon">📋</div>
+            <h3 class="empty-state__title">No Saved Missions Yet</h3>
+            <p class="empty-state__description">
+                Create your first custom mission template to get started.<br>
+                Saved missions can be triggered multiple times with a single click.
+            </p>
+            <a href="/CustomMission" class="btn btn-primary">
+                Create Your First Mission
+            </a>
+        </div>
+    }
+</div>
+
+@section Scripts {
+    <script>
+        const pollingIntervals = new Map();
+        const POLLING_INTERVAL_MS = @(Model.PollingIntervalSeconds * 1000);
+        const MAX_ATTEMPTS = @Model.MaxPollingAttempts;
+        const ACTIVE_MISSIONS_KEY = 'activeSavedMissions';
+        const QUEUED_CHECK_INTERVAL_MS = 10000;
+        let queuedMissionsCheckInterval = null;
+
+        const scheduleState = {
+            missionId: null,
+            missionName: '',
+            schedules: [],
+            selectedScheduleId: null,
+            logsTake: 25
+        };
+        let scheduleModalInstance = null;
+        let timezoneOptionsLoaded = false;
+
+        function openScheduleManager(missionId, missionName) {
+            scheduleState.missionId = missionId;
+            scheduleState.missionName = missionName;
+            scheduleState.selectedScheduleId = null;
+
+            const modalElement = document.getElementById('scheduleManagerModal');
+            if (!scheduleModalInstance) {
+                scheduleModalInstance = new bootstrap.Modal(modalElement);
+            }
+
+            document.getElementById('scheduleModalTitle').textContent = `Mission Scheduler — ${missionName}`;
+            document.getElementById('scheduleListCount').textContent = 'Loading schedules...';
+            document.getElementById('scheduleSummaryBanner').classList.add('d-none');
+
+            resetScheduleForm();
+            hideScheduleForm();
+
+            if (!timezoneOptionsLoaded) {
+                populateTimezoneOptions();
+                timezoneOptionsLoaded = true;
+            }
+
+            loadSchedules();
+            refreshScheduleLogs();
+
+            scheduleModalInstance.show();
+        }
+
+        async function readJsonResponse(response) {
+            const text = await response.text();
+            let data = null;
+            try {
+                data = text ? JSON.parse(text) : null;
+            } catch (error) {
+                data = null;
+            }
+
+            return {
+                ok: response.ok,
+                status: response.status,
+                data,
+                text
+            };
+        }
+
+        function populateTimezoneOptions() {
+            const select = document.getElementById('timezoneSelect');
+            if (!select) { return; }
+
+            const resolvedZone = Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC';
+            const zones = new Set(['UTC', resolvedZone]);
+
+            if (typeof Intl.supportedValuesOf === 'function') {
+                try {
+                    Intl.supportedValuesOf('timeZone').slice(0, 200).forEach(z => zones.add(z));
+                } catch (err) {
+                    console.warn('Failed to load supported time zones', err);
+                }
+            }
+
+            select.innerHTML = '';
+            Array.from(zones).sort().forEach(zone => {
+                const option = document.createElement('option');
+                option.value = zone;
+                option.textContent = zone;
+                if (zone === resolvedZone) {
+                    option.selected = true;
+                }
+                select.appendChild(option);
+            });
+
+            // Add event listener to update timezone hint
+            select.addEventListener('change', function() {
+                const timezoneHint = document.getElementById('timezoneHint');
+                if (timezoneHint) {
+                    timezoneHint.textContent = this.value || 'UTC';
+                }
+            });
+
+            // Initialize the hint with current value
+            const timezoneHint = document.getElementById('timezoneHint');
+            if (timezoneHint) {
+                timezoneHint.textContent = select.value || 'UTC';
+            }
+        }
+
+        async function loadSchedules() {
+            if (!scheduleState.missionId) return;
+            try {
+                const response = await fetch(`?handler=MissionSchedules&missionId=${scheduleState.missionId}`);
+                const payload = await readJsonResponse(response);
+                if (!payload.ok || payload.data?.success === false) {
+                    document.getElementById('scheduleListCount').textContent = payload.data?.message || payload.text || 'Failed to load schedules.';
+                    return;
+                }
+
+                scheduleState.schedules = payload.data?.data ?? [];
+                renderSchedules();
+                updateMissionCardSummary(scheduleState.missionId, scheduleState.schedules);
+            } catch (error) {
+                console.error('Failed to load schedules', error);
+                document.getElementById('scheduleListCount').textContent = 'Unable to load schedules.';
+            }
+        }
+
+        function renderSchedules() {
+            const listCount = document.getElementById('scheduleListCount');
+            const table = document.getElementById('scheduleTable');
+            const tbody = document.getElementById('scheduleTableBody');
+            const emptyState = document.getElementById('scheduleEmptyState');
+
+            if (!scheduleState.schedules.length) {
+                listCount.textContent = 'No schedules configured.';
+                table.classList.add('d-none');
+                emptyState.classList.remove('d-none');
+                tbody.innerHTML = '';
+                updateScheduleSummaryBanner(null);
+                return;
+            }
+
+            listCount.textContent = `${scheduleState.schedules.length} schedule${scheduleState.schedules.length > 1 ? 's' : ''}`;
+            table.classList.remove('d-none');
+            emptyState.classList.add('d-none');
+
+            const rows = scheduleState.schedules.map(schedule => buildScheduleRow(schedule)).join('');
+            tbody.innerHTML = rows;
+            updateScheduleSummaryBanner(scheduleState.schedules);
+        }
+
+        function buildScheduleRow(schedule) {
+            const typeBadge = schedule.triggerType === 0
+                ? '<span class="schedule-badge once">One-time</span>'
+                : '<span class="schedule-badge recurring">Recurring</span>';
+            const stateBadge = schedule.isEnabled
+                ? '<span class="schedule-badge active">Active</span>'
+                : '<span class="schedule-badge paused">Paused</span>';
+
+            // Parse UTC dates properly - ensure they're treated as UTC, not local time
+            const nextRun = schedule.nextRunUtc
+                ? (() => {
+                    const raw = schedule.nextRunUtc;
+                    // If the string doesn't end with 'Z', it might be parsed as local time
+                    const dateStr = raw.endsWith('Z') ? raw : raw + 'Z';
+                    const date = new Date(dateStr);
+                    console.log(`[v3-UTC-FIX Display] Raw nextRunUtc="${raw}", Parsed with Z="${dateStr}", Date object=${date.toISOString()}, Display=${date.toLocaleString()}`);
+                    return date.toLocaleString();
+                })()
+                : '—';
+
+            const lastRun = schedule.lastRunUtc
+                ? (() => {
+                    const raw = schedule.lastRunUtc;
+                    const dateStr = raw.endsWith('Z') ? raw : raw + 'Z';
+                    const date = new Date(dateStr);
+                    return `${date.toLocaleString()}${schedule.lastStatus ? ` (${schedule.lastStatus})` : ''}`;
+                })()
+                : '—';
+
+            const toggleLabel = schedule.isEnabled ? 'Disable' : 'Enable';
+            const toggleIcon = schedule.isEnabled ? '⏸️' : '▶️';
+
+            const actions = [
+                `<button type="button" class="btn btn-outline-secondary" title="Edit" onclick="editSchedule(${schedule.id})">✏️</button>`,
+                `<button type="button" class="btn btn-outline-secondary" title="${toggleLabel}" onclick="toggleSchedule(${schedule.id}, ${schedule.isEnabled ? 'false' : 'true'})">${toggleIcon}</button>`,
+                `<button type="button" class="btn btn-outline-secondary" title="Run now" onclick="runScheduleNow(${schedule.id})">⚡</button>`,
+                `<button type="button" class="btn btn-outline-danger" title="Delete" onclick="deleteSchedule(${schedule.id})">🗑️</button>`
+            ].join('');
+
+            const rowParts = [
+                '<tr>',
+                `<td><div class="d-flex flex-column gap-1"><div>${typeBadge} ${stateBadge}</div><small class="text-muted">${describeSchedule(schedule)}</small></div></td>`,
+                `<td>${nextRun}</td>`,
+                `<td>${lastRun}</td>`,
+                `<td class="text-end"><div class="btn-group btn-group-sm" role="group">${actions}</div><button type="button" class="btn btn-link btn-sm mt-1 p-0" onclick="viewScheduleLogs(${schedule.id})">View logs</button></td>`,
+                '</tr>'
+            ];
+
+            return rowParts.join('');
+        }
+
+        function describeSchedule(schedule) {
+            if (schedule.triggerType === 0) {
+                const runAt = schedule.oneTimeRunUtc
+                    ? (() => {
+                        const raw = schedule.oneTimeRunUtc;
+                        const dateStr = raw.endsWith('Z') ? raw : raw + 'Z';
+                        return new Date(dateStr).toLocaleString();
+                    })()
+                    : '—';
+                return `Once at ${runAt} (${schedule.timezoneId})`;
+            }
+
+            if (schedule.cronExpression) {
+                return `${schedule.cronExpression} (${schedule.timezoneId})`;
+            }
+
+            return `Recurring (${schedule.timezoneId})`;
+        }
+
+        function updateScheduleSummaryBanner(schedules) {
+            const banner = document.getElementById('scheduleSummaryBanner');
+            if (!schedules || !schedules.length) {
+                banner.classList.add('d-none');
+                return;
+            }
+
+            const active = schedules.filter(s => s.isEnabled).length;
+            const nextRun = schedules
+                .filter(s => s.isEnabled && s.nextRunUtc)
+                .map(s => {
+                    const raw = s.nextRunUtc;
+                    const dateStr = raw.endsWith('Z') ? raw : raw + 'Z';
+                    return new Date(dateStr);
+                })
+                .sort((a, b) => a - b)[0];
+
+            banner.classList.remove('d-none');
+            const bannerMessage = `<strong>${active}</strong> active schedule${active !== 1 ? 's' : ''}. ` +
+                (nextRun ? `Next run at <strong>${nextRun.toLocaleString()}</strong>.` : 'No upcoming runs.');
+            banner.innerHTML = bannerMessage;
+        }
+
+        function updateMissionCardSummary(missionId, schedules) {
+            const summaryElement = document.getElementById(`mission-schedule-summary-${missionId}`);
+            if (!summaryElement) return;
+
+            const total = schedules.length;
+            const active = schedules.filter(s => s.isEnabled).length;
+            const nextRun = schedules
+                .filter(s => s.isEnabled && s.nextRunUtc)
+                .map(s => {
+                    const raw = s.nextRunUtc;
+                    const dateStr = raw.endsWith('Z') ? raw : raw + 'Z';
+                    return new Date(dateStr);
+                })
+                .sort((a, b) => a - b)[0];
+
+            const nextRunHtml = nextRun
+                ? `Next run: ${nextRun.toLocaleString()}`
+                : 'No upcoming runs';
+
+            const fragments = [
+                '<span class="summary-label">Scheduler</span>',
+                `<span class="badge bg-light text-dark border">${total} total</span>`,
+                `<span class="badge bg-success-subtle text-success border border-success-subtle">${active} active</span>`,
+                `<span class="next-run">${nextRunHtml}</span>`
+            ];
+            summaryElement.innerHTML = fragments.join(' ');
+        }
+
+        function prepareNewSchedule() {
+            resetScheduleForm();
+            showScheduleForm(false);
+        }
+
+        function showScheduleForm(isEdit = false) {
+            const wrapper = document.getElementById('scheduleFormWrapper');
+            if (!isEdit) {
+                resetScheduleForm();
+            }
+            wrapper.classList.remove('d-none');
+            document.getElementById('scheduleFormTitle').textContent = isEdit ? 'Edit Schedule' : 'New Schedule';
+            document.getElementById('scheduleFormSubtitle').textContent = isEdit ? 'Update the selected schedule settings.' : 'Automate workflow execution.';
+        }
+
+        function hideScheduleForm() {
+            const wrapper = document.getElementById('scheduleFormWrapper');
+            wrapper.classList.add('d-none');
+        }
+
+        function resetScheduleForm() {
+            document.getElementById('scheduleIdInput').value = '';
+            document.getElementById('triggerTypeOnce').checked = true;
+            document.getElementById('triggerTypeRecurring').checked = false;
+            document.getElementById('runAtInput').value = '';
+            document.getElementById('cronExpressionInput').value = '';
+            document.getElementById('scheduleEnabledToggle').checked = true;
+
+            // Reset new frequency controls to defaults
+            document.getElementById('frequencyType').value = 'daily';
+            document.getElementById('dailyHour').value = '3';
+            document.getElementById('dailyMinute').value = '0';
+            document.getElementById('dailyAmPm').value = 'PM';
+            document.getElementById('hourlyMinute').value = '0';
+            document.getElementById('hoursInterval').value = '2';
+            document.getElementById('minutesInterval').value = '30';
+            document.getElementById('advancedModeToggle').checked = false;
+            document.getElementById('advancedCronSection').classList.add('d-none');
+
+            // Update timezone hint to reflect the currently selected timezone
+            const timezoneSelect = document.getElementById('timezoneSelect');
+            const timezoneHint = document.getElementById('timezoneHint');
+            if (timezoneHint && timezoneSelect) {
+                timezoneHint.textContent = timezoneSelect.value || 'UTC';
+            }
+
+            toggleScheduleMode();
+        }
+
+        function toggleScheduleMode() {
+            const onceFields = document.getElementById('onceFields');
+            const recurringFields = document.getElementById('recurringFields');
+            const isRecurring = document.getElementById('triggerTypeRecurring').checked;
+            if (isRecurring) {
+                onceFields.classList.add('d-none');
+                recurringFields.classList.remove('d-none');
+                // Initialize frequency controls
+                onFrequencyChange();
+                updateSchedulePreview();
+            } else {
+                onceFields.classList.remove('d-none');
+                recurringFields.classList.add('d-none');
+            }
+        }
+
+        function applyCronPreset(value) {
+            if (value.startsWith('@@')) {
+                value = value.substring(1);
+            }
+            document.getElementById('cronExpressionInput').value = value;
+        }
+
+        // ========================================
+        // NEW USER-FRIENDLY SCHEDULER FUNCTIONS
+        // ========================================
+
+        function validateTimeInput(input, min, max) {
+            let value = parseInt(input.value);
+
+            // Remove non-numeric characters
+            input.value = input.value.replace(/[^0-9]/g, '');
+
+            // Validate range
+            if (value < min) {
+                input.value = min;
+            } else if (value > max) {
+                input.value = max;
+            }
+
+            // Pad single digit minutes with leading zero
+            if (input.id === 'dailyMinute' && input.value.length === 1 && value >= 0 && value <= 9) {
+                // Don't pad while typing, let them finish
+                if (input.value.length > 0 && !input.value.includes('.')) {
+                    // Pad on blur or when they move away
+                }
+            }
+        }
+
+        function onFrequencyChange() {
+            const frequencyType = document.getElementById('frequencyType').value;
+
+            // Hide all time controls first
+            document.getElementById('dailyTimeControls').classList.add('d-none');
+            document.getElementById('hourlyTimeControls').classList.add('d-none');
+            document.getElementById('everyXHoursControls').classList.add('d-none');
+            document.getElementById('everyXMinutesControls').classList.add('d-none');
+
+            // Show relevant controls based on frequency type
+            switch(frequencyType) {
+                case 'daily':
+                    document.getElementById('dailyTimeControls').classList.remove('d-none');
+                    break;
+                case 'hourly':
+                    document.getElementById('hourlyTimeControls').classList.remove('d-none');
+                    break;
+                case 'every-x-hours':
+                    document.getElementById('everyXHoursControls').classList.remove('d-none');
+                    break;
+                case 'every-x-minutes':
+                    document.getElementById('everyXMinutesControls').classList.remove('d-none');
+                    break;
+            }
+
+            updateSchedulePreview();
+        }
+
+        function buildCronFromFrequency() {
+            const frequencyType = document.getElementById('frequencyType').value;
+
+            switch(frequencyType) {
+                case 'daily': {
+                    let hour = parseInt(document.getElementById('dailyHour').value) || 3;
+                    let minute = parseInt(document.getElementById('dailyMinute').value) || 0;
+                    const amPm = document.getElementById('dailyAmPm').value;
+
+                    // Validate hour range (1-12)
+                    if (hour < 1) hour = 1;
+                    if (hour > 12) hour = 12;
+
+                    // Validate minute range (0-59)
+                    if (minute < 0) minute = 0;
+                    if (minute > 59) minute = 59;
+
+                    // Convert 12-hour to 24-hour format
+                    let hour24 = hour;
+                    if (amPm === 'PM' && hour !== 12) {
+                        hour24 = hour + 12;
+                    } else if (amPm === 'AM' && hour === 12) {
+                        hour24 = 0;
+                    }
+
+                    return `${minute} ${hour24} * * *`;
+                }
+
+                case 'hourly': {
+                    const minute = document.getElementById('hourlyMinute').value;
+                    return `${minute} * * * *`;
+                }
+
+                case 'every-x-hours': {
+                    const interval = document.getElementById('hoursInterval').value;
+                    return `0 */${interval} * * *`;
+                }
+
+                case 'every-x-minutes': {
+                    const interval = document.getElementById('minutesInterval').value;
+                    return `*/${interval} * * * *`;
+                }
+
+                default:
+                    return '0 15 * * *'; // Default to 3 PM daily
+            }
+        }
+
+        function updateSchedulePreview() {
+            const frequencyType = document.getElementById('frequencyType').value;
+            const cronExpression = buildCronFromFrequency();
+
+            // Update the hidden cron input
+            document.getElementById('cronExpressionInput').value = cronExpression;
+
+            // Build human-readable description
+            let description = '';
+            switch(frequencyType) {
+                case 'daily': {
+                    let hour = parseInt(document.getElementById('dailyHour').value) || 3;
+                    let minute = parseInt(document.getElementById('dailyMinute').value) || 0;
+                    const amPm = document.getElementById('dailyAmPm').value;
+
+                    // Format minute with leading zero
+                    const minuteStr = minute.toString().padStart(2, '0');
+                    description = `Daily at ${hour}:${minuteStr} ${amPm}`;
+                    break;
+                }
+
+                case 'hourly': {
+                    const minute = document.getElementById('hourlyMinute').value;
+                    if (minute === '0') {
+                        description = 'Every hour on the hour';
+                    } else {
+                        description = `Every hour at :${minute}`;
+                    }
+                    break;
+                }
+
+                case 'every-x-hours': {
+                    const interval = document.getElementById('hoursInterval').value;
+                    description = `Every ${interval} hour${interval > 1 ? 's' : ''} (starting at 12 AM)`;
+                    break;
+                }
+
+                case 'every-x-minutes': {
+                    const interval = document.getElementById('minutesInterval').value;
+                    description = `Every ${interval} minute${interval > 1 ? 's' : ''}`;
+                    break;
+                }
+            }
+
+            // Get timezone name
+            const timezoneSelect = document.getElementById('timezoneSelect');
+            const timezone = timezoneSelect.value || 'UTC';
+            const timezoneShort = timezone.split('/').pop().replace('_', ' ');
+
+            description += ` (${timezoneShort})`;
+
+            // Update preview text
+            document.getElementById('schedulePreviewText').textContent = description;
+
+            // Calculate next 3 runs (simplified - actual times calculated by backend)
+            const nextRunsHtml = '<strong>Next runs:</strong> Will be calculated after saving';
+            document.getElementById('nextRunsPreview').innerHTML = nextRunsHtml;
+        }
+
+        function toggleAdvancedMode() {
+            const advancedSection = document.getElementById('advancedCronSection');
+            const isChecked = document.getElementById('advancedModeToggle').checked;
+
+            if (isChecked) {
+                advancedSection.classList.remove('d-none');
+            } else {
+                advancedSection.classList.add('d-none');
+            }
+        }
+
+        // ========================================
+        // END NEW SCHEDULER FUNCTIONS
+        // ========================================
+
+        function formatDateForInput(utcString, timezoneId) {
+            if (!utcString) {
+                return '';
+            }
+
+            try {
+                // Parse the UTC date string
+                const utcDate = new Date(utcString);
+
+                // First, get what time this is in the SCHEDULE's timezone
+                const scheduleFormatter = new Intl.DateTimeFormat('en-US', {
+                    timeZone: timezoneId || 'UTC',
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: false
+                });
+                const scheduleParts = scheduleFormatter.formatToParts(utcDate).reduce((acc, part) => {
+                    acc[part.type] = part.value;
+                    return acc;
+                }, {});
+                const scheduleTimeString = `${scheduleParts.year}-${scheduleParts.month}-${scheduleParts.day} ${scheduleParts.hour}:${scheduleParts.minute}`;
+
+                // For datetime-local input, we need to provide the value in a way that DISPLAYS correctly
+                // The datetime-local input always works in browser's local timezone
+                // So we convert: UTC → browser local time
+                const year = utcDate.getFullYear();
+                const month = String(utcDate.getMonth() + 1).padStart(2, '0');
+                const day = String(utcDate.getDate()).padStart(2, '0');
+                const hours = String(utcDate.getHours()).padStart(2, '0');
+                const minutes = String(utcDate.getMinutes()).padStart(2, '0');
+
+                const browserLocalTime = `${year}-${month}-${day}T${hours}:${minutes}`;
+
+                console.log(`formatDateForInput: UTC=${utcString}, Schedule TZ=${timezoneId}, Schedule Time=${scheduleTimeString}, Browser Input=${browserLocalTime}`);
+
+                return browserLocalTime;
+            }
+            catch (err) {
+                console.warn('Failed to format date for input', utcString, timezoneId, err);
+                return utcString.substring(0, 16);
+            }
+        }
+
+        async function submitScheduleForm(event) {
+            event.preventDefault();
+            if (!scheduleState.missionId) return;
+
+            const isRecurring = document.getElementById('triggerTypeRecurring').checked;
+            const scheduleId = document.getElementById('scheduleIdInput').value || null;
+
+            // Generate cron from frequency controls if recurring
+            let cron = '';
+            if (isRecurring) {
+                cron = buildCronFromFrequency();
+                document.getElementById('cronExpressionInput').value = cron; // Update the field
+            }
+
+            const runAt = document.getElementById('runAtInput').value;
+            const timezoneId = document.getElementById('timezoneSelect').value;
+            const isEnabled = document.getElementById('scheduleEnabledToggle').checked;
+
+            if (!isRecurring && !runAt) {
+                showToast('Please select the time for the one-time schedule.', 'error');
+                return;
+            }
+
+            if (isRecurring && !cron) {
+                showToast('Cron expression is required for recurring schedules.', 'error');
+                return;
+            }
+
+            // Convert the datetime-local value from browser's timezone to schedule's timezone
+            // The datetime-local input gives us a value like "2025-11-03T15:08" which is in the BROWSER's local timezone
+            // We need to convert this to the equivalent time in the SCHEDULE's timezone
+            let runAtLocalTime = runAt;
+            if (!isRecurring && runAt) {
+                const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+                console.log(`[v3-UTC-FIX] Submitting schedule: Raw input=${runAt}, Browser TZ=${browserTz}, Schedule TZ=${timezoneId}`);
+
+                try {
+                    // Parse the datetime-local value as a local time in the browser's timezone
+                    const browserDate = new Date(runAt);
+
+                    // Get the time components in the schedule's timezone that represent the SAME MOMENT
+                    // Then extract what the "wall clock time" would be in the schedule's timezone
+                    const scheduleFormatter = new Intl.DateTimeFormat('en-CA', {
+                        timeZone: timezoneId,
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit',
+                        hour12: false
+                    });
+
+                    const scheduleParts = scheduleFormatter.formatToParts(browserDate).reduce((acc, part) => {
+                        acc[part.type] = part.value;
+                        return acc;
+                    }, {});
+
+                    // This is the time in the schedule's timezone that represents the same moment
+                    runAtLocalTime = `${scheduleParts.year}-${scheduleParts.month}-${scheduleParts.day}T${scheduleParts.hour}:${scheduleParts.minute}:${scheduleParts.second}`;
+
+                    console.log(`Converted: Browser local="${runAt}" → Schedule TZ time="${runAtLocalTime}"`);
+                } catch (err) {
+                    console.error('Failed to convert timezone', err);
+                    // Fall back to using the original value
+                    runAtLocalTime = runAt;
+                }
+            }
+
+            const payload = {
+                missionId: scheduleState.missionId,
+                scheduleId: scheduleId ? parseInt(scheduleId) : null,
+                schedule: {
+                    triggerType: isRecurring ? 1 : 0,
+                    cronExpression: isRecurring ? cron : null,
+                    runAtLocalTime: !isRecurring ? runAtLocalTime : null,
+                    timezoneId,
+                    isEnabled
+                }
+            };
+
+            try {
+                const response = await fetch('?handler=MissionScheduleUpsert', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await readJsonResponse(response);
+                if (!result.ok || result.data?.success === false) {
+                    const message = result.data?.message || result.data?.title || result.text || 'Failed to save schedule.';
+                    showToast(message, 'error');
+                    return;
+                }
+
+                showToast('Schedule saved successfully.', 'success');
+                resetScheduleForm();
+                hideScheduleForm();
+                await loadSchedules();
+                await refreshScheduleLogs();
+            } catch (error) {
+                console.error('Failed to save schedule', error);
+                showToast('Error saving schedule.', 'error');
+            }
+        }
+
+        function editSchedule(scheduleId) {
+            const schedule = scheduleState.schedules.find(s => s.id === scheduleId);
+            if (!schedule) return;
+
+            document.getElementById('scheduleIdInput').value = schedule.id;
+            const isRecurring = schedule.triggerType === 1;
+            document.getElementById('triggerTypeOnce').checked = !isRecurring;
+            document.getElementById('triggerTypeRecurring').checked = isRecurring;
+            document.getElementById('runAtInput').value = formatDateForInput(schedule.oneTimeRunUtc, schedule.timezoneId);
+            document.getElementById('cronExpressionInput').value = schedule.cronExpression ?? '';
+            document.getElementById('timezoneSelect').value = schedule.timezoneId || 'UTC';
+            document.getElementById('scheduleEnabledToggle').checked = schedule.isEnabled;
+
+            // Update timezone hint to match the schedule's timezone
+            const timezoneHint = document.getElementById('timezoneHint');
+            if (timezoneHint) {
+                timezoneHint.textContent = schedule.timezoneId || 'UTC';
+            }
+
+            toggleScheduleMode();
+            showScheduleForm(true);
+        }
+
+        async function toggleSchedule(scheduleId, enable) {
+            const schedule = scheduleState.schedules.find(s => s.id === scheduleId);
+            if (!schedule) return;
+
+            const runAtLocal = schedule.triggerType === 0
+                ? formatDateForInput(schedule.oneTimeRunUtc, schedule.timezoneId)
+                : null;
+
+            const payload = {
+                missionId: scheduleState.missionId,
+                scheduleId: scheduleId,
+                schedule: {
+                    triggerType: schedule.triggerType,
+                    cronExpression: schedule.cronExpression,
+                    runAtLocalTime: runAtLocal || null,
+                    timezoneId: schedule.timezoneId,
+                    isEnabled: enable
+                }
+            };
+
+            try {
+                const response = await fetch('?handler=MissionScheduleUpsert', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await readJsonResponse(response);
+                if (!result.ok || result.data?.success === false) {
+                    const message = result.data?.message || result.data?.title || result.text || 'Unable to update schedule.';
+                    showToast(message, 'error');
+                    return;
+                }
+
+                showToast(`Schedule ${enable ? 'enabled' : 'paused'}.`, 'success');
+                await loadSchedules();
+            } catch (error) {
+                console.error('Failed to toggle schedule', error);
+                showToast('Error updating schedule.', 'error');
+            }
+        }
+
+        async function deleteSchedule(scheduleId) {
+            if (!confirm('Delete this schedule?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch('?handler=MissionScheduleDelete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ missionId: scheduleState.missionId, scheduleId })
+                });
+                const result = await readJsonResponse(response);
+                if (!result.ok || result.data?.success === false) {
+                    const message = result.data?.message || result.data?.title || result.text || 'Unable to delete schedule.';
+                    showToast(message, 'error');
+                    return;
+                }
+
+                showToast('Schedule deleted.', 'success');
+                await loadSchedules();
+                await refreshScheduleLogs();
+            } catch (error) {
+                console.error('Failed to delete schedule', error);
+                showToast('Error deleting schedule.', 'error');
+            }
+        }
+
+        async function runScheduleNow(scheduleId) {
+            try {
+                const response = await fetch('?handler=MissionScheduleRun', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ missionId: scheduleState.missionId, scheduleId })
+                });
+                const result = await readJsonResponse(response);
+                if (!result.ok || result.data?.success === false) {
+                    const message = result.data?.message || result.data?.title || result.text || 'Failed to enqueue schedule.';
+                    showToast(message, 'error');
+                    return;
+                }
+
+                showToast('Scheduled run enqueued.', 'success');
+                await refreshScheduleLogs();
+            } catch (error) {
+                console.error('Failed to run schedule now', error);
+                showToast('Error triggering schedule.', 'error');
+            }
+        }
+
+        async function refreshScheduleLogs() {
+            if (!scheduleState.missionId) return;
+
+            const take = scheduleState.logsTake;
+            const scheduleId = scheduleState.selectedScheduleId;
+
+            try {
+                const response = await fetch(`?handler=MissionScheduleLogs&missionId=${scheduleState.missionId}&take=${take}${scheduleId ? `&scheduleId=${scheduleId}` : ''}`);
+                const payload = await readJsonResponse(response);
+                if (!payload.ok || payload.data?.success === false) {
+                    renderScheduleLogs([]);
+                    return;
+                }
+
+                renderScheduleLogs(payload.data?.data ?? []);
+            } catch (error) {
+                console.error('Failed to load schedule logs', error);
+                renderScheduleLogs([]);
+            }
+        }
+
+        function renderScheduleLogs(logs) {
+            const tbody = document.getElementById('scheduleLogsBody');
+            if (!logs.length) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="5" class="text-center text-muted py-3">
+                            No logs available for this selection.
+                        </td>
+                    </tr>`;
+                return;
+            }
+
+            const rows = logs.map(log => {
+                const scheduledFor = (() => {
+                    const raw = log.scheduledForUtc;
+                    const dateStr = raw.endsWith('Z') ? raw : raw + 'Z';
+                    return new Date(dateStr).toLocaleString();
+                })();
+
+                const enqueued = log.enqueuedUtc
+                    ? (() => {
+                        const raw = log.enqueuedUtc;
+                        const dateStr = raw.endsWith('Z') ? raw : raw + 'Z';
+                        return new Date(dateStr).toLocaleString();
+                    })()
+                    : '—';
+
+                return `
+                    <tr>
+                        <td>${scheduledFor}</td>
+                        <td>${enqueued}</td>
+                        <td>${log.queueId ?? '—'}</td>
+                        <td>${log.resultStatus}</td>
+                        <td>${log.error ?? ''}</td>
+                    </tr>`;
+            }).join('');
+            tbody.innerHTML = rows;
+        }
+
+        function viewScheduleLogs(scheduleId) {
+            scheduleState.selectedScheduleId = scheduleId;
+            refreshScheduleLogs();
+        }
+
+        // Session storage for active missions
+        function saveActiveMission(savedMissionId, missionCode, isQueued = false) {
+            const activeMissions = getActiveMissions();
+            activeMissions[savedMissionId] = {
+                missionCode: missionCode,
+                startTime: new Date().toISOString(),
+                isQueued: isQueued,
+                lastChecked: new Date().toISOString()
+            };
+            sessionStorage.setItem(ACTIVE_MISSIONS_KEY, JSON.stringify(activeMissions));
+            console.log(`Saved mission ${missionCode} for saved mission ${savedMissionId} (queued: ${isQueued})`);
+        }
+
+        function getActiveMissions() {
+            const stored = sessionStorage.getItem(ACTIVE_MISSIONS_KEY);
+            return stored ? JSON.parse(stored) : {};
+        }
+
+        function removeActiveMission(savedMissionId) {
+            const activeMissions = getActiveMissions();
+            delete activeMissions[savedMissionId];
+            sessionStorage.setItem(ACTIVE_MISSIONS_KEY, JSON.stringify(activeMissions));
+            console.log(`Removed mission for saved mission ${savedMissionId}`);
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            if (!timezoneOptionsLoaded) {
+                populateTimezoneOptions();
+                timezoneOptionsLoaded = true;
+            }
+            hideScheduleForm();
+
+            // Setup trigger form handlers
+            document.querySelectorAll('.trigger-form').forEach(form => {
+                form.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    await handleFormSubmit(form);
+                });
+            });
+
+            // Setup cancel action handlers
+            document.querySelectorAll('.cancel-action').forEach(item => {
+                item.addEventListener('click', async (e) => {
+                    e.preventDefault();
+                    const savedMissionId = parseInt(item.dataset.savedMissionId);
+                    const cancelMode = item.dataset.cancelMode;
+                    await handleCancelAction(savedMissionId, cancelMode);
+                });
+            });
+
+            // Setup stop polling buttons
+            document.querySelectorAll('.stop-polling-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const card = this.closest('[data-mission-name]');
+                    const form = card.querySelector('.trigger-form');
+                    const savedMissionId = parseInt(form.dataset.savedMissionId);
+                    stopPolling(savedMissionId);
+                });
+            });
+
+            // Restore active missions from session storage
+            restoreActiveMissions();
+
+            @if (!string.IsNullOrEmpty(Model.SuccessMessage))
+            {
+                <text>
+                showToast('@Html.Raw(Model.SuccessMessage.Replace("'", "\\'"))', 'success');
+                </text>
+            }
+            @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+            {
+                <text>
+                showToast('@Html.Raw(Model.ErrorMessage.Replace("'", "\\'"))', 'error');
+                </text>
+            }
+        });
+
+        async function handleFormSubmit(form) {
+            const savedMissionId = parseInt(form.dataset.savedMissionId);
+            const submitBtn = form.querySelector('button[type="submit"]');
+            const btnText = submitBtn.querySelector('.btn-text');
+            const spinner = submitBtn.querySelector('.spinner-border');
+
+            submitBtn.disabled = true;
+            btnText.textContent = 'Submitting...';
+            spinner.classList.remove('d-none');
+
+            try {
+                const data = {
+                    savedMissionId: savedMissionId
+                };
+
+                const response = await fetch('?handler=TriggerAjax', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    if (result.executeImmediately) {
+                        showToast(`Mission executing now. Mission: ${result.missionCode}`, 'success');
+                        saveActiveMission(savedMissionId, result.missionCode, false);
+                        startStatusPolling(savedMissionId, result.missionCode);
+                    } else if (result.queued) {
+                        showToast(`Mission queued. Mission: ${result.missionCode}`, 'info');
+                        saveActiveMission(savedMissionId, result.missionCode, true);
+                        if (!queuedMissionsCheckInterval) {
+                            startQueuedMissionsCheck();
+                        }
+                    } else {
+                        showToast(`Mission triggered. Mission: ${result.missionCode}`, 'success');
+                        saveActiveMission(savedMissionId, result.missionCode, false);
+                        startStatusPolling(savedMissionId, result.missionCode);
+                    }
+                } else {
+                    showToast(result.message || 'Failed to trigger mission', 'error');
+                }
+            } catch (error) {
+                console.error('Error submitting mission:', error);
+                showToast('Network error. Please try again.', 'error');
+            } finally {
+                submitBtn.disabled = false;
+                btnText.textContent = 'Trigger';
+                spinner.classList.add('d-none');
+            }
+        }
+
+        async function handleCancelAction(savedMissionId, cancelMode) {
+            const card = document.querySelector(`[data-saved-mission-id="${savedMissionId}"]`).closest('.mission-card');
+            if (!card) return;
+
+            const statusSection = card.querySelector('.mission-status-section');
+            const missionCode = statusSection.dataset.missionCode;
+
+            if (!missionCode) {
+                showToast('No active mission to cancel.', 'warning');
+                return;
+            }
+
+            const cancelBtn = card.querySelector('.cancel-dropdown-btn');
+            const btnText = cancelBtn.querySelector('.btn-text');
+            const originalText = btnText.textContent;
+
+            btnText.textContent = 'Cancelling...';
+            cancelBtn.disabled = true;
+
+            try {
+                const data = {
+                    missionCode: missionCode,
+                    cancelMode: cancelMode,
+                    reason: ''
+                };
+
+                const response = await fetch('?handler=CancelAjax', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showToast(`Cancellation requested for ${missionCode}. Waiting for status update...`, 'success');
+                } else {
+                    showToast(result.message || 'Failed to cancel mission', 'error');
+                }
+            } catch (error) {
+                console.error('Error cancelling mission:', error);
+                showToast('Network error. Please try again.', 'error');
+            } finally {
+                btnText.textContent = 'Cancel';
+                cancelBtn.disabled = false;
+            }
+        }
+
+        function startStatusPolling(savedMissionId, missionCode) {
+            const card = document.querySelector(`[data-saved-mission-id="${savedMissionId}"]`).closest('.mission-card');
+            if (!card) return;
+
+            const cancelBtn = card.querySelector('.cancel-dropdown-btn');
+            if (cancelBtn) {
+                cancelBtn.disabled = false;
+            }
+
+            const statusSection = card.querySelector('.mission-status-section');
+            statusSection.style.display = 'block';
+            statusSection.dataset.missionCode = missionCode;
+            statusSection.querySelector('.mission-code-display').textContent = missionCode;
+
+            let attempts = 0;
+
+            queryJobStatus(savedMissionId, missionCode);
+
+            const intervalId = setInterval(async () => {
+                attempts++;
+                if (attempts > MAX_ATTEMPTS) {
+                    clearInterval(intervalId);
+                    pollingIntervals.delete(savedMissionId);
+                    showStatusError(statusSection, 'Polling timeout exceeded');
+                    if (cancelBtn) cancelBtn.disabled = true;
+                    return;
+                }
+
+                const isTerminal = await queryJobStatus(savedMissionId, missionCode);
+                if (isTerminal) {
+                    clearInterval(intervalId);
+                    pollingIntervals.delete(savedMissionId);
+                    removeActiveMission(savedMissionId);
+                    if (cancelBtn) cancelBtn.disabled = true;
+                }
+            }, POLLING_INTERVAL_MS);
+
+            pollingIntervals.set(savedMissionId, intervalId);
+        }
+
+        async function queryJobStatus(savedMissionId, missionCode) {
+            const card = document.querySelector(`[data-saved-mission-id="${savedMissionId}"]`).closest('.mission-card');
+            if (!card) return false;
+
+            const statusSection = card.querySelector('.mission-status-section');
+
+            try {
+                const response = await fetch(`?handler=Status&jobCode=${encodeURIComponent(missionCode)}`);
+
+                if (!response.ok) {
+                    if (response.status === 404) {
+                        return false;
+                    }
+                    showStatusError(statusSection, `HTTP error: ${response.status}`);
+                    return false;
+                }
+
+                const data = await response.json();
+
+                if (data.success) {
+                    updateStatusDisplay(statusSection, data);
+                    return data.isTerminal;
+                } else {
+                    showStatusError(statusSection, data.message || 'Unknown error');
+                    return false;
+                }
+            } catch (error) {
+                console.error('Polling error:', error);
+                showStatusError(statusSection, `Network error: ${error.message}`);
+                return false;
+            }
+        }
+
+        function updateStatusDisplay(statusSection, data) {
+            const statusBadge = statusSection.querySelector('.status-badge');
+            const statusText = statusSection.querySelector('.status-text');
+            const robotDisplay = statusSection.querySelector('.robot-id-display');
+            const durationDisplay = statusSection.querySelector('.duration-display');
+
+            statusText.textContent = data.statusName;
+            statusBadge.className = `status-badge ${data.cssClass}`;
+
+            robotDisplay.textContent = data.robotId || 'N/A';
+
+            if (data.spendTime) {
+                durationDisplay.textContent = `${data.spendTime}s`;
+            } else {
+                durationDisplay.textContent = '-';
+            }
+
+            const errorMsg = statusSection.querySelector('.status-error-msg');
+            if (errorMsg) {
+                errorMsg.remove();
+            }
+        }
+
+        function showStatusError(statusSection, message) {
+            let errorMsg = statusSection.querySelector('.status-error-msg');
+            if (!errorMsg) {
+                errorMsg = document.createElement('div');
+                errorMsg.className = 'alert alert-danger alert-sm status-error-msg mt-2';
+                statusSection.appendChild(errorMsg);
+            }
+            errorMsg.textContent = message;
+        }
+
+        function stopPolling(savedMissionId) {
+            const intervalId = pollingIntervals.get(savedMissionId);
+            if (intervalId) {
+                clearInterval(intervalId);
+                pollingIntervals.delete(savedMissionId);
+                removeActiveMission(savedMissionId);
+
+                const card = document.querySelector(`[data-saved-mission-id="${savedMissionId}"]`).closest('.mission-card');
+                if (card) {
+                    const statusSection = card.querySelector('.mission-status-section');
+                    showStatusError(statusSection, 'Polling stopped by user');
+
+                    const cancelBtn = card.querySelector('.cancel-dropdown-btn');
+                    if (cancelBtn) {
+                        cancelBtn.disabled = true;
+                    }
+                }
+            }
+        }
+
+        async function restoreActiveMissions() {
+            const activeMissions = getActiveMissions();
+
+            console.log('Restoring active missions from session storage:', activeMissions);
+
+            for (const [savedMissionId, missionInfo] of Object.entries(activeMissions)) {
+                const missionCode = missionInfo.missionCode;
+                const isQueued = missionInfo.isQueued || false;
+
+                console.log(`Attempting to restore mission ${missionCode} for saved mission ${savedMissionId} (queued: ${isQueued})`);
+
+                try {
+                    const response = await fetch(`?handler=Status&jobCode=${encodeURIComponent(missionCode)}`);
+
+                    if (response.ok) {
+                        const data = await response.json();
+
+                        if (data.success) {
+                            if (!data.isTerminal) {
+                                console.log(`Mission ${missionCode} is active (status: ${data.statusName}). Starting polling.`);
+
+                                if (isQueued) {
+                                    saveActiveMission(parseInt(savedMissionId), missionCode, false);
+                                }
+
+                                startStatusPolling(parseInt(savedMissionId), missionCode);
+                            } else {
+                                console.log(`Mission ${missionCode} has completed with status: ${data.statusName}.`);
+                                removeActiveMission(savedMissionId);
+                            }
+                        } else {
+                            if (isQueued) {
+                                console.log(`Queued mission ${missionCode} not found in job status yet.`);
+                            } else {
+                                console.log(`Mission ${missionCode} not found. Removing from storage.`);
+                                removeActiveMission(savedMissionId);
+                            }
+                        }
+                    }
+                } catch (error) {
+                    console.error(`Error restoring mission ${missionCode}:`, error);
+                }
+            }
+
+            startQueuedMissionsCheck();
+        }
+
+        function startQueuedMissionsCheck() {
+            const activeMissions = getActiveMissions();
+            const hasQueuedMissions = Object.values(activeMissions).some(m => m.isQueued);
+
+            if (!hasQueuedMissions) {
+                console.log('No queued missions found. Skipping periodic check.');
+                return;
+            }
+
+            if (queuedMissionsCheckInterval) {
+                clearInterval(queuedMissionsCheckInterval);
+            }
+
+            queuedMissionsCheckInterval = setInterval(async () => {
+                const activeMissions = getActiveMissions();
+                let hasQueuedMissions = false;
+
+                for (const [savedMissionId, missionInfo] of Object.entries(activeMissions)) {
+                    if (missionInfo.isQueued) {
+                        hasQueuedMissions = true;
+                        const missionCode = missionInfo.missionCode;
+
+                        try {
+                            const response = await fetch(`?handler=Status&jobCode=${encodeURIComponent(missionCode)}`);
+
+                            if (response.ok) {
+                                const data = await response.json();
+
+                                if (data.success && !data.isTerminal) {
+                                    console.log(`Queued mission ${missionCode} has started executing (status: ${data.statusName})`);
+
+                                    saveActiveMission(parseInt(savedMissionId), missionCode, false);
+                                    startStatusPolling(parseInt(savedMissionId), missionCode);
+                                    showToast(`Mission ${missionCode} has started executing`, 'info');
+                                } else if (data.success && data.isTerminal) {
+                                    console.log(`Queued mission ${missionCode} completed with status: ${data.statusName}`);
+                                    removeActiveMission(savedMissionId);
+                                }
+                            }
+                        } catch (error) {
+                            console.error(`Error checking queued mission ${missionCode}:`, error);
+                        }
+                    }
+                }
+
+                if (!hasQueuedMissions) {
+                    console.log('No more queued missions to track. Stopping periodic check.');
+                    clearInterval(queuedMissionsCheckInterval);
+                    queuedMissionsCheckInterval = null;
+                }
+            }, QUEUED_CHECK_INTERVAL_MS);
+
+            console.log('Started periodic check for queued missions (every 10 seconds)');
+        }
+
+        window.addEventListener('beforeunload', () => {
+            if (queuedMissionsCheckInterval) {
+                clearInterval(queuedMissionsCheckInterval);
+            }
+            pollingIntervals.forEach((intervalId) => clearInterval(intervalId));
+        });
+
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+
+            const icon = type === 'success' ? '✓' : type === 'error' ? '✕' : 'ℹ';
+            toast.innerHTML = `
+                <div style="font-size: 24px; font-weight: bold;">${icon}</div>
+                <div style="flex: 1;">${message}</div>
+            `;
+
+            container.appendChild(toast);
+
+            setTimeout(() => {
+                toast.style.animation = 'slideIn 0.3s ease-out reverse';
+                setTimeout(() => {
+                    container.removeChild(toast);
+                }, 300);
+            }, 5000);
+        }
+
+        function filterMissions() {
+            const searchTerm = document.getElementById('missionSearch').value.toLowerCase();
+            const grid = document.getElementById('missionsGrid');
+            const cards = grid ? grid.getElementsByClassName('mission-card') : [];
+            const noResultsMessage = document.getElementById('noResultsMessage');
+            const clearBtn = document.getElementById('clearSearch');
+            let visibleCount = 0;
+
+            for (let i = 0; i < cards.length; i++) {
+                const card = cards[i];
+                const missionName = card.dataset.missionName || '';
+                const missionType = card.dataset.missionType || '';
+                const robotType = card.dataset.robotType || '';
+
+                if (missionName.includes(searchTerm) ||
+                    missionType.includes(searchTerm) ||
+                    robotType.includes(searchTerm)) {
+                    card.style.display = '';
+                    visibleCount++;
+                } else {
+                    card.style.display = 'none';
+                }
+            }
+
+            document.getElementById('searchResultCount').textContent =
+                `Showing ${visibleCount} of ${cards.length} mission(s)`;
+
+            if (noResultsMessage) {
+                noResultsMessage.style.display = visibleCount === 0 && searchTerm ? '' : 'none';
+            }
+
+            if (clearBtn) {
+                clearBtn.style.display = searchTerm ? '' : 'none';
+            }
+        }
+
+        function clearSearch() {
+            document.getElementById('missionSearch').value = '';
+            filterMissions();
+        }
+
+        // === Inline Mission Control Functions ===
+        const activeMissionData = new Map(); // Store mission data for polling
+
+        async function startMission(missionId) {
+            const startBtn = document.getElementById(`start-btn-${missionId}`);
+            const statusSection = document.getElementById(`status-section-${missionId}`);
+            const cancelGroup = document.getElementById(`cancel-group-${missionId}`);
+
+            startBtn.disabled = true;
+            startBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Starting...';
+
+            try {
+                const response = await fetch('?handler=TriggerAjax', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ SavedMissionId: missionId })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showToast(result.message, 'success');
+
+                    // Store mission data for polling
+                    activeMissionData.set(missionId, {
+                        missionCode: result.missionCode,
+                        robotId: null,
+                        startTime: Date.now()
+                    });
+
+                    // Show status section and cancel button
+                    statusSection.classList.remove('d-none');
+                    startBtn.style.display = 'none';
+                    cancelGroup.style.display = 'flex';
+
+                    // Start status polling
+                    startEnhancedStatusPolling(missionId, result.missionCode);
+                } else {
+                    showToast(result.message || 'Failed to start mission', 'error');
+                    startBtn.disabled = false;
+                    startBtn.innerHTML = '▶️ Start';
+                }
+            } catch (error) {
+                console.error('Error starting mission:', error);
+                showToast('Error starting mission', 'error');
+                startBtn.disabled = false;
+                startBtn.innerHTML = '▶️ Start';
+            }
+        }
+
+        async function cancelMission(missionId, cancelMode) {
+            const missionData = activeMissionData.get(missionId);
+            if (!missionData) {
+                showToast('No active mission to cancel', 'error');
+                return;
+            }
+
+            const cancelBtn = document.getElementById(`cancel-btn-${missionId}`);
+            if (cancelBtn) {
+                cancelBtn.disabled = true;
+                cancelBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Cancelling...';
+            }
+
+            try {
+                const response = await fetch('?handler=CancelAjax', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        MissionCode: missionData.missionCode,
+                        CancelMode: cancelMode || 'NORMAL',
+                        Reason: `Cancelled via inline control (mode: ${cancelMode || 'NORMAL'})`
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showToast(`Mission cancelled (${cancelMode})`, 'success');
+                } else {
+                    showToast(result.message || 'Failed to cancel mission', 'error');
+                }
+            } catch (error) {
+                console.error('Error cancelling mission:', error);
+                showToast('Error cancelling mission', 'error');
+            } finally {
+                if (cancelBtn) {
+                    cancelBtn.disabled = false;
+                    cancelBtn.innerHTML = '⏹ Cancel';
+                }
+            }
+        }
+
+        async function resumeManualWaypoint(missionId) {
+            const missionData = activeMissionData.get(missionId);
+            if (!missionData) {
+                showToast('No active mission to resume', 'error');
+                return;
+            }
+
+            const resumeBtn = document.getElementById(`resume-btn-${missionId}`);
+            if (resumeBtn) {
+                resumeBtn.disabled = true;
+                resumeBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Resuming...';
+            }
+
+            try {
+                const response = await fetch('?handler=ResumeManualWaypoint', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ MissionCode: missionData.missionCode })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showToast('Mission resumed successfully', 'success');
+
+                    // Hide manual waypoint alert and resume button
+                    const waypointAlert = document.getElementById(`manual-waypoint-alert-${missionId}`);
+                    if (waypointAlert) waypointAlert.classList.add('d-none');
+                    if (resumeBtn) resumeBtn.classList.add('d-none');
+                } else {
+                    showToast(result.message || 'Failed to resume mission', 'error');
+                }
+            } catch (error) {
+                console.error('Error resuming mission:', error);
+                showToast('Error resuming mission', 'error');
+            } finally {
+                if (resumeBtn) {
+                    resumeBtn.disabled = false;
+                    resumeBtn.innerHTML = '▶️ Resume';
+                }
+            }
+        }
+
+        function stopPollingMission(missionId) {
+            const intervalId = pollingIntervals.get(missionId);
+            if (intervalId) {
+                clearInterval(intervalId);
+                pollingIntervals.delete(missionId);
+            }
+
+            activeMissionData.delete(missionId);
+
+            // Hide status section and show start button
+            const statusSection = document.getElementById(`status-section-${missionId}`);
+            const startBtn = document.getElementById(`start-btn-${missionId}`);
+            const cancelGroup = document.getElementById(`cancel-group-${missionId}`);
+            const resumeBtn = document.getElementById(`resume-btn-${missionId}`);
+
+            if (statusSection) statusSection.classList.add('d-none');
+            if (startBtn) {
+                startBtn.style.display = 'block';
+                startBtn.disabled = false;
+                startBtn.innerHTML = '▶️ Start';
+            }
+            if (cancelGroup) cancelGroup.style.display = 'none';
+            if (resumeBtn) resumeBtn.classList.add('d-none');
+
+            showToast(`Stopped monitoring mission`, 'info');
+        }
+
+        function startEnhancedStatusPolling(missionId, missionCode) {
+            // Clear existing polling if any
+            const existingInterval = pollingIntervals.get(missionId);
+            if (existingInterval) {
+                clearInterval(existingInterval);
+            }
+
+            let pollCount = 0;
+            const maxPolls = MAX_ATTEMPTS;
+
+            const intervalId = setInterval(async () => {
+                pollCount++;
+                const missionData = activeMissionData.get(missionId);
+
+                if (!missionData) {
+                    clearInterval(intervalId);
+                    pollingIntervals.delete(missionId);
+                    return;
+                }
+
+                try {
+                    const url = `?handler=Status&jobCode=${encodeURIComponent(missionCode)}&savedMissionId=${missionId}&robotId=${missionData.robotId || ''}`;
+                    const response = await fetch(url);
+                    const data = await response.json();
+
+                    if (data.success) {
+                        // Update stored robot ID
+                        if (data.robotId) {
+                            missionData.robotId = data.robotId;
+                        }
+
+                        // Update status badge
+                        const statusBadge = document.getElementById(`status-badge-${missionId}`);
+                        const statusText = document.getElementById(`status-text-${missionId}`);
+                        if (statusBadge && statusText) {
+                            statusBadge.className = `status-badge ${data.cssClass}`;
+                            statusText.textContent = data.statusName;
+                        }
+
+                        // Update status details
+                        const robotIdElem = document.getElementById(`robot-id-${missionId}`);
+                        const robotPosElem = document.getElementById(`robot-position-${missionId}`);
+                        const stepProgressTextElem = document.getElementById(`step-progress-text-${missionId}`);
+                        const stepProgressBarElem = document.getElementById(`step-progress-bar-${missionId}`);
+                        const batteryTextElem = document.getElementById(`battery-level-text-${missionId}`);
+                        const batteryBarElem = document.getElementById(`battery-level-bar-${missionId}`);
+                        const durationElem = document.getElementById(`duration-${missionId}`);
+
+                        if (robotIdElem) robotIdElem.textContent = data.robotId || '-';
+                        if (robotPosElem) robotPosElem.textContent = data.currentNodeCode || '-';
+
+                        // Update battery level with bar
+                        if (data.batteryLevel) {
+                            if (batteryTextElem) batteryTextElem.textContent = `${data.batteryLevel}%`;
+                            if (batteryBarElem) {
+                                batteryBarElem.style.width = `${data.batteryLevel}%`;
+                                // Update battery color based on level
+                                batteryBarElem.className = 'battery-bar-fill';
+                                if (data.batteryLevel >= 60) {
+                                    batteryBarElem.classList.add('battery-high');
+                                } else if (data.batteryLevel >= 30) {
+                                    batteryBarElem.classList.add('battery-medium');
+                                } else {
+                                    batteryBarElem.classList.add('battery-low');
+                                }
+                            }
+                        } else {
+                            if (batteryTextElem) batteryTextElem.textContent = '-';
+                            if (batteryBarElem) batteryBarElem.style.width = '0%';
+                        }
+
+                        // Update step progress with bar
+                        if (data.totalSteps > 0) {
+                            const currentStep = (data.currentStepIndex !== null && data.currentStepIndex !== undefined)
+                                ? data.currentStepIndex + 1
+                                : 0;
+                            const progressPercentage = data.progressPercentage || 0;
+
+                            if (stepProgressTextElem) {
+                                stepProgressTextElem.textContent = `Step ${currentStep} of ${data.totalSteps}`;
+                            }
+                            if (stepProgressBarElem) {
+                                stepProgressBarElem.style.width = `${progressPercentage}%`;
+                            }
+                        } else {
+                            if (stepProgressTextElem) stepProgressTextElem.textContent = '-';
+                            if (stepProgressBarElem) stepProgressBarElem.style.width = '0%';
+                        }
+
+                        // Update duration
+                        if (durationElem) {
+                            const elapsed = Math.floor((Date.now() - missionData.startTime) / 1000);
+                            const minutes = Math.floor(elapsed / 60);
+                            const seconds = elapsed % 60;
+                            durationElem.textContent = `${minutes}m ${seconds}s`;
+                        }
+
+                        // Handle manual waypoint
+                        const waypointAlert = document.getElementById(`manual-waypoint-alert-${missionId}`);
+                        const resumeBtn = document.getElementById(`resume-btn-${missionId}`);
+                        const waypointPosition = document.getElementById(`waypoint-position-${missionId}`);
+
+                        if (data.isWaitingAtManualWaypoint && data.manualWaypointData) {
+                            if (waypointAlert) {
+                                waypointAlert.classList.remove('d-none');
+                                if (waypointPosition) {
+                                    waypointPosition.textContent = data.manualWaypointData.currentPosition || 'unknown';
+                                }
+                            }
+                            if (resumeBtn) resumeBtn.classList.remove('d-none');
+                        } else {
+                            if (waypointAlert) waypointAlert.classList.add('d-none');
+                            if (resumeBtn) resumeBtn.classList.add('d-none');
+                        }
+
+                        // Handle terminal status
+                        if (data.isTerminal) {
+                            console.log(`Mission ${missionCode} completed with status: ${data.statusName}`);
+
+                            clearInterval(intervalId);
+                            pollingIntervals.delete(missionId);
+                            activeMissionData.delete(missionId);
+
+                            // Hide cancel button, show start button
+                            const cancelGroup = document.getElementById(`cancel-group-${missionId}`);
+                            const startBtn = document.getElementById(`start-btn-${missionId}`);
+                            if (cancelGroup) cancelGroup.style.display = 'none';
+                            if (startBtn) {
+                                startBtn.style.display = 'block';
+                                startBtn.disabled = false;
+                                startBtn.innerHTML = '▶️ Start';
+                            }
+
+                            const statusMsg = data.statusName === 'Complete' || data.statusName === 'Manual Complete'
+                                ? 'Mission completed successfully'
+                                : `Mission ended: ${data.statusName}`;
+                            showToast(statusMsg, data.statusName.includes('Complete') ? 'success' : 'error');
+                        }
+                    } else {
+                        console.error('Status polling failed:', data.message);
+                    }
+                } catch (error) {
+                    console.error('Error polling mission status:', error);
+                }
+
+                if (pollCount >= maxPolls) {
+                    console.log(`Max polling attempts reached for mission ${missionCode}`);
+                    clearInterval(intervalId);
+                    pollingIntervals.delete(missionId);
+                    stopPollingMission(missionId);
+                    showToast('Mission monitoring stopped (timeout)', 'error');
+                }
+            }, POLLING_INTERVAL_MS);
+
+            pollingIntervals.set(missionId, intervalId);
+            console.log(`Started enhanced status polling for mission ${missionCode} (ID: ${missionId})`);
+        }
+
+    </script>
+}

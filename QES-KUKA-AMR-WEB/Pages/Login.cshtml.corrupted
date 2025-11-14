@@ -1,0 +1,158 @@
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.EntityFrameworkCore;
+using QES_KUKA_AMR_API.Data;
+using QES_KUKA_AMR_API.Data.Entities;
+using System.ComponentModel.DataAnnotations;
+using System.Text;
+using System.Text.Json;
+using System.Threading;
+
+namespace QES_KUKA_AMR_WEB.Pages
+{
+    public class LoginModel : PageModel
+    {
+        private readonly IHttpClientFactory _httpClientFactory;
+        private readonly IConfiguration _configuration;
+        private readonly ILogger<LoginModel>
+    _logger;
+    private readonly ApplicationDbContext _dbContext;
+
+    [BindProperty]
+    [Required(ErrorMessage = "Username is required")]
+    public string Username { get; set; } = string.Empty;
+
+    [BindProperty]
+    [Required(ErrorMessage = "Password is required")]
+    public string Password { get; set; } = string.Empty;
+
+    public string? ErrorMessage { get; set; }
+
+    public LoginModel(
+    IHttpClientFactory httpClientFactory,
+    IConfiguration configuration,
+    ILogger<LoginModel>
+        logger, ApplicationDbContext dbContext)
+        {
+        _httpClientFactory = httpClientFactory;
+        _configuration = configuration;
+        _logger = logger;
+        _dbContext = dbContext;
+        }
+
+        public void OnGet()
+        {
+        // Clear any existing session
+        HttpContext.Session.Clear();
+        }
+
+        public async Task<IActionResult>
+            OnPostAsync()
+            {
+            if (!ModelState.IsValid)
+            return Page();
+
+            try
+            {
+            var apiBaseUrl = _configuration["ApiSettings:BaseUrl"] ?? "https://localhost:7255";
+            var httpClient = _httpClientFactory.CreateClient();
+            httpClient.BaseAddress = new Uri(apiBaseUrl);
+
+            var loginRequest = new
+            {
+            username = Username,
+            password = Password
+            };
+
+            var jsonContent = JsonSerializer.Serialize(loginRequest);
+            using var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
+
+            var response = await httpClient.PostAsync("api/login", content);
+            var responseContent = await response.Content.ReadAsStringAsync();
+
+            if (!response.IsSuccessStatusCode)
+            {
+            ErrorMessage = ExtractErrorMessage(responseContent) ??
+            "Unable to connect to the authentication server. Please try again.";
+            _logger.LogWarning("Login API returned {StatusCode} for user {Username}", response.StatusCode, Username);
+            return Page();
+            }
+
+            var loginResponse = JsonSerializer.Deserialize<LoginApiResponse>
+                (
+                responseContent,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+                if (loginResponse?.Success == true && !string.IsNullOrEmpty(loginResponse.Data?.Token))
+                {
+                var user = await _dbContext.Users.FirstOrDefaultAsync(u => u.Username == Username);
+                if (user != null)
+                {
+                var roles = user.Roles ?? new List<Role>
+                    ();
+
+                    if (roles.Count == 0 && !string.IsNullOrEmpty(user.RolesJson))
+                    {
+                    try
+                    {
+                    roles = JsonSerializer.Deserialize<List<Role>>(user.RolesJson) ?? new List<Role>();
+                            }
+                            catch (Exception jsonEx)
+                            {
+                                _logger.LogWarning(jsonEx, "Failed to parse RoleJson for {Username}", Username);
+                            }
+                        }
+
+                        var roleNames = roles.Select(r => r.Name ?? "Unknown").ToList();
+
+                        HttpContext.Session.SetString("JwtToken", loginResponse.Data.Token);
+                        HttpContext.Session.SetString("Username", Username);
+                        HttpContext.Session.SetString("Role", JsonSerializer.Serialize(roleNames));
+
+                        _logger.LogInformation("User {Username} logged in successfully", Username);
+                        return RedirectToPage("/WorkflowManagement");
+                    }
+                }
+
+                ErrorMessage = loginResponse?.Msg ?? "Login failed. Please check your credentials.";
+                _logger.LogWarning("Login failed for user {Username}: {Error}", Username, ErrorMessage);
+            }
+            catch (Exception ex)
+            {
+                ErrorMessage = "An error occurred during login. Please try again.";
+                _logger.LogError(ex, "Exception occurred during login for user {Username}.", Username);
+            }
+
+            return Page();
+        }
+
+
+        private static string? ExtractErrorMessage(string responseContent)
+        {
+            try
+            {
+                var errorResponse = JsonSerializer.Deserialize<LoginApiResponse>(
+                    responseContent,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+                return errorResponse?.Msg;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private class LoginApiResponse
+        {
+            public bool Success { get; set; }
+            public string? Msg { get; set; }
+            public LoginApiResponseData? Data { get; set; }
+        }
+
+        private class LoginApiResponseData
+        {
+            public string? Token { get; set; }
+        }
+    }
+}

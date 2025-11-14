@@ -1,0 +1,720 @@
+@page
+@model QES_KUKA_AMR_WEB.Pages.MissionConfigurationModel
+@{
+    ViewData["Title"] = "Mission Configuration";
+    Layout = "_DashboardLayout";
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/mission-configuration.css" asp-append-version="true" />
+}
+
+<div class="mission-configuration">
+    <div class="mission-configuration__header">
+        <div>
+            <h2 class="mission-configuration__title">Mission Configuration</h2>
+            <p class="mission-configuration__subtitle">Manage configurable resources that power AMR missions.</p>
+        </div>
+    </div>
+
+    <div class="mission-configuration__tabs" role="tablist" aria-label="Mission configuration tabs">
+        <button class="mission-configuration__tab mission-configuration__tab--active"
+                id="missionTypesTabButton"
+                role="tab"
+                aria-selected="true"
+                aria-controls="missionTypesPanel">
+            Mission Types
+        </button>
+        <button class="mission-configuration__tab"
+                id="robotTypesTabButton"
+                role="tab"
+                aria-selected="false"
+                aria-controls="robotTypesPanel"
+                tabindex="-1">
+            Robot Types
+        </button>
+        <button class="mission-configuration__tab"
+                id="shelfDecisionTabButton"
+                role="tab"
+                aria-selected="false"
+                aria-controls="shelfDecisionPanel"
+                tabindex="-1">
+            Shelf Decision
+        </button>
+        <button class="mission-configuration__tab"
+                id="resumeStrategyTabButton"
+                role="tab"
+                aria-selected="false"
+                aria-controls="resumeStrategyPanel"
+                tabindex="-1">
+            Resume Strategy
+        </button>
+        <button class="mission-configuration__tab"
+                id="areasTabButton"
+                role="tab"
+                aria-selected="false"
+                aria-controls="areasPanel"
+                tabindex="-1">
+            Areas
+        </button>
+    </div>
+
+    <section id="missionTypesPanel"
+             class="mission-configuration__panel mission-configuration__panel--active"
+             role="tabpanel"
+             aria-labelledby="missionTypesTabButton">
+        <div class="mission-types__header">
+            <div>
+                <h3 class="mission-types__title">Mission Types</h3>
+                <p class="mission-types__description">Pair a user-friendly label with the value expected by the AMR backend.</p>
+            </div>
+            <div class="mission-types__actions">
+                <button type="button" class="btn btn-primary" id="btnOpenCreateMissionType">
+                    <span class="mission-types__actions-icon">＋</span>
+                    Add Mission Type
+                </button>
+            </div>
+        </div>
+
+        <div id="missionTypeFeedback" class="alert alert-info d-none" role="status"></div>
+
+        <div class="mission-types__state mission-types__state--loading" id="missionTypesLoading">
+            <div class="spinner-border text-primary" role="status" aria-hidden="true"></div>
+            <p class="mission-types__state-text">Loading mission types…</p>
+        </div>
+
+        <div class="mission-types__state mission-types__state--error d-none" id="missionTypesError">
+            <div class="mission-types__state-icon">⚠️</div>
+            <p class="mission-types__state-text" id="missionTypesErrorMessage">Unable to load mission types.</p>
+            <button type="button" class="btn btn-outline-secondary btn-sm" id="missionTypesRetry">
+                Try Again
+            </button>
+        </div>
+
+        <div class="mission-types__state mission-types__state--empty d-none" id="missionTypesEmpty">
+            <div class="mission-types__state-icon">📦</div>
+            <p class="mission-types__state-text">
+                No mission types yet. Create one to define the first pairing.
+            </p>
+            <button type="button" class="btn btn-outline-primary btn-sm" id="missionTypesEmptyCreate">
+                Create Mission Type
+            </button>
+        </div>
+
+        <div class="table-container table-scroll-mission mission-types__table d-none" id="missionTypesTableWrapper">
+            <div class="table-responsive">
+                <table class="data-table">
+                    <thead>
+                    <tr>
+                        <th scope="col">Display Value</th>
+                        <th scope="col">Actual Value</th>
+                        <th scope="col">Description</th>
+                        <th scope="col">Status</th>
+                        <th scope="col">Timestamps</th>
+                        <th scope="col" class="mission-types__actions-column">Actions</th>
+                    </tr>
+                    </thead>
+                    <tbody id="missionTypesTableBody">
+                    <tr>
+                        <td colspan="6" class="text-center text-muted py-4">Loading…</td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <section id="robotTypesPanel"
+             class="mission-configuration__panel"
+             role="tabpanel"
+             aria-labelledby="robotTypesTabButton"
+             hidden>
+        <div class="robot-types__header">
+            <div>
+                <h3 class="robot-types__title">Robot Types</h3>
+                <p class="robot-types__description">Define the robot type identifiers expected by the AMR backend.</p>
+            </div>
+            <div class="robot-types__actions">
+                <button type="button" class="btn btn-primary" id="btnOpenCreateRobotType">
+                    <span class="robot-types__actions-icon">＋</span>
+                    Add Robot Type
+                </button>
+            </div>
+        </div>
+
+        <div id="robotTypeFeedback" class="alert alert-info d-none" role="status"></div>
+
+        <div class="robot-types__state robot-types__state--loading" id="robotTypesLoading">
+            <div class="spinner-border text-primary" role="status" aria-hidden="true"></div>
+            <p class="robot-types__state-text">Loading robot types…</p>
+        </div>
+
+        <div class="robot-types__state robot-types__state--error d-none" id="robotTypesError">
+            <div class="robot-types__state-icon">⚠️</div>
+            <p class="robot-types__state-text" id="robotTypesErrorMessage">Unable to load robot types.</p>
+            <button type="button" class="btn btn-outline-secondary btn-sm" id="robotTypesRetry">
+                Try Again
+            </button>
+        </div>
+
+        <div class="robot-types__state robot-types__state--empty d-none" id="robotTypesEmpty">
+            <div class="robot-types__state-icon">🤖</div>
+            <p class="robot-types__state-text">
+                No robot types yet. Create one to map the first value pair.
+            </p>
+            <button type="button" class="btn btn-outline-primary btn-sm" id="robotTypesEmptyCreate">
+                Create Robot Type
+            </button>
+        </div>
+
+        <div class="table-container table-scroll-robot robot-types__table d-none" id="robotTypesTableWrapper">
+            <div class="table-responsive">
+                <table class="data-table">
+                    <thead>
+                    <tr>
+                        <th scope="col">Display Value</th>
+                        <th scope="col">Actual Value</th>
+                        <th scope="col">Description</th>
+                        <th scope="col">Status</th>
+                        <th scope="col">Timestamps</th>
+                        <th scope="col" class="robot-types__actions-column">Actions</th>
+                    </tr>
+                    </thead>
+                    <tbody id="robotTypesTableBody">
+                    <tr>
+                        <td colspan="6" class="text-center text-muted py-4">Loading…</td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <section id="shelfDecisionPanel"
+             class="mission-configuration__panel"
+             role="tabpanel"
+             aria-labelledby="shelfDecisionTabButton"
+             hidden>
+        <div class="shelf-decision__header">
+            <div>
+                <h3 class="shelf-decision__title">Shelf Decision Rules</h3>
+                <p class="shelf-decision__description">
+                    Configure how the system decides if shelves must be lowered at the current node (Display vs Actual value).
+                </p>
+            </div>
+            <div class="shelf-decision__actions">
+                <button type="button" class="btn btn-primary" id="btnOpenCreateShelfDecision">
+                    <span class="shelf-decision__actions-icon">＋</span>
+                    Add Shelf Decision
+                </button>
+            </div>
+        </div>
+
+        <div id="shelfDecisionFeedback" class="alert alert-info d-none" role="status"></div>
+
+        <div class="shelf-decision__state shelf-decision__state--loading" id="shelfDecisionLoading">
+            <div class="spinner-border text-primary" role="status" aria-hidden="true"></div>
+            <p class="shelf-decision__state-text">Loading shelf decision rules…</p>
+        </div>
+
+        <div class="shelf-decision__state shelf-decision__state--error d-none" id="shelfDecisionError">
+            <div class="shelf-decision__state-icon">⚠️</div>
+            <p class="shelf-decision__state-text" id="shelfDecisionErrorMessage">Unable to load shelf decision rules.</p>
+            <button type="button" class="btn btn-outline-secondary btn-sm" id="shelfDecisionRetry">
+                Try Again
+            </button>
+        </div>
+
+        <div class="shelf-decision__state shelf-decision__state--empty d-none" id="shelfDecisionEmpty">
+            <div class="shelf-decision__state-icon">⚙️</div>
+            <p class="shelf-decision__state-text">
+                No shelf decision rules yet. Create one to define the lowering behavior.
+            </p>
+            <button type="button" class="btn btn-outline-primary btn-sm" id="shelfDecisionEmptyCreate">
+                Create Shelf Decision
+            </button>
+        </div>
+
+        <div class="table-container table-scroll-shelf shelf-decision__table d-none" id="shelfDecisionTableWrapper">
+            <div class="table-responsive">
+                <table class="data-table">
+                    <thead>
+                    <tr>
+                        <th scope="col">Display Value</th>
+                        <th scope="col">Actual Value</th>
+                        <th scope="col">Description</th>
+                        <th scope="col">Status</th>
+                        <th scope="col">Timestamps</th>
+                        <th scope="col" class="shelf-decision__actions-column">Actions</th>
+                    </tr>
+                    </thead>
+                    <tbody id="shelfDecisionTableBody">
+                    <tr>
+                        <td colspan="6" class="text-center text-muted py-4">Loading…</td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <section id="resumeStrategyPanel"
+             class="mission-configuration__panel"
+             role="tabpanel"
+             aria-labelledby="resumeStrategyTabButton"
+             hidden>
+        <div class="resume-strategy__header">
+            <div>
+                <h3 class="resume-strategy__title">Resume Strategy</h3>
+                <p class="resume-strategy__description">
+                    Control how missions resume at the current node (e.g., AUTO vs MANUAL).
+                </p>
+            </div>
+            <div class="resume-strategy__actions">
+                <button type="button" class="btn btn-primary" id="btnOpenCreateResumeStrategy">
+                    <span class="resume-strategy__actions-icon">＋</span>
+                    Add Resume Strategy
+                </button>
+            </div>
+        </div>
+
+        <div id="resumeStrategyFeedback" class="alert alert-info d-none" role="status"></div>
+
+        <div class="resume-strategy__state resume-strategy__state--loading" id="resumeStrategyLoading">
+            <div class="spinner-border text-primary" role="status" aria-hidden="true"></div>
+            <p class="resume-strategy__state-text">Loading resume strategies…</p>
+        </div>
+
+        <div class="resume-strategy__state resume-strategy__state--error d-none" id="resumeStrategyError">
+            <div class="resume-strategy__state-icon">⚠️</div>
+            <p class="resume-strategy__state-text" id="resumeStrategyErrorMessage">Unable to load resume strategies.</p>
+            <button type="button" class="btn btn-outline-secondary btn-sm" id="resumeStrategyRetry">
+                Try Again
+            </button>
+        </div>
+
+        <div class="resume-strategy__state resume-strategy__state--empty d-none" id="resumeStrategyEmpty">
+            <div class="resume-strategy__state-icon">⏯️</div>
+            <p class="resume-strategy__state-text">
+                No resume strategies yet. Create one to define AUTO or MANUAL behavior.
+            </p>
+            <button type="button" class="btn btn-outline-primary btn-sm" id="resumeStrategyEmptyCreate">
+                Create Resume Strategy
+            </button>
+        </div>
+
+        <div class="table-container table-scroll-resume resume-strategy__table d-none" id="resumeStrategyTableWrapper">
+            <div class="table-responsive">
+                <table class="data-table">
+                    <thead>
+                    <tr>
+                        <th scope="col">Display Value</th>
+                        <th scope="col">Actual Value</th>
+                        <th scope="col">Description</th>
+                        <th scope="col">Status</th>
+                        <th scope="col">Timestamps</th>
+                        <th scope="col" class="resume-strategy__actions-column">Actions</th>
+                    </tr>
+                    </thead>
+                    <tbody id="resumeStrategyTableBody">
+                    <tr>
+                        <td colspan="6" class="text-center text-muted py-4">Loading…</td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <section id="areasPanel"
+             class="mission-configuration__panel"
+             role="tabpanel"
+             aria-labelledby="areasTabButton"
+             hidden>
+        <div class="areas__header">
+            <div>
+                <h3 class="areas__title">Areas</h3>
+                <p class="areas__description">
+                    Define area labels and actual values used by missions (e.g., Warehouse West, WWEST).
+                </p>
+            </div>
+            <div class="areas__actions">
+                <button type="button" class="btn btn-primary" id="btnOpenCreateArea">
+                    <span class="areas__actions-icon">＋</span>
+                    Add Area
+                </button>
+            </div>
+        </div>
+
+        <div id="areaFeedback" class="alert alert-info d-none" role="status"></div>
+
+        <div class="areas__state areas__state--loading" id="areasLoading">
+            <div class="spinner-border text-primary" role="status" aria-hidden="true"></div>
+            <p class="areas__state-text">Loading areas…</p>
+        </div>
+
+        <div class="areas__state areas__state--error d-none" id="areasError">
+            <div class="areas__state-icon">⚠️</div>
+            <p class="areas__state-text" id="areasErrorMessage">Unable to load areas.</p>
+            <button type="button" class="btn btn-outline-secondary btn-sm" id="areasRetry">
+                Try Again
+            </button>
+        </div>
+
+        <div class="areas__state areas__state--empty d-none" id="areasEmpty">
+            <div class="areas__state-icon">🗺️</div>
+            <p class="areas__state-text">
+                No areas yet. Create one to start mapping actual values.
+            </p>
+            <button type="button" class="btn btn-outline-primary btn-sm" id="areasEmptyCreate">
+                Create Area
+            </button>
+        </div>
+
+        <div class="table-container table-scroll-area areas__table d-none" id="areasTableWrapper">
+            <div class="table-responsive">
+                <table class="data-table">
+                    <thead>
+                    <tr>
+                        <th scope="col">Display Value</th>
+                        <th scope="col">Actual Value</th>
+                        <th scope="col">Description</th>
+                        <th scope="col">Status</th>
+                        <th scope="col">Timestamps</th>
+                        <th scope="col" class="areas__actions-column">Actions</th>
+                    </tr>
+                    </thead>
+                    <tbody id="areasTableBody">
+                    <tr>
+                        <td colspan="6" class="text-center text-muted py-4">Loading…</td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+</div>
+
+<div class="modal fade" id="missionTypeModal" tabindex="-1" aria-labelledby="missionTypeModalTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="missionTypeModalTitle">Mission Type</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="missionTypeForm" novalidate>
+                    <input type="hidden" id="missionTypeId" name="Id" />
+                    <div class="mb-3">
+                        <label for="missionTypeDisplayName" class="form-label">Display Value</label>
+                        <input type="text"
+                               class="form-control"
+                               id="missionTypeDisplayName"
+                               name="DisplayName"
+                               maxlength="128"
+                               required
+                               placeholder="e.g. Rack Move" />
+                        <div class="form-text">Visible name shown to operators.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="missionTypeActualValue" class="form-label">Actual Value</label>
+                        <input type="text"
+                               class="form-control"
+                               id="missionTypeActualValue"
+                               name="ActualValue"
+                               maxlength="128"
+                               required
+                               placeholder="e.g. RACK_MOVE" />
+                        <div class="form-text">
+                            Value sent to the backend. Spaces are converted to underscores and uppercased automatically.
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="missionTypeDescription" class="form-label">Description <span class="text-muted">(optional)</span></label>
+                        <textarea class="form-control"
+                                  id="missionTypeDescription"
+                                  name="Description"
+                                  rows="3"
+                                  maxlength="512"
+                                  placeholder="Clarify when to use this mission type."></textarea>
+                    </div>
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input"
+                               type="checkbox"
+                               id="missionTypeIsActive"
+                               name="IsActive"
+                               checked />
+                        <label class="form-check-label" for="missionTypeIsActive">Mission type is active</label>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-primary" form="missionTypeForm" id="missionTypeSubmit">
+                    <span class="spinner-border spinner-border-sm me-2 d-none" id="missionTypeSubmittingSpinner" role="status" aria-hidden="true"></span>
+                    <span id="missionTypeSubmitLabel">Create</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="robotTypeModal" tabindex="-1" aria-labelledby="robotTypeModalTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="robotTypeModalTitle">Robot Type</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="robotTypeForm" novalidate>
+                    <input type="hidden" id="robotTypeId" name="Id" />
+                    <div class="mb-3">
+                        <label for="robotTypeDisplayName" class="form-label">Display Value</label>
+                        <input type="text"
+                               class="form-control"
+                               id="robotTypeDisplayName"
+                               name="DisplayName"
+                               maxlength="128"
+                               required
+                               placeholder="e.g. Lift Robot" />
+                        <div class="form-text">Human friendly label shown in dropdowns.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="robotTypeActualValue" class="form-label">Actual Value</label>
+                        <input type="text"
+                               class="form-control"
+                               id="robotTypeActualValue"
+                               name="ActualValue"
+                               maxlength="128"
+                               required
+                               placeholder="e.g. LIFT" />
+                        <div class="form-text">
+                            Value sent to AMR backend. Spaces convert to underscores and become uppercase automatically.
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="robotTypeDescription" class="form-label">Description <span class="text-muted">(optional)</span></label>
+                        <textarea class="form-control"
+                                  id="robotTypeDescription"
+                                  name="Description"
+                                  rows="3"
+                                  maxlength="512"
+                                  placeholder="Add usage notes for this robot type."></textarea>
+                    </div>
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input"
+                               type="checkbox"
+                               id="robotTypeIsActive"
+                               name="IsActive"
+                               checked />
+                        <label class="form-check-label" for="robotTypeIsActive">Robot type is active</label>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-primary" form="robotTypeForm" id="robotTypeSubmit">
+                    <span class="spinner-border spinner-border-sm me-2 d-none" id="robotTypeSubmittingSpinner" role="status" aria-hidden="true"></span>
+                    <span id="robotTypeSubmitLabel">Create</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="shelfDecisionModal" tabindex="-1" aria-labelledby="shelfDecisionModalTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="shelfDecisionModalTitle">Shelf Decision Rule</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="shelfDecisionForm" novalidate>
+                    <input type="hidden" id="shelfDecisionId" name="Id" />
+                    <div class="mb-3">
+                        <label for="shelfDecisionDisplayName" class="form-label">Display Value</label>
+                        <input type="text"
+                               class="form-control"
+                               id="shelfDecisionDisplayName"
+                               name="DisplayName"
+                               maxlength="128"
+                               required
+                               placeholder="e.g. Lower shelf at node" />
+                        <div class="form-text">Operator-friendly label explaining the lowering behavior.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="shelfDecisionActualValue" class="form-label">Actual Value</label>
+                        <input type="text"
+                               class="form-control"
+                               id="shelfDecisionActualValue"
+                               name="ActualValue"
+                               maxlength="128"
+                               required
+                               placeholder="e.g. LOWER_SHELF" />
+                        <div class="form-text">
+                            Value sent to backend logic. Spaces convert to underscores and become uppercase automatically.
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="shelfDecisionDescription" class="form-label">Description <span class="text-muted">(optional)</span></label>
+                        <textarea class="form-control"
+                                  id="shelfDecisionDescription"
+                                  name="Description"
+                                  rows="3"
+                                  maxlength="512"
+                                  placeholder="Document when to use this shelf decision rule."></textarea>
+                    </div>
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input"
+                               type="checkbox"
+                               id="shelfDecisionIsActive"
+                               name="IsActive"
+                               checked />
+                        <label class="form-check-label" for="shelfDecisionIsActive">Shelf decision rule is active</label>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-primary" form="shelfDecisionForm" id="shelfDecisionSubmit">
+                    <span class="spinner-border spinner-border-sm me-2 d-none" id="shelfDecisionSubmittingSpinner" role="status" aria-hidden="true"></span>
+                    <span id="shelfDecisionSubmitLabel">Create</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="resumeStrategyModal" tabindex="-1" aria-labelledby="resumeStrategyModalTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="resumeStrategyModalTitle">Resume Strategy</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="resumeStrategyForm" novalidate>
+                    <input type="hidden" id="resumeStrategyId" name="Id" />
+                    <div class="mb-3">
+                        <label for="resumeStrategyDisplayName" class="form-label">Display Value</label>
+                        <input type="text"
+                               class="form-control"
+                               id="resumeStrategyDisplayName"
+                               name="DisplayName"
+                               maxlength="128"
+                               required
+                               placeholder="e.g. Automatically resume" />
+                        <div class="form-text">Operator label describing the resume behavior.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="resumeStrategyActualValue" class="form-label">Actual Value</label>
+                        <input type="text"
+                               class="form-control"
+                               id="resumeStrategyActualValue"
+                               name="ActualValue"
+                               maxlength="128"
+                               required
+                               placeholder="e.g. AUTO" />
+                        <div class="form-text">
+                            Value sent to AMR logic (AUTO/MANUAL). Spaces convert to underscores and become uppercase.
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="resumeStrategyDescription" class="form-label">Description <span class="text-muted">(optional)</span></label>
+                        <textarea class="form-control"
+                                  id="resumeStrategyDescription"
+                                  name="Description"
+                                  rows="3"
+                                  maxlength="512"
+                                  placeholder="Document when to apply this strategy."></textarea>
+                    </div>
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input"
+                               type="checkbox"
+                               id="resumeStrategyIsActive"
+                               name="IsActive"
+                               checked />
+                        <label class="form-check-label" for="resumeStrategyIsActive">Resume strategy is active</label>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-primary" form="resumeStrategyForm" id="resumeStrategySubmit">
+                    <span class="spinner-border spinner-border-sm me-2 d-none" id="resumeStrategySubmittingSpinner" role="status" aria-hidden="true"></span>
+                    <span id="resumeStrategySubmitLabel">Create</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="areaModal" tabindex="-1" aria-labelledby="areaModalTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="areaModalTitle">Area</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="areaForm" novalidate>
+                    <input type="hidden" id="areaId" name="Id" />
+                    <div class="mb-3">
+                        <label for="areaDisplayName" class="form-label">Display Value</label>
+                        <input type="text"
+                               class="form-control"
+                               id="areaDisplayName"
+                               name="DisplayName"
+                               maxlength="128"
+                               required
+                               placeholder="e.g. Warehouse East" />
+                        <div class="form-text">Friendly name referenced in the UI.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="areaActualValue" class="form-label">Actual Value</label>
+                        <input type="text"
+                               class="form-control"
+                               id="areaActualValue"
+                               name="ActualValue"
+                               maxlength="128"
+                               required
+                               placeholder="e.g. WAREHOUSE_EAST" />
+                        <div class="form-text">
+                            Value used in backend payloads. Spaces convert to underscores and become uppercase automatically.
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="areaDescription" class="form-label">Description <span class="text-muted">(optional)</span></label>
+                        <textarea class="form-control"
+                                  id="areaDescription"
+                                  name="Description"
+                                  rows="3"
+                                  maxlength="512"
+                                  placeholder="Describe the geographic boundaries or usage."></textarea>
+                    </div>
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input"
+                               type="checkbox"
+                               id="areaIsActive"
+                               name="IsActive"
+                               checked />
+                        <label class="form-check-label" for="areaIsActive">Area is active</label>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-primary" form="areaForm" id="areaSubmit">
+                    <span class="spinner-border spinner-border-sm me-2 d-none" id="areaSubmittingSpinner" role="status" aria-hidden="true"></span>
+                    <span id="areaSubmitLabel">Create</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="~/js/mission-configuration.js" asp-append-version="true"></script>
+}

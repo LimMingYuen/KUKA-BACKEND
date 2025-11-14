@@ -1,0 +1,2209 @@
+@page
+@model QES_KUKA_AMR_WEB.Pages.CustomMissionModel
+@{
+    ViewData["Title"] = "Manage Custom Missions";
+    Layout = "_DashboardLayout";
+}
+
+@section Styles {
+    <style>
+        .custom-mission {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+
+        .custom-mission__header {
+            margin-bottom: 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .custom-mission__title {
+            font-size: 28px;
+            font-weight: 600;
+            color: #1a202c;
+            margin: 0;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: none;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-secondary {
+            background: #e2e8f0;
+            color: #2d3748;
+        }
+
+        .btn-secondary:hover {
+            background: #cbd5e0;
+        }
+
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+
+        .btn-success {
+            background-color: #10b981;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background-color: #059669;
+        }
+
+        .btn-warning {
+            background-color: #f59e0b;
+            color: white;
+        }
+
+        .btn-warning:hover {
+            background-color: #d97706;
+        }
+
+        .btn-danger {
+            background-color: #ef4444;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background-color: #dc2626;
+        }
+
+        .btn-info {
+            background-color: #3b82f6;
+            color: white;
+        }
+
+        .btn-info:hover {
+            background-color: #2563eb;
+        }
+
+        .alert {
+            padding: 12px 16px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+
+        .alert-success {
+            background: #c6f6d5;
+            color: #22543d;
+            border: 1px solid #9ae6b4;
+        }
+
+        .alert-error {
+            background: #fed7d7;
+            color: #742a2a;
+            border: 1px solid #fc8181;
+        }
+
+        /* Table Styles */
+        .missions-table-container {
+            background: white;
+            border-radius: 8px;
+            padding: 24px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .missions-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 16px;
+        }
+
+        .missions-table thead {
+            background: #f7fafc;
+        }
+
+        .missions-table th {
+            padding: 12px;
+            text-align: left;
+            font-size: 13px;
+            font-weight: 600;
+            color: #4a5568;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        .missions-table td {
+            padding: 12px;
+            border-bottom: 1px solid #e2e8f0;
+            font-size: 14px;
+        }
+
+        .missions-table tbody tr:hover {
+            background: #f7fafc;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .badge-primary {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .badge-secondary {
+            background: #e5e7eb;
+            color: #374151;
+        }
+
+        .badge-info {
+            background: #e0e7ff;
+            color: #3730a3;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 4rem 2rem;
+        }
+
+        .empty-state__icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+            opacity: 0.3;
+        }
+
+        .empty-state__title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #1a1a1a;
+            margin-bottom: 0.5rem;
+        }
+
+        .empty-state__description {
+            color: #6b7280;
+            margin-bottom: 1.5rem;
+        }
+
+        /* Modal Styles */
+        .modal-header {
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .modal-footer {
+            border-top: 1px solid #e2e8f0;
+        }
+
+        .form-section {
+            margin-bottom: 24px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .form-section:last-of-type {
+            border-bottom: none;
+        }
+
+        .form-section__title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #2d3748;
+            margin: 0 0 12px 0;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 16px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .form-label {
+            font-size: 14px;
+            font-weight: 500;
+            color: #4a5568;
+            margin-bottom: 6px;
+        }
+
+        .form-input,
+        .form-select,
+        .form-textarea {
+            padding: 8px 12px;
+            border: 1px solid #cbd5e0;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .form-input:focus,
+        .form-select:focus,
+        .form-textarea:focus {
+            outline: none;
+            border-color: #4299e1;
+            box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1);
+        }
+
+        .form-hint {
+            font-size: 12px;
+            color: #718096;
+            margin-top: 4px;
+        }
+
+        /* Robot IDs Wrapper - looks like a select input */
+        .robot-ids-wrapper {
+            position: relative;
+            display: flex;
+            flex-direction: row;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 8px;
+            border: 1px solid #cbd5e0;
+            border-radius: 6px;
+            background-color: white;
+            min-height: 38px;
+            width: 100%;
+        }
+
+        .robot-ids-wrapper:focus-within {
+            border-color: #4299e1;
+            box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1);
+        }
+
+        /* Robot Chips Container */
+        .robot-chips-container {
+            display: inline-flex;
+            flex-direction: row;
+            flex-wrap: wrap;
+            gap: 6px;
+            align-items: center;
+        }
+
+        /* Simple Robot Chip */
+        .robot-chip {
+            display: inline-flex;
+            flex-direction: row;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 8px;
+            background-color: #e2e8f0;
+            color: #2d3748;
+            border-radius: 4px;
+            font-size: 13px;
+            white-space: nowrap;
+            pointer-events: auto;
+        }
+
+        .robot-chip-remove {
+            background: none;
+            border: none;
+            color: #718096;
+            cursor: pointer;
+            padding: 0;
+            font-size: 16px;
+            line-height: 1;
+            width: 16px;
+            height: 16px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: auto;
+        }
+
+        .robot-chip-remove:hover {
+            color: #e53e3e;
+        }
+
+        /* Placeholder text */
+        .robot-ids-placeholder {
+            position: relative;
+            z-index: 0;
+            color: #a0aec0;
+            font-size: 13px;
+            pointer-events: none;
+        }
+
+        .robot-ids-placeholder.hidden {
+            display: none;
+        }
+
+        /* Inline select dropdown */
+        .form-select-inline {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border: none;
+            background: transparent;
+            outline: none;
+            font-size: 13px;
+            color: transparent;
+            padding: 6px 24px 6px 8px;
+            cursor: pointer;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23718096' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 8px center;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+        }
+
+        .form-select-inline option {
+            color: #2d3748;
+            background-color: white;
+        }
+
+        .form-select-inline:focus {
+            outline: none;
+        }
+
+        /* Mission Steps Table in Modal */
+        .mission-steps__table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 16px;
+        }
+
+        .mission-steps__table th {
+            background: #f7fafc;
+            padding: 8px;
+            text-align: left;
+            font-size: 12px;
+            font-weight: 600;
+            color: #4a5568;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        .mission-steps__table td {
+            padding: 8px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .mission-steps__input,
+        .mission-steps__select {
+            width: 100%;
+            padding: 6px 8px;
+            border: 1px solid #cbd5e0;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 8px;
+        }
+
+        /* Flowchart Visualization Styles */
+        .flowchart-container {
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            overflow-x: auto;
+        }
+
+        .flowchart {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0;
+            min-width: 100%;
+        }
+
+        .flowchart-horizontal {
+            flex-direction: row;
+            flex-wrap: wrap;
+            justify-content: flex-start;
+            align-items: center;
+            gap: 0;
+        }
+
+        .flowchart-horizontal .flow-node {
+            min-width: 120px;
+            max-width: 150px;
+        }
+
+        .flowchart-horizontal .flow-connector {
+            padding: 0 4px;
+        }
+
+        .flowchart-horizontal .flow-arrow-horizontal {
+            width: 20px;
+        }
+
+        .flow-node {
+            background: white;
+            border: 2px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 10px;
+            min-width: 140px;
+            max-width: 180px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .flow-node:hover {
+            box-shadow: 0 3px 8px rgba(0, 0, 0, 0.12);
+            transform: translateY(-1px);
+        }
+
+        .flow-node-start {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            font-weight: 600;
+            text-align: center;
+            padding: 8px 16px;
+            min-width: 80px;
+            font-size: 13px;
+        }
+
+        .flow-node-end {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+            font-weight: 600;
+            text-align: center;
+            padding: 8px 16px;
+            min-width: 80px;
+            font-size: 13px;
+        }
+
+        .flow-node-header {
+            text-align: center;
+            margin-bottom: 8px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .flow-node-sequence {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 12px;
+            margin-bottom: 4px;
+        }
+
+        .flow-node-body {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .flow-node-location {
+            background: #f7fafc;
+            padding: 6px 8px;
+            border-radius: 3px;
+            border-left: 2px solid #667eea;
+            text-align: center;
+        }
+
+        .flow-node-location-value {
+            font-size: 12px;
+            color: #2d3748;
+            font-weight: 500;
+            word-break: break-word;
+        }
+
+        .flow-node-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            margin-top: 4px;
+        }
+
+        .flow-action-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 11px;
+            color: #4a5568;
+        }
+
+        .flow-action-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .dot-pickup {
+            background: #10b981;
+        }
+
+        .dot-dropoff {
+            background: #3b82f6;
+        }
+
+        .dot-wait {
+            background: #f59e0b;
+        }
+
+        .dot-pass {
+            background: #9ca3af;
+        }
+
+        .flow-connector {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 8px 0;
+        }
+
+        .flow-arrow {
+            width: 2px;
+            height: 30px;
+            background: linear-gradient(180deg, #cbd5e0 0%, #667eea 50%, #cbd5e0 100%);
+            position: relative;
+        }
+
+        .flow-arrow::after {
+            content: '';
+            position: absolute;
+            bottom: -5px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 5px solid transparent;
+            border-right: 5px solid transparent;
+            border-top: 6px solid #667eea;
+        }
+
+        .flow-arrow-horizontal {
+            width: 30px;
+            height: 2px;
+            background: linear-gradient(90deg, #cbd5e0 0%, #667eea 50%, #cbd5e0 100%);
+        }
+
+        .flow-arrow-horizontal::after {
+            right: -5px;
+            left: auto;
+            top: 50%;
+            transform: translateY(-50%);
+            border-left: 6px solid #667eea;
+            border-right: none;
+            border-top: 5px solid transparent;
+            border-bottom: 5px solid transparent;
+        }
+
+        .flow-toggle-btn {
+            margin-bottom: 16px;
+            padding: 8px 16px;
+            background: white;
+            border: 1px solid #cbd5e0;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+
+        .flow-toggle-btn:hover {
+            background: #f7fafc;
+            border-color: #667eea;
+        }
+
+        /* Preview Panel Below Form */
+        .preview-panel {
+            width: 100%;
+            margin-top: 20px;
+            padding-top: 16px;
+            border-top: 2px solid #e2e8f0;
+        }
+
+        .preview-panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 14px;
+            background: #f7fafc;
+            border-radius: 6px;
+            margin-bottom: 12px;
+        }
+
+        .preview-panel-title-text {
+            font-size: 14px;
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        .btn-toggle-preview {
+            background: white;
+            border: 1px solid #cbd5e0;
+            border-radius: 4px;
+            padding: 4px 10px;
+            font-size: 11px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            transition: all 0.2s;
+            color: #4a5568;
+            font-weight: 500;
+        }
+
+        .btn-toggle-preview:hover {
+            background: #e2e8f0;
+            border-color: #a0aec0;
+        }
+
+        .preview-content {
+            background: white;
+            border-radius: 6px;
+            padding: 16px;
+            border: 1px solid #e2e8f0;
+            max-height: 350px;
+            overflow-x: auto;
+            overflow-y: auto;
+            transition: max-height 0.3s ease, opacity 0.3s ease;
+        }
+
+        .preview-content.collapsed {
+            max-height: 0;
+            padding: 0;
+            border: none;
+            opacity: 0;
+            overflow: hidden;
+        }
+
+        .preview-empty {
+            text-align: center;
+            padding: 40px 20px;
+            color: #9ca3af;
+            font-size: 13px;
+        }
+
+        /* Snake/Zigzag Layout */
+        .flowchart-snake {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            width: 100%;
+        }
+
+        .flow-row {
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            gap: 0;
+        }
+
+        .flow-row.reverse {
+            flex-direction: row-reverse;
+            justify-content: flex-end;
+        }
+
+        .flow-row-connector {
+            display: flex;
+            align-items: center;
+            padding: 4px 0;
+            width: 100%;
+        }
+
+        .flow-row-connector.align-right {
+            justify-content: flex-end;
+            padding-right: 70px;
+        }
+
+        .flow-row-connector.align-left {
+            justify-content: flex-start;
+            padding-left: 70px;
+        }
+
+        .flow-arrow-down {
+            width: 2px;
+            height: 24px;
+            background: #667eea;
+            position: relative;
+        }
+
+        .flow-arrow-down::after {
+            content: '';
+            position: absolute;
+            bottom: -5px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 5px solid transparent;
+            border-right: 5px solid transparent;
+            border-top: 6px solid #667eea;
+        }
+
+        .btn-layout-toggle {
+            background: white;
+            border: 1px solid #cbd5e0;
+            border-radius: 4px;
+            padding: 4px 10px;
+            font-size: 11px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            transition: all 0.2s;
+            color: #4a5568;
+            font-weight: 500;
+        }
+
+        .btn-layout-toggle:hover {
+            background: #e2e8f0;
+            border-color: #a0aec0;
+        }
+
+        .btn-fullscreen {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 4px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 11px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            transition: all 0.2s;
+            min-width: 140px; /* Ensure consistent width */
+        }
+
+        .btn-fullscreen:hover {
+            background: #764ba2;
+        }
+
+        .flow-toggle-btn {
+            min-width: 140px; /* Match fullscreen button width */
+            justify-content: center;
+        }
+
+        .preview-controls {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        /* Mermaid.js Flowchart Styling */
+        .mermaid-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            background: white;
+            border-radius: 6px;
+            width: 100%;
+        }
+
+        .mermaid-container svg {
+            max-width: 100%;
+            height: auto;
+        }
+
+        /* Fullscreen specific styling */
+        #fullscreenFlowchartContent .mermaid-container {
+            min-height: calc(100vh - 160px);
+            width: 100%;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+        }
+
+        /* Default (vertical) layout - constrain width to prevent oversized nodes */
+        #fullscreenFlowchartContent .mermaid-container svg {
+            max-width: 600px;
+            width: 100%;
+            height: auto;
+        }
+
+        /* Horizontal layout - allow full width for better spacing */
+        #fullscreenFlowchartContent .mermaid-container.fullscreen-horizontal {
+            align-items: center;
+        }
+
+        #fullscreenFlowchartContent .mermaid-container.fullscreen-horizontal svg {
+            max-width: 95%;
+            min-width: 800px;
+            width: auto;
+        }
+
+        /* Override Mermaid default styles */
+        .mermaid-container .node rect,
+        .mermaid-container .node circle,
+        .mermaid-container .node ellipse,
+        .mermaid-container .node polygon {
+            stroke-width: 2px !important;
+        }
+
+        .mermaid-container .edgePath .path {
+            stroke-width: 2px !important;
+        }
+
+        .mermaid-container .marker {
+            fill: #667eea !important;
+        }
+
+        @@media (max-width: 992px) {
+            .flowchart-horizontal {
+                flex-direction: column;
+            }
+
+            .preview-content {
+                max-height: 250px;
+            }
+
+            .flow-row,
+            .flow-row.reverse {
+                flex-direction: column;
+                align-items: center;
+            }
+        }
+    </style>
+}
+
+<div class="custom-mission">
+    <div class="custom-mission__header">
+        <h2 class="custom-mission__title">Manage Custom Missions</h2>
+        <button type="button" class="btn btn-primary" onclick="openCreateModal()">
+            ➕ Create Mission
+        </button>
+    </div>
+
+    @if (!string.IsNullOrEmpty(Model.SuccessMessage))
+    {
+        <div class="alert alert-success">@Model.SuccessMessage</div>
+    }
+
+    @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+    {
+        <div class="alert alert-error">@Model.ErrorMessage</div>
+    }
+
+    @if (Model.SavedMissions.Any())
+    {
+        <div class="missions-table-container">
+            <table class="missions-table">
+                <thead>
+                    <tr>
+                        <th>Mission Name</th>
+                        <th>Description</th>
+                        <th>Type</th>
+                        <th>Robot Type</th>
+                        <th>Priority</th>
+                        <th>Steps</th>
+                        <th>Created By</th>
+                        <th>Created Date</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var mission in Model.SavedMissions)
+                    {
+                        var stepsJson = System.Text.Json.JsonSerializer.Deserialize<List<System.Text.Json.JsonElement>>(mission.MissionStepsJson);
+                        var miniFlow = "";
+                        if (stepsJson != null && stepsJson.Any())
+                        {
+                            var firstStep = stepsJson.First().GetProperty("position").GetString();
+                            var lastStep = stepsJson.Last().GetProperty("position").GetString();
+                            if (stepsJson.Count == 1)
+                            {
+                                miniFlow = $"🤖 → {firstStep} → 🎯";
+                            }
+                            else
+                            {
+                                miniFlow = $"🤖 → {firstStep} → ... → {lastStep} → 🎯";
+                            }
+                        }
+
+                        <tr>
+                            <td><strong>@mission.MissionName</strong></td>
+                            <td>@(mission.Description ?? "-")</td>
+                            <td><span class="badge badge-primary">@mission.MissionType</span></td>
+                            <td><span class="badge badge-secondary">@mission.RobotType</span></td>
+                            <td>@mission.Priority</td>
+                            <td>
+                                <span class="badge badge-info">@mission.StepCount steps</span>
+                                @if (!string.IsNullOrEmpty(miniFlow))
+                                {
+                                    <br />
+                                    <small style="color: #718096; font-size: 11px;">@miniFlow</small>
+                                }
+                            </td>
+                            <td>@mission.CreatedBy</td>
+                            <td>@mission.CreatedUtc.ToString("yyyy-MM-dd HH:mm")</td>
+                            <td>
+                                <div class="action-buttons">
+                                    <button type="button" class="btn btn-info btn-sm" onclick="viewMission(@mission.Id)" title="View Flow">
+                                        🗺️ View
+                                    </button>
+                                    <a href="/CustomMission?handler=Edit&id=@mission.Id" class="btn btn-warning btn-sm" title="Edit">
+                                        ✏ Edit
+                                    </a>
+                                    <form method="post" asp-page-handler="Delete" asp-route-id="@mission.Id" style="display: inline;">
+                                        <button type="submit" class="btn btn-danger btn-sm"
+                                                onclick="return confirm('Delete mission \'@mission.MissionName\'? This cannot be undone.')"
+                                                title="Delete">
+                                            🗑 Delete
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+    else
+    {
+        <div class="missions-table-container">
+            <div class="empty-state">
+                <div class="empty-state__icon">📋</div>
+                <h3 class="empty-state__title">No Missions Yet</h3>
+                <p class="empty-state__description">
+                    Create your first custom mission to get started.
+                </p>
+                <button type="button" class="btn btn-primary" onclick="openCreateModal()">
+                    Create Your First Mission
+                </button>
+            </div>
+        </div>
+    }
+</div>
+
+<!-- Create/Edit Mission Modal -->
+<div class="modal fade" id="missionModal" tabindex="-1" aria-labelledby="missionModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <form method="post" id="missionForm">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="missionModalLabel">Create Custom Mission</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
+                    <input type="hidden" id="EditingMissionId" name="EditingMissionId" value="@Model.EditingMissionId" />
+
+                    <!-- Mission Basics -->
+                    <div class="form-section">
+                        <h3 class="form-section__title">Mission Basics</h3>
+                        <div class="form-grid">
+                            <div class="form-group" style="grid-column: 1 / -1;">
+                                <label class="form-label" for="MissionName">Mission Name *</label>
+                                <input type="text" id="MissionName" name="MissionName" class="form-input"
+                                       value="@Model.MissionName" placeholder="e.g., Warehouse Pickup Route A" required />
+                            </div>
+                            <div class="form-group" style="grid-column: 1 / -1;">
+                                <label class="form-label" for="Description">Description (Optional)</label>
+                                <textarea id="Description" name="Description" class="form-input" rows="2"
+                                          placeholder="Brief description of what this mission does">@Model.Description</textarea>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="MissionType">Mission Type *</label>
+                                <select id="MissionType" name="MissionType" class="form-select" required>
+                                    <option value="">Select Mission Type</option>
+                                    @foreach (var mt in Model.MissionTypes)
+                                    {
+                                        <option value="@mt.ActualValue" selected="@(mt.ActualValue == Model.MissionType)">@mt.DisplayName</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="Priority">Priority *</label>
+                                <input type="number" id="Priority" name="Priority" class="form-input"
+                                       value="@Model.Priority" min="0" max="10" required />
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Robot Configuration -->
+                    <div class="form-section">
+                        <h3 class="form-section__title">Robot Configuration</h3>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label class="form-label" for="RobotModels">Robot Model (Type Code)</label>
+                                <select id="RobotModels" name="RobotModels" class="form-select">
+                                    <option value="">Select Robot Model</option>
+                                </select>
+                                <small class="form-hint">Select a robot type code to filter available robots</small>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="RobotIdsSelect">Robot IDs</label>
+
+                                <!-- Container that looks like a select input with chips inside -->
+                                <div class="robot-ids-wrapper">
+                                    <!-- Placeholder text -->
+                                    <span id="robotIdsPlaceholder" class="robot-ids-placeholder">Select a robot to add...</span>
+
+                                    <!-- Dropdown overlay (invisible but clickable, full width) -->
+                                    <select id="RobotIdsSelect" class="form-select-inline">
+                                        <option value="">Select a robot to add...</option>
+                                    </select>
+
+                                    <!-- Selected Robots Chips Display (positioned above dropdown) -->
+                                    <div id="selectedRobotsChips" class="robot-chips-container" style="position: relative; z-index: 1; pointer-events: none;"></div>
+                                </div>
+
+                                <input type="hidden" id="RobotIds" name="RobotIds" value="@Model.RobotIds" />
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="RobotType">Robot Type *</label>
+                                <select id="RobotType" name="RobotType" class="form-select" required>
+                                    <option value="">Select Robot Type</option>
+                                    @foreach (var rt in Model.RobotTypes)
+                                    {
+                                        <option value="@rt.ActualValue" selected="@(rt.ActualValue == Model.RobotType)">@rt.DisplayName</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Container Details -->
+                    <div class="form-section">
+                        <h3 class="form-section__title">Container Details</h3>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label class="form-label" for="ContainerModelCode">Container Model Code</label>
+                                <input type="text" id="ContainerModelCode" name="ContainerModelCode" class="form-input"
+                                       value="@Model.ContainerModelCode" placeholder="e.g., 10001" />
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="ContainerCode">Container Code</label>
+                                <input type="text" id="ContainerCode" name="ContainerCode" class="form-input"
+                                       value="@Model.ContainerCode" placeholder="e.g., 1000002" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Advanced Options -->
+                    <div class="form-section">
+                        <h3 class="form-section__title">Advanced Options</h3>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label class="form-label" for="IdleNode">Idle Node (QR Code)</label>
+                                <input type="text" id="IdleNode" name="IdleNode" class="form-input"
+                                       value="@Model.IdleNode" placeholder="e.g., A000000013" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Mission Steps -->
+                    <div class="form-section">
+                        <h3 class="form-section__title">Mission Steps *</h3>
+                        <div class="mission-steps">
+                            <table class="mission-steps__table" id="missionStepsTable">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 60px;">Seq</th>
+                                        <th style="width: 140px;">Location Type</th>
+                                        <th style="width: 180px;">Location</th>
+                                        <th style="width: 100px;">Put Down</th>
+                                        <th style="width: 130px;">Pass Strategy</th>
+                                        <th style="width: 100px;">Wait (ms)</th>
+                                        <th style="width: 80px;">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="missionStepsBody">
+                                    <!-- Steps will be populated by JavaScript -->
+                                </tbody>
+                            </table>
+                            <button type="button" class="btn btn-secondary btn-sm" onclick="addMissionStep(); updatePreview();">
+                                + Add Step
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Live Preview Panel (Below Steps) -->
+                    <div class="preview-panel" id="previewPanel">
+                        <div class="preview-panel-header">
+                            <span class="preview-panel-title-text">🗺️ Live Flow Preview</span>
+                            <div class="preview-controls">
+                                <button type="button" class="btn-fullscreen" onclick="openFullscreenFlowchart()" title="View in fullscreen">
+                                    🔍 Fullscreen
+                                </button>
+                                <button type="button" class="btn-layout-toggle" onclick="toggleFlowLayout()" title="Switch between vertical and horizontal layout">
+                                    <span id="layoutToggleIcon">⬍</span>
+                                    <span id="layoutToggleText">Horizontal</span>
+                                </button>
+                                <button type="button" class="btn-toggle-preview" onclick="togglePreview()" title="Toggle preview visibility">
+                                    <span id="togglePreviewText">Hide</span>
+                                    <span id="togglePreviewIcon">▲</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div id="liveFlowPreview" class="preview-content">
+                            <div class="preview-empty">
+                                Add mission steps to see the flow visualization
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Mission</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- View Mission Modal -->
+<div class="modal fade" id="viewMissionModal" tabindex="-1" aria-labelledby="viewMissionModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="viewMissionModalLabel">Mission Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Mission Basic Info -->
+                <div id="viewMissionInfo" class="mb-4">
+                    <!-- Info will be populated by JavaScript -->
+                </div>
+
+                <!-- Mission Flow Visualization -->
+                <div class="flowchart-container">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h6 class="mb-0">🗺️ Mission Flow Path</h6>
+                        <div class="d-flex gap-2">
+                            <button type="button" class="btn-fullscreen" onclick="openFullscreenFromViewModal()" title="View in fullscreen">
+                                🔍 Fullscreen
+                            </button>
+                            <button type="button" class="flow-toggle-btn" onclick="toggleFlowDirection()">
+                                <span id="flowDirectionText">Switch to Horizontal View</span>
+                            </button>
+                        </div>
+                    </div>
+                    <div id="viewMissionFlowchart">
+                        <!-- Flowchart will be populated by JavaScript -->
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Fullscreen Flowchart Modal -->
+<div class="modal fade" id="fullscreenFlowchartModal" tabindex="-1" aria-labelledby="fullscreenFlowchartLabel" aria-hidden="true">
+    <div class="modal-dialog modal-fullscreen">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="fullscreenFlowchartLabel">Mission Flowchart - Fullscreen View</h5>
+                <div class="d-flex gap-2 align-items-center">
+                    <button type="button" class="btn-layout-toggle" onclick="toggleFullscreenLayout()" title="Switch layout">
+                        <span id="fullscreenLayoutIcon">⬍</span>
+                        <span id="fullscreenLayoutText">Horizontal</span>
+                    </button>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+            </div>
+            <div class="modal-body" style="overflow: auto; height: calc(100vh - 120px); background: #f8f9fa;">
+                <div id="fullscreenFlowchartContent" style="min-height: 100%; display: flex; align-items: center; justify-content: center;">
+                    <div class="preview-empty">Loading flowchart...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <!-- Mermaid.js for flowchart visualization -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+
+    <script>
+        let stepSequence = 1;
+
+        // Configuration data from server
+        const areas = @Html.Raw(Json.Serialize(Model.Areas));
+        const mapZones = @Html.Raw(Json.Serialize(Model.MapZones));
+        const shelfDecisionRules = @Html.Raw(Json.Serialize(Model.ShelfDecisionRules));
+        const resumeStrategies = @Html.Raw(Json.Serialize(Model.ResumeStrategies));
+        const qrCodes = @Html.Raw(Json.Serialize(Model.QrCodes));
+        const existingSteps = @Html.Raw(Json.Serialize(Model.Steps));
+
+        window.addEventListener('DOMContentLoaded', function() {
+            // If editing, open modal and populate steps
+            const editingId = document.getElementById('EditingMissionId').value;
+            if (editingId && editingId !== '') {
+                openEditModal();
+                populateExistingSteps();
+            }
+        });
+
+        function openCreateModal() {
+            document.getElementById('missionModalLabel').textContent = 'Create Custom Mission';
+            document.getElementById('missionForm').reset();
+            document.getElementById('EditingMissionId').value = '';
+            document.getElementById('missionStepsBody').innerHTML = '';
+            stepSequence = 1;
+            addMissionStep();
+
+            const modal = new bootstrap.Modal(document.getElementById('missionModal'));
+            modal.show();
+        }
+
+        function openEditModal() {
+            document.getElementById('missionModalLabel').textContent = 'Edit Custom Mission';
+            const modal = new bootstrap.Modal(document.getElementById('missionModal'));
+            modal.show();
+        }
+
+        function populateExistingSteps() {
+            document.getElementById('missionStepsBody').innerHTML = '';
+            stepSequence = 1;
+
+            if (existingSteps && existingSteps.length > 0) {
+                existingSteps.forEach(step => {
+                    addMissionStep(step);
+                });
+            } else {
+                addMissionStep();
+            }
+            updatePreview();
+        }
+
+        function addMissionStep(stepData = null) {
+            const tbody = document.getElementById('missionStepsBody');
+            const row = document.createElement('tr');
+            const index = stepSequence - 1;
+
+            // Build Shelf Decision options (Put Down)
+            let shelfDecisionOptions = '';
+            shelfDecisionRules.forEach(sd => {
+                const boolValue = sd.actualValue.toLowerCase() === 'true' || sd.actualValue === '1';
+                const selected = stepData && stepData.putDown === boolValue ? 'selected' : '';
+                shelfDecisionOptions += `<option value="${boolValue}" ${selected}>${sd.displayName}</option>`;
+            });
+
+            // Build Resume Strategy options
+            let resumeStrategyOptions = '';
+            resumeStrategies.forEach(rs => {
+                const selected = stepData && stepData.passStrategy === rs.actualValue ? 'selected' : '';
+                resumeStrategyOptions += `<option value="${rs.actualValue}" ${selected}>${rs.displayName}</option>`;
+            });
+
+            const sequenceValue = stepData ? stepData.sequence : stepSequence;
+            const typeValue = stepData ? stepData.type : '';
+            const positionValue = stepData ? stepData.position : '';
+            const waitingValue = stepData ? stepData.waitingMillis : 0;
+
+            row.innerHTML = `
+                <td>
+                    <input type="number" class="mission-steps__input" name="Steps[${index}].Sequence"
+                           value="${sequenceValue}" readonly required />
+                </td>
+                <td>
+                    <select class="mission-steps__select location-type-select"
+                            name="Steps[${index}].Type"
+                            data-step-index="${index}"
+                            onchange="handleLocationTypeChange(this)" required>
+                        <option value="">Select Type</option>
+                        <option value="NODE_AREA" ${typeValue === 'NODE_AREA' ? 'selected' : ''}>Area</option>
+                        <option value="NODE_POINT" ${typeValue === 'NODE_POINT' ? 'selected' : ''}>Node</option>
+                    </select>
+                </td>
+                <td>
+                    <select class="mission-steps__select location-select"
+                            name="Steps[${index}].Position"
+                            data-step-index="${index}" required>
+                        <option value="">Select Type First</option>
+                    </select>
+                </td>
+                <td>
+                    <select class="mission-steps__select" name="Steps[${index}].PutDown" required>
+                        ${shelfDecisionOptions}
+                    </select>
+                </td>
+                <td>
+                    <select class="mission-steps__select" name="Steps[${index}].PassStrategy" required>
+                        ${resumeStrategyOptions}
+                    </select>
+                </td>
+                <td>
+                    <input type="number" class="mission-steps__input" name="Steps[${index}].WaitingMillis"
+                           value="${waitingValue}" min="0" required />
+                </td>
+                <td>
+                    <button type="button" class="btn btn-danger btn-sm" onclick="removeStep(this)">✕</button>
+                </td>
+            `;
+            tbody.appendChild(row);
+
+            // If stepData exists, populate the location dropdown
+            if (stepData && typeValue) {
+                const locationSelect = row.querySelector('.location-select');
+                populateLocationOptions(locationSelect, typeValue, positionValue);
+            }
+
+            stepSequence++;
+        }
+
+        function handleLocationTypeChange(selectElement) {
+            const row = selectElement.closest('tr');
+            const locationSelect = row.querySelector('.location-select');
+            const locationType = selectElement.value;
+
+            populateLocationOptions(locationSelect, locationType, '');
+            updatePreview();
+        }
+
+        function populateLocationOptions(locationSelect, locationType, selectedValue) {
+            locationSelect.innerHTML = '<option value="">Select Location</option>';
+
+            if (locationType === 'NODE_AREA') {
+                mapZones.forEach(zone => {
+                    const option = document.createElement('option');
+                    option.value = zone.zoneCode;
+                    option.textContent = zone.zoneName;
+                    if (selectedValue === zone.zoneCode) {
+                        option.selected = true;
+                    }
+                    locationSelect.appendChild(option);
+                });
+            } else if (locationType === 'NODE_POINT') {
+                qrCodes.forEach(qr => {
+                    const option = document.createElement('option');
+                    option.value = qr.displayLabel;
+                    option.textContent = qr.displayLabel;
+                    if (selectedValue === qr.displayLabel) {
+                        option.selected = true;
+                    }
+                    locationSelect.appendChild(option);
+                });
+            }
+        }
+
+        function removeStep(button) {
+            const row = button.closest('tr');
+            row.remove();
+            renumberSteps();
+            updatePreview();
+        }
+
+        function renumberSteps() {
+            const rows = document.querySelectorAll('#missionStepsBody tr');
+            rows.forEach((row, index) => {
+                const sequenceInput = row.querySelector('input[name*=".Sequence"]');
+                if (sequenceInput) {
+                    sequenceInput.value = index + 1;
+                    row.querySelectorAll('input, select').forEach(element => {
+                        const name = element.getAttribute('name');
+                        if (name) {
+                            element.setAttribute('name', name.replace(/Steps\[\d+\]/, `Steps[${index}]`));
+                        }
+                        if (element.dataset.stepIndex !== undefined) {
+                            element.dataset.stepIndex = index;
+                        }
+                    });
+                }
+            });
+            stepSequence = rows.length + 1;
+        }
+
+        async function viewMission(id) {
+            try {
+                // Use the page handler to fetch mission details from the API
+                const response = await fetch(`/CustomMission?handler=GetMission&id=${id}`);
+
+                if (response.ok) {
+                    const result = await response.json();
+                    const mission = result;
+
+                    // Display basic mission info
+                    const infoHtml = `
+                        <div class="row">
+                            <div class="col-md-6">
+                                <p><strong>Mission Name:</strong> ${mission.missionName}</p>
+                                <p><strong>Description:</strong> ${mission.description || 'N/A'}</p>
+                                <p><strong>Mission Type:</strong> <span class="badge badge-primary">${mission.missionType}</span></p>
+                                <p><strong>Robot Type:</strong> <span class="badge badge-secondary">${mission.robotType}</span></p>
+                                <p><strong>Priority:</strong> ${mission.priority}</p>
+                            </div>
+                            <div class="col-md-6">
+                                <p><strong>Robot Models:</strong> ${mission.robotModels || 'Any'}</p>
+                                <p><strong>Robot IDs:</strong> ${mission.robotIds || 'Any'}</p>
+                                <p><strong>Container Model:</strong> ${mission.containerModelCode || 'N/A'}</p>
+                                <p><strong>Container Code:</strong> ${mission.containerCode || 'N/A'}</p>
+                                <p><strong>Idle Node:</strong> ${mission.idleNode || 'N/A'}</p>
+                            </div>
+                        </div>
+                        <div class="mt-2">
+                            <small class="text-muted"><strong>Created By:</strong> ${mission.createdBy} on ${new Date(mission.createdUtc).toLocaleString()}</small>
+                        </div>
+                    `;
+
+                    document.getElementById('viewMissionInfo').innerHTML = infoHtml;
+
+                    // Store mission for fullscreen view
+                    currentViewedMission = mission;
+
+                    // Render flowchart using Mermaid
+                    if (mission.missionStepsJson) {
+                        const steps = JSON.parse(mission.missionStepsJson);
+                        renderFlowchartMermaid(steps, viewModalLayout).then(flowchartHtml => {
+                            document.getElementById('viewMissionFlowchart').innerHTML = flowchartHtml;
+                        }).catch(error => {
+                            console.error('Error rendering flowchart:', error);
+                            document.getElementById('viewMissionFlowchart').innerHTML =
+                                '<div class="preview-empty">Error rendering flowchart</div>';
+                        });
+                    }
+
+                    const modal = new bootstrap.Modal(document.getElementById('viewMissionModal'));
+                    modal.show();
+                }
+            } catch (error) {
+                console.error('Error loading mission:', error);
+                alert('Failed to load mission details');
+            }
+        }
+
+        // Initialize Mermaid.js
+        mermaid.initialize({
+            startOnLoad: false,
+            theme: 'default',
+            themeVariables: {
+                primaryColor: '#667eea',
+                primaryTextColor: '#fff',
+                primaryBorderColor: '#764ba2',
+                lineColor: '#667eea',
+                secondaryColor: '#e2e8f0',
+                tertiaryColor: '#f7fafc'
+            },
+            flowchart: {
+                useMaxWidth: true, // Use max width to prevent oversized nodes
+                htmlLabels: true,
+                curve: 'basis',
+                padding: 20,
+                nodeSpacing: 50, // Reasonable space between nodes
+                rankSpacing: 80 // Reasonable space between ranks
+            }
+        });
+
+        // Create a map of zone codes to names for display purposes
+        const zoneCodeToNameMap = {};
+        if (mapZones && Array.isArray(mapZones)) {
+            mapZones.forEach(zone => {
+                zoneCodeToNameMap[zone.zoneCode] = zone.zoneName;
+            });
+        }
+
+        // Helper function to get display name for position (zone code -> zone name, or just return the value for node points)
+        function getDisplayPosition(position) {
+            if (position && zoneCodeToNameMap[position]) {
+                return zoneCodeToNameMap[position];
+            }
+            return position;
+        }
+
+        // Flowchart rendering functions
+        let isHorizontalFlow = false;
+        let currentLayout = 'TD'; // 'TD' (top-down) or 'LR' (left-right) for Mermaid
+        let viewModalLayout = 'TD'; // Separate layout state for view modal
+        let currentViewedMission = null; // Store currently viewed mission for fullscreen
+        let fullscreenLayout = 'TD'; // Layout for fullscreen modal
+        let fullscreenSteps = []; // Steps for fullscreen modal
+
+        // Render flowchart using Mermaid.js
+        async function renderFlowchartMermaid(steps, direction = 'TD') {
+            if (!steps || steps.length === 0) {
+                return '<div class="preview-empty">No mission steps defined</div>';
+            }
+
+            // Generate unique ID for this diagram
+            const diagramId = 'mermaid-' + Date.now();
+
+            // Build Mermaid syntax
+            let mermaidCode = `graph ${direction}\n`;
+
+            // START node
+            mermaidCode += '    START([🚀 START])\n';
+            mermaidCode += '    style START fill:#667eea,stroke:#764ba2,stroke-width:3px,color:#fff\n';
+
+            // Add each step
+            steps.forEach((step, index) => {
+                const stepId = `S${step.sequence}`;
+                const prevId = index === 0 ? 'START' : `S${steps[index - 1].sequence}`;
+
+                // Determine action icon and text
+                const actionIcon = step.putDown ? '🔽' : '🔼';
+                const actionText = step.putDown ? 'Drop' : 'Pick';
+
+                // Build label with line breaks
+                let label = `"<b>${step.sequence}</b>: ${getDisplayPosition(step.position)}`;
+                label += `<br/>${actionIcon} ${actionText}`;
+
+                if (step.waitingMillis > 0) {
+                    const waitText = step.waitingMillis >= 1000
+                        ? `${(step.waitingMillis / 1000).toFixed(1)}s`
+                        : `${step.waitingMillis}ms`;
+                    label += `<br/>⏱️ ${waitText}`;
+                }
+
+                label += `"`;
+
+                // Add step node
+                mermaidCode += `    ${stepId}[${label}]\n`;
+
+                // Add connection from previous
+                mermaidCode += `    ${prevId} --> ${stepId}\n`;
+
+                // Style based on action
+                if (step.putDown) {
+                    mermaidCode += `    style ${stepId} fill:#dbeafe,stroke:#3b82f6,stroke-width:2px\n`;
+                } else {
+                    mermaidCode += `    style ${stepId} fill:#d1fae5,stroke:#10b981,stroke-width:2px\n`;
+                }
+            });
+
+            // END node
+            const lastStepId = `S${steps[steps.length - 1].sequence}`;
+            mermaidCode += '    END([🎯 END])\n';
+            mermaidCode += `    ${lastStepId} --> END\n`;
+            mermaidCode += '    style END fill:#10b981,stroke:#059669,stroke-width:3px,color:#fff\n';
+
+            // Create container and render
+            try {
+                const { svg } = await mermaid.render(diagramId, mermaidCode);
+                return `<div class="mermaid-container">${svg}</div>`;
+            } catch (error) {
+                console.error('Mermaid rendering error:', error);
+                return `<div class="preview-empty">Error rendering flowchart: ${error.message}</div>`;
+            }
+        }
+
+        function renderFlowchart(steps, isHorizontal = false) {
+            if (!steps || steps.length === 0) {
+                return '<div class="preview-empty">No mission steps defined</div>';
+            }
+
+            const flowClass = isHorizontal ? 'flowchart flowchart-horizontal' : 'flowchart';
+            const arrowClass = isHorizontal ? 'flow-arrow flow-arrow-horizontal' : 'flow-arrow';
+
+            let html = `<div class="${flowClass}">`;
+
+            // Start node
+            html += `
+                <div class="flow-node flow-node-start">
+                    START
+                </div>
+                <div class="flow-connector">
+                    <div class="${arrowClass}"></div>
+                </div>
+            `;
+
+            // Step nodes
+            steps.forEach((step, index) => {
+                html += generateStepCard(step, index);
+
+                // Add connector arrow if not last step
+                if (index < steps.length - 1) {
+                    html += `
+                        <div class="flow-connector">
+                            <div class="${arrowClass}"></div>
+                        </div>
+                    `;
+                }
+            });
+
+            // End node
+            html += `
+                <div class="flow-connector">
+                    <div class="${arrowClass}"></div>
+                </div>
+                <div class="flow-node flow-node-end">
+                    END
+                </div>
+            `;
+
+            html += '</div>';
+            return html;
+        }
+
+        function generateStepCard(step, index) {
+            // Determine actions with colored dots
+            let actions = [];
+
+            // Pick up or drop off
+            if (step.putDown) {
+                actions.push('<div class="flow-action-item"><span class="flow-action-dot dot-dropoff"></span>Drop</div>');
+            } else {
+                actions.push('<div class="flow-action-item"><span class="flow-action-dot dot-pickup"></span>Pick</div>');
+            }
+
+            // Wait time (convert to seconds if >= 1000ms)
+            if (step.waitingMillis > 0) {
+                let waitText = step.waitingMillis >= 1000
+                    ? `${(step.waitingMillis / 1000).toFixed(1)}s`
+                    : `${step.waitingMillis}ms`;
+                actions.push(`<div class="flow-action-item"><span class="flow-action-dot dot-wait"></span>${waitText}</div>`);
+            }
+
+            // Pass strategy (only show if not AUTO)
+            if (step.passStrategy && step.passStrategy !== 'AUTO') {
+                actions.push(`<div class="flow-action-item"><span class="flow-action-dot dot-pass"></span>${step.passStrategy}</div>`);
+            }
+
+            const actionsHtml = actions.join('');
+
+            return `
+                <div class="flow-node">
+                    <div class="flow-node-header">
+                        <div class="flow-node-sequence">${step.sequence}</div>
+                    </div>
+                    <div class="flow-node-body">
+                        <div class="flow-node-location">
+                            <div class="flow-node-location-value">${getDisplayPosition(step.position)}</div>
+                        </div>
+                        <div class="flow-node-actions">
+                            ${actionsHtml}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function toggleFlowDirection() {
+            // Toggle between TD and LR for view modal
+            viewModalLayout = viewModalLayout === 'TD' ? 'LR' : 'TD';
+
+            // Update button text
+            const buttonText = viewModalLayout === 'TD'
+                ? 'Switch to Horizontal View'
+                : 'Switch to Vertical View';
+            document.getElementById('flowDirectionText').textContent = buttonText;
+
+            // Re-render flowchart with new layout
+            if (currentViewedMission && currentViewedMission.missionStepsJson) {
+                const steps = JSON.parse(currentViewedMission.missionStepsJson);
+                renderFlowchartMermaid(steps, viewModalLayout).then(flowchartHtml => {
+                    document.getElementById('viewMissionFlowchart').innerHTML = flowchartHtml;
+                }).catch(error => {
+                    console.error('Error rendering flowchart:', error);
+                });
+            }
+        }
+
+        // Live Preview Update Function
+        function updatePreview() {
+            const previewContainer = document.getElementById('liveFlowPreview');
+            if (!previewContainer) return;
+
+            const rows = document.querySelectorAll('#missionStepsBody tr');
+
+            if (rows.length === 0) {
+                previewContainer.innerHTML = '<div class="preview-empty">Add mission steps to see the flow visualization</div>';
+                return;
+            }
+
+            // Extract step data from the form
+            const steps = [];
+            let hasIncompleteData = false;
+
+            rows.forEach((row, index) => {
+                const sequenceInput = row.querySelector('input[name*=".Sequence"]');
+                const typeSelect = row.querySelector('select[name*=".Type"]');
+                const positionSelect = row.querySelector('select[name*=".Position"]');
+                const putDownSelect = row.querySelector('select[name*=".PutDown"]');
+                const passStrategySelect = row.querySelector('select[name*=".PassStrategy"]');
+                const waitingInput = row.querySelector('input[name*=".WaitingMillis"]');
+
+                const type = typeSelect ? typeSelect.value : '';
+                const position = positionSelect ? positionSelect.value : '';
+
+                if (!type || !position) {
+                    hasIncompleteData = true;
+                    // Still add a placeholder for incomplete steps
+                    steps.push({
+                        sequence: index + 1,
+                        type: type || 'Unknown',
+                        position: position || 'Incomplete',
+                        putDown: putDownSelect ? (putDownSelect.value === 'true') : false,
+                        passStrategy: passStrategySelect ? passStrategySelect.value : 'AUTO',
+                        waitingMillis: waitingInput ? parseInt(waitingInput.value) || 0 : 0
+                    });
+                } else {
+                    steps.push({
+                        sequence: index + 1,
+                        type: type,
+                        position: position,
+                        putDown: putDownSelect ? (putDownSelect.value === 'true') : false,
+                        passStrategy: passStrategySelect ? passStrategySelect.value : 'AUTO',
+                        waitingMillis: waitingInput ? parseInt(waitingInput.value) || 0 : 0
+                    });
+                }
+            });
+
+            // Render the flowchart using Mermaid (async)
+            renderFlowchartMermaid(steps, currentLayout).then(flowchartHtml => {
+                previewContainer.innerHTML = flowchartHtml;
+            }).catch(error => {
+                console.error('Error rendering flowchart:', error);
+                previewContainer.innerHTML = '<div class="preview-empty">Error rendering flowchart</div>';
+            });
+
+            // Show a notice if there's incomplete data
+            if (hasIncompleteData) {
+                const notice = '<div style="background: #fef3c7; color: #92400e; padding: 8px 12px; border-radius: 4px; font-size: 12px; margin-top: 12px;">⚠️ Some steps have incomplete data</div>';
+                previewContainer.innerHTML += notice;
+            }
+        }
+
+        // Add event listeners to update preview when form fields change
+        document.addEventListener('change', function(e) {
+            if (e.target.closest('#missionStepsBody')) {
+                // Debounce the update to avoid too frequent re-renders
+                clearTimeout(window.previewUpdateTimeout);
+                window.previewUpdateTimeout = setTimeout(updatePreview, 300);
+            }
+        });
+
+        // Also update on blur for input fields
+        document.addEventListener('blur', function(e) {
+            if (e.target.closest('#missionStepsBody') && e.target.tagName === 'INPUT') {
+                clearTimeout(window.previewUpdateTimeout);
+                window.previewUpdateTimeout = setTimeout(updatePreview, 300);
+            }
+        }, true);
+
+        // Toggle Preview Panel
+        let isPreviewExpanded = true;
+
+        function togglePreview() {
+            isPreviewExpanded = !isPreviewExpanded;
+
+            const previewContent = document.getElementById('liveFlowPreview');
+            const toggleText = document.getElementById('togglePreviewText');
+            const toggleIcon = document.getElementById('togglePreviewIcon');
+
+            if (isPreviewExpanded) {
+                previewContent.classList.remove('collapsed');
+                toggleText.textContent = 'Hide';
+                toggleIcon.textContent = '▲';
+            } else {
+                previewContent.classList.add('collapsed');
+                toggleText.textContent = 'Show';
+                toggleIcon.textContent = '▼';
+            }
+
+            // Save preference
+            sessionStorage.setItem('previewExpanded', isPreviewExpanded);
+        }
+
+        // Toggle layout between TD (top-down) and LR (left-right)
+        function toggleFlowLayout() {
+            currentLayout = currentLayout === 'TD' ? 'LR' : 'TD';
+
+            const layoutText = document.getElementById('layoutToggleText');
+            const layoutIcon = document.getElementById('layoutToggleIcon');
+
+            if (currentLayout === 'TD') {
+                layoutText.textContent = 'Horizontal';
+                layoutIcon.textContent = '⬍'; // Vertical/top-down icon
+            } else {
+                layoutText.textContent = 'Vertical';
+                layoutIcon.textContent = '⬌'; // Horizontal/left-right icon
+            }
+
+            // Save preference
+            sessionStorage.setItem('flowLayout', currentLayout);
+
+            // Re-render preview
+            updatePreview();
+        }
+
+        // Fullscreen Flowchart Functions
+        function openFullscreenFlowchart() {
+            // Get current steps from the edit form
+            const rows = document.querySelectorAll('#missionStepsBody tr');
+            const steps = [];
+
+            rows.forEach((row, index) => {
+                const typeSelect = row.querySelector('select[name*=".Type"]');
+                const positionSelect = row.querySelector('select[name*=".Position"]');
+                const putDownSelect = row.querySelector('select[name*=".PutDown"]');
+                const passStrategySelect = row.querySelector('select[name*=".PassStrategy"]');
+                const waitingInput = row.querySelector('input[name*=".WaitingMillis"]');
+
+                if (typeSelect?.value && positionSelect?.value) {
+                    steps.push({
+                        sequence: index + 1,
+                        type: typeSelect.value,
+                        position: positionSelect.value,
+                        putDown: putDownSelect?.value === 'true',
+                        passStrategy: passStrategySelect?.value || 'AUTO',
+                        waitingMillis: parseInt(waitingInput?.value) || 0
+                    });
+                }
+            });
+
+            if (steps.length === 0) {
+                alert('Please add mission steps first');
+                return;
+            }
+
+            fullscreenSteps = steps;
+            renderFullscreenFlowchart();
+
+            const modal = new bootstrap.Modal(document.getElementById('fullscreenFlowchartModal'));
+            modal.show();
+        }
+
+        function openFullscreenFromViewModal() {
+            // Get steps from the currently viewed mission
+            if (currentViewedMission && currentViewedMission.missionStepsJson) {
+                const steps = JSON.parse(currentViewedMission.missionStepsJson);
+                fullscreenSteps = steps;
+                renderFullscreenFlowchart();
+
+                const modal = new bootstrap.Modal(document.getElementById('fullscreenFlowchartModal'));
+                modal.show();
+            }
+        }
+
+        async function renderFullscreenFlowchart() {
+            const container = document.getElementById('fullscreenFlowchartContent');
+            container.innerHTML = '<div class="preview-empty">Rendering flowchart...</div>';
+
+            try {
+                // Use a special render function for fullscreen to get larger output
+                const flowchartHtml = await renderFlowchartMermaidFullscreen(fullscreenSteps, fullscreenLayout);
+                container.innerHTML = flowchartHtml;
+            } catch (error) {
+                console.error('Error rendering fullscreen flowchart:', error);
+                container.innerHTML = '<div class="preview-empty">Error rendering flowchart</div>';
+            }
+        }
+
+        // Special fullscreen rendering with optimized sizing
+        async function renderFlowchartMermaidFullscreen(steps, direction = 'TD') {
+            if (!steps || steps.length === 0) {
+                return '<div class="preview-empty">No mission steps defined</div>';
+            }
+
+            // Generate unique ID for this diagram
+            const diagramId = 'mermaid-fullscreen-' + Date.now();
+
+            // Build Mermaid syntax (same as regular render)
+            let mermaidCode = `graph ${direction}\n`;
+
+            // START node
+            mermaidCode += '    START([🚀 START])\n';
+            mermaidCode += '    style START fill:#667eea,stroke:#764ba2,stroke-width:3px,color:#fff\n';
+
+            // Add each step
+            steps.forEach((step, index) => {
+                const stepId = `S${step.sequence}`;
+                const prevId = index === 0 ? 'START' : `S${steps[index - 1].sequence}`;
+
+                const actionIcon = step.putDown ? '🔽' : '🔼';
+                const actionText = step.putDown ? 'Drop' : 'Pick';
+
+                let label = `"<b>${step.sequence}</b>: ${getDisplayPosition(step.position)}`;
+                label += `<br/>${actionIcon} ${actionText}`;
+
+                if (step.waitingMillis > 0) {
+                    const waitText = step.waitingMillis >= 1000
+                        ? `${(step.waitingMillis / 1000).toFixed(1)}s`
+                        : `${step.waitingMillis}ms`;
+                    label += `<br/>⏱️ ${waitText}`;
+                }
+
+                label += `"`;
+
+                mermaidCode += `    ${stepId}[${label}]\n`;
+                mermaidCode += `    ${prevId} --> ${stepId}\n`;
+
+                if (step.putDown) {
+                    mermaidCode += `    style ${stepId} fill:#dbeafe,stroke:#3b82f6,stroke-width:2px\n`;
+                } else {
+                    mermaidCode += `    style ${stepId} fill:#d1fae5,stroke:#10b981,stroke-width:2px\n`;
+                }
+            });
+
+            // END node
+            const lastStepId = `S${steps[steps.length - 1].sequence}`;
+            mermaidCode += '    END([🎯 END])\n';
+            mermaidCode += `    ${lastStepId} --> END\n`;
+            mermaidCode += '    style END fill:#10b981,stroke:#059669,stroke-width:3px,color:#fff\n';
+
+            // Create container and render with fullscreen config
+            try {
+                const { svg } = await mermaid.render(diagramId, mermaidCode);
+                // Add class based on direction for CSS targeting
+                const containerClass = direction === 'LR' ? 'mermaid-container fullscreen-horizontal' : 'mermaid-container';
+                return `<div class="${containerClass}">${svg}</div>`;
+            } catch (error) {
+                console.error('Mermaid rendering error:', error);
+                return `<div class="preview-empty">Error rendering flowchart: ${error.message}</div>`;
+            }
+        }
+
+        function toggleFullscreenLayout() {
+            fullscreenLayout = fullscreenLayout === 'TD' ? 'LR' : 'TD';
+
+            const layoutText = document.getElementById('fullscreenLayoutText');
+            const layoutIcon = document.getElementById('fullscreenLayoutIcon');
+
+            if (fullscreenLayout === 'TD') {
+                layoutText.textContent = 'Horizontal';
+                layoutIcon.textContent = '⬍';
+            } else {
+                layoutText.textContent = 'Vertical';
+                layoutIcon.textContent = '⬌';
+            }
+
+            renderFullscreenFlowchart();
+        }
+
+        // Restore preview state and layout on page load
+        window.addEventListener('DOMContentLoaded', function() {
+            // Restore preview expand/collapse state
+            const savedState = sessionStorage.getItem('previewExpanded');
+            if (savedState === 'false') {
+                togglePreview();
+            }
+
+            // Restore layout preference
+            const savedLayout = sessionStorage.getItem('flowLayout');
+            if (savedLayout && (savedLayout === 'TD' || savedLayout === 'LR')) {
+                currentLayout = savedLayout;
+                const layoutText = document.getElementById('layoutToggleText');
+                const layoutIcon = document.getElementById('layoutToggleIcon');
+
+                if (currentLayout === 'TD') {
+                    layoutText.textContent = 'Horizontal';
+                    layoutIcon.textContent = '⬍';
+                } else {
+                    layoutText.textContent = 'Vertical';
+                    layoutIcon.textContent = '⬌';
+                }
+            }
+
+            // Initialize robot dropdowns
+            initializeRobotDropdowns();
+        });
+
+        // Robot Dropdown Functions
+        let selectedRobots = []; // Array to store selected robot objects
+        let availableRobots = []; // Store all available robots for current type
+
+        async function initializeRobotDropdowns() {
+            const robotModelsSelect = document.getElementById('RobotModels');
+            const robotIdsSelect = document.getElementById('RobotIdsSelect');
+
+            if (!robotModelsSelect || !robotIdsSelect) {
+                console.warn('Robot dropdown elements not found');
+                return;
+            }
+
+            // Load robot type codes
+            await loadRobotTypeCodes();
+
+            // Set up event listener for Robot Model change
+            robotModelsSelect.addEventListener('change', async function() {
+                const selectedTypeCode = this.value;
+                if (selectedTypeCode) {
+                    await loadRobotIdsByType(selectedTypeCode);
+                } else {
+                    // Clear Robot IDs dropdown if no model selected
+                    robotIdsSelect.innerHTML = '<option value="">Select Robot Model first</option>';
+                    availableRobots = [];
+                }
+            });
+
+            // Set up event listener for Robot IDs selection
+            robotIdsSelect.addEventListener('change', function() {
+                const selectedValue = this.value;
+                if (selectedValue) {
+                    addRobotChip(selectedValue);
+                    this.value = ''; // Reset dropdown after selection
+                }
+            });
+
+            // Restore previously selected values if in edit mode
+            const savedRobotModel = '@Model.RobotModels';
+            if (savedRobotModel) {
+                robotModelsSelect.value = savedRobotModel;
+                if (savedRobotModel) {
+                    await loadRobotIdsByType(savedRobotModel);
+                    // Restore selected robot IDs as chips
+                    const savedRobotIds = '@Model.RobotIds';
+                    if (savedRobotIds) {
+                        const robotIdArray = savedRobotIds.split(',').map(id => id.trim()).filter(id => id);
+                        // Wait a bit for robots to load
+                        setTimeout(() => {
+                            robotIdArray.forEach(robotId => {
+                                addRobotChip(robotId);
+                            });
+                        }, 500);
+                    }
+                }
+            }
+        }
+
+        async function loadRobotTypeCodes() {
+            const robotModelsSelect = document.getElementById('RobotModels');
+
+            try {
+                const response = await fetch('/CustomMission?handler=RobotTypes');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const robotTypes = await response.json();
+
+                // Clear existing options except the first one
+                robotModelsSelect.innerHTML = '<option value="">Select Robot Model</option>';
+
+                // Add robot type options
+                robotTypes.forEach(typeCode => {
+                    const option = document.createElement('option');
+                    option.value = typeCode;
+                    option.textContent = typeCode;
+                    robotModelsSelect.appendChild(option);
+                });
+
+                console.log(`Loaded ${robotTypes.length} robot type codes`);
+            } catch (error) {
+                console.error('Error loading robot type codes:', error);
+                robotModelsSelect.innerHTML = '<option value="">Error loading robot types</option>';
+            }
+        }
+
+        async function loadRobotIdsByType(typeCode) {
+            const robotIdsSelect = document.getElementById('RobotIdsSelect');
+
+            try {
+                const response = await fetch(`/CustomMission?handler=RobotsByType&typeCode=${encodeURIComponent(typeCode)}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const robots = await response.json();
+                availableRobots = robots; // Store for chip creation
+
+                // Clear existing options
+                robotIdsSelect.innerHTML = '<option value="">Select a robot to add...</option>';
+
+                if (robots.length === 0) {
+                    robotIdsSelect.innerHTML = '<option value="" disabled>No robots found for this type</option>';
+                } else {
+                    // Add robot ID options
+                    robots.forEach(robot => {
+                        const option = document.createElement('option');
+                        option.value = robot.robotId;
+                        option.textContent = `${robot.robotId} (Battery: ${robot.batteryLevel}%, Status: ${robot.status})`;
+                        robotIdsSelect.appendChild(option);
+                    });
+
+                    console.log(`Loaded ${robots.length} robots for type ${typeCode}`);
+                }
+            } catch (error) {
+                console.error('Error loading robots by type:', error);
+                robotIdsSelect.innerHTML = '<option value="" disabled>Error loading robots</option>';
+            }
+        }
+
+        function addRobotChip(robotId) {
+            // Check if robot is already added
+            if (selectedRobots.find(r => r.robotId === robotId)) {
+                console.log('Robot already selected:', robotId);
+                return;
+            }
+
+            // Find robot details from available robots
+            const robot = availableRobots.find(r => r.robotId === robotId);
+            if (!robot) {
+                console.error('Robot not found:', robotId);
+                return;
+            }
+
+            // Add to selected robots array
+            selectedRobots.push(robot);
+
+            // Render chips
+            renderRobotChips();
+
+            // Update hidden field
+            updateRobotIdsHiddenField();
+        }
+
+        function removeRobotChip(robotId) {
+            // Remove from selected robots array
+            selectedRobots = selectedRobots.filter(r => r.robotId !== robotId);
+
+            // Render chips
+            renderRobotChips();
+
+            // Update hidden field
+            updateRobotIdsHiddenField();
+        }
+
+        function renderRobotChips() {
+            const container = document.getElementById('selectedRobotsChips');
+            const placeholder = document.getElementById('robotIdsPlaceholder');
+            if (!container) return;
+
+            // Clear container
+            container.innerHTML = '';
+
+            // Show/hide placeholder based on whether there are chips
+            if (selectedRobots.length === 0) {
+                if (placeholder) placeholder.classList.remove('hidden');
+            } else {
+                if (placeholder) placeholder.classList.add('hidden');
+            }
+
+            // Create simple chip for each selected robot
+            selectedRobots.forEach(robot => {
+                const chip = document.createElement('div');
+                chip.className = 'robot-chip';
+
+                chip.innerHTML = `
+                    <span>${robot.robotId}</span>
+                    <button type="button" class="robot-chip-remove" onclick="removeRobotChip('${robot.robotId}')" title="Remove">
+                        ×
+                    </button>
+                `;
+
+                container.appendChild(chip);
+            });
+        }
+
+        function updateRobotIdsHiddenField() {
+            const hiddenField = document.getElementById('RobotIds');
+
+            // Update hidden field with comma-separated robot IDs
+            hiddenField.value = selectedRobots.map(r => r.robotId).join(',');
+
+            console.log('Selected Robot IDs:', hiddenField.value);
+        }
+    </script>
+}
