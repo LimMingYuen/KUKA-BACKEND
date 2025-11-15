@@ -155,6 +155,86 @@ public class WorkflowNodeCodeService : IWorkflowNodeCodeService
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<WorkflowZoneClassification?> ClassifyWorkflowByZoneAsync(
+        int externalWorkflowId,
+        CancellationToken cancellationToken = default)
+    {
+        using var scope = _serviceScopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        // Get workflow node codes in order (already sorted from external API)
+        var workflowNodeCodes = await dbContext.WorkflowNodeCodes
+            .Where(wnc => wnc.ExternalWorkflowId == externalWorkflowId)
+            .OrderBy(wnc => wnc.Id) // Preserve insertion order (which matches API order)
+            .Select(wnc => wnc.NodeCode)
+            .ToListAsync(cancellationToken);
+
+        if (workflowNodeCodes.Count == 0)
+        {
+            _logger.LogWarning("No node codes found for workflow {ExternalWorkflowId}", externalWorkflowId);
+            return null;
+        }
+
+        // Create a HashSet for efficient lookup
+        var workflowNodeSet = workflowNodeCodes.ToHashSet();
+
+        // Get all map zones (assuming active zones only)
+        var mapZones = await dbContext.MapZones
+            .Where(mz => mz.Status == 1) // Assuming 1 = active
+            .OrderBy(mz => mz.Id) // Process zones in order
+            .ToListAsync(cancellationToken);
+
+        _logger.LogInformation("Classifying workflow {ExternalWorkflowId} with {NodeCount} node codes against {ZoneCount} zones",
+            externalWorkflowId, workflowNodeCodes.Count, mapZones.Count);
+
+        // Find the first zone where ALL zone nodes exist in workflow node codes
+        foreach (var zone in mapZones)
+        {
+            if (string.IsNullOrWhiteSpace(zone.Nodes))
+            {
+                continue;
+            }
+
+            // Parse zone nodes (assuming JSON array format like ["Sim1-1-1", "Sim1-1-2"])
+            List<string> zoneNodes;
+            try
+            {
+                zoneNodes = System.Text.Json.JsonSerializer.Deserialize<List<string>>(zone.Nodes) ?? new List<string>();
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                // If not JSON, try comma-separated
+                zoneNodes = zone.Nodes.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+            }
+
+            if (zoneNodes.Count == 0)
+            {
+                continue;
+            }
+
+            // Check if ALL zone nodes exist in workflow node codes
+            var allNodesMatch = zoneNodes.All(zoneNode => workflowNodeSet.Contains(zoneNode));
+
+            if (allNodesMatch)
+            {
+                _logger.LogInformation("Workflow {ExternalWorkflowId} classified to zone '{ZoneName}' ({ZoneCode}) with {MatchCount} matching nodes",
+                    externalWorkflowId, zone.ZoneName, zone.ZoneCode, zoneNodes.Count);
+
+                return new WorkflowZoneClassification
+                {
+                    ZoneName = zone.ZoneName,
+                    ZoneCode = zone.ZoneCode,
+                    MapCode = zone.MapCode,
+                    MatchedNodesCount = zoneNodes.Count,
+                    MatchedNodes = zoneNodes
+                };
+            }
+        }
+
+        _logger.LogInformation("Workflow {ExternalWorkflowId} could not be classified to any zone", externalWorkflowId);
+        return null;
+    }
+
     private async Task<SyncInternalResult> SyncWorkflowNodeCodesInternalAsync(
         int externalWorkflowId,
         ApplicationDbContext dbContext,

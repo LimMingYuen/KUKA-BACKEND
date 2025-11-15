@@ -117,4 +117,45 @@ public class WorkflowNodeCodesController : ControllerBase
             });
         }
     }
+
+    /// <summary>
+    /// Classifies a workflow into a zone based on node code matching.
+    /// Compares the workflow's node codes against MapZone.Nodes to find the first zone
+    /// where ALL zone nodes exist in the workflow's node codes.
+    /// </summary>
+    /// <param name="externalWorkflowId">The external workflow ID</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Zone classification result, or 404 if no matching zone found</returns>
+    [HttpGet("{externalWorkflowId}/zone")]
+    public async Task<ActionResult<WorkflowZoneClassification>> ClassifyByZoneAsync(
+        int externalWorkflowId,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var classification = await _workflowNodeCodeService.ClassifyWorkflowByZoneAsync(
+                externalWorkflowId,
+                cancellationToken);
+
+            if (classification == null)
+            {
+                return NotFound(new
+                {
+                    Error = $"No matching zone found for workflow {externalWorkflowId}",
+                    Message = "The workflow's node codes do not match any zone's nodes"
+                });
+            }
+
+            return Ok(classification);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error classifying workflow {ExternalWorkflowId} by zone", externalWorkflowId);
+            return StatusCode(StatusCodes.Status500InternalServerError, new
+            {
+                Error = $"Failed to classify workflow {externalWorkflowId}",
+                Message = ex.Message
+            });
+        }
+    }
 }
