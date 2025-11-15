@@ -13,22 +13,22 @@ public interface ISavedCustomMissionService
     Task<SavedCustomMission> CreateAsync(SavedCustomMission mission, string createdBy, CancellationToken cancellationToken = default);
     Task<SavedCustomMission?> UpdateAsync(int id, SavedCustomMission mission, CancellationToken cancellationToken = default);
     Task<bool> DeleteAsync(int id, CancellationToken cancellationToken = default);
-    Task<TriggerResult> TriggerAsync(int id, string triggeredBy, MissionTriggerSource triggerSource = MissionTriggerSource.Manual, CancellationToken cancellationToken = default);
+    Task<TriggerResult> TriggerAsync(int id, string triggeredBy, CancellationToken cancellationToken = default);
 }
 
 public class SavedCustomMissionService : ISavedCustomMissionService
 {
     private readonly ApplicationDbContext _dbContext;
-    private readonly IQueueService _queueService;
+
     private readonly ILogger<SavedCustomMissionService> _logger;
 
     public SavedCustomMissionService(
         ApplicationDbContext dbContext,
-        IQueueService queueService,
+
         ILogger<SavedCustomMissionService> logger)
     {
         _dbContext = dbContext;
-        _queueService = queueService;
+
         _logger = logger;
     }
 
@@ -162,7 +162,6 @@ public class SavedCustomMissionService : ISavedCustomMissionService
     public async Task<TriggerResult> TriggerAsync(
         int id,
         string triggeredBy,
-        MissionTriggerSource triggerSource = MissionTriggerSource.Manual,
         CancellationToken cancellationToken = default)
     {
         var savedMission = await GetByIdAsync(id, cancellationToken);
@@ -216,61 +215,19 @@ public class SavedCustomMissionService : ISavedCustomMissionService
                 .ToList();
         }
 
-        // Build enqueue request
-        var enqueueRequest = new EnqueueRequest
-        {
-            // Use SavedMission.Id as WorkflowId to prevent concurrent triggers of same saved mission
-            WorkflowId = id,
-            WorkflowCode = null,
-            WorkflowName = savedMission.MissionName,
-            TemplateCode = null,
-
-            // Mission source tracking
-            SavedMissionId = id,
-            TriggerSource = triggerSource,
-
-            // Common fields with fresh IDs
-            MissionCode = missionCode,
-            RequestId = requestId,
-            Priority = savedMission.Priority,
-            CreatedBy = triggeredBy,
-
-            // Custom mission fields from saved mission
-            MissionType = savedMission.MissionType,
-            RobotType = savedMission.RobotType,
-            RobotModels = robotModels,
-            RobotIds = robotIds,
-            ContainerModelCode = savedMission.ContainerModelCode,
-            ContainerCode = savedMission.ContainerCode,
-            ViewBoardType = null, // Always null
-            IdleNode = savedMission.IdleNode,
-            LockRobotAfterFinish = false, // Always false
-            UnlockRobotId = null,
-            UnlockMissionCode = null,
-            MissionData = missionData
-        };
-
-        // Enqueue the mission
-        var queueResult = await _queueService.EnqueueMissionAsync(enqueueRequest, cancellationToken);
-
-        if (!queueResult.Success)
-        {
-            _logger.LogError("Failed to enqueue mission from saved custom mission {Id}", id);
-            throw new InvalidOperationException("Failed to enqueue mission");
-        }
-
+        // Queue functionality removed - skipping mission enqueuing
         _logger.LogInformation("Triggered saved custom mission {Id} ('{MissionName}'). " +
-            "Generated MissionCode: {MissionCode}, RequestId: {RequestId}, QueueId: {QueueId}",
-            id, savedMission.MissionName, missionCode, requestId, queueResult.QueueId);
+            "Generated MissionCode: {MissionCode}, RequestId: {RequestId} (queue functionality removed)",
+            id, savedMission.MissionName, missionCode, requestId);
 
         return new TriggerResult
         {
             Success = true,
             MissionCode = missionCode,
             RequestId = requestId,
-            QueueId = queueResult.QueueId,
-            ExecuteImmediately = queueResult.ExecuteImmediately,
-            Message = queueResult.Message
+            QueueId = 0, // Not applicable without queue
+            ExecuteImmediately = true, // Default value
+            Message = "Queue functionality removed"
         };
     }
 

@@ -93,8 +93,7 @@ builder.Services.Configure<MobileRobotServiceOptions>(
     builder.Configuration.GetSection(MobileRobotServiceOptions.SectionName));
 builder.Services.Configure<MissionListServiceOptions>(
     builder.Configuration.GetSection(MissionListServiceOptions.SectionName));
-builder.Services.Configure<UserServiceOptions>(
-    builder.Configuration.GetSection(UserServiceOptions.SectionName));
+
 builder.Services.Configure<AmrServiceOptions>(
     builder.Configuration.GetSection(AmrServiceOptions.SectionName));
 builder.Services.AddHttpClient();
@@ -116,9 +115,7 @@ builder.Services.AddHttpClient<IWorkflowAnalyticsService, WorkflowAnalyticsServi
 
 builder.Services.AddScoped<IJobStatusClient, JobStatusClient>();
 
-// Add Database Initialization Service
-builder.Services.AddScoped<QES_KUKA_AMR_API.Services.Database.IDatabaseInitializationService, 
-    QES_KUKA_AMR_API.Services.Database.DatabaseInitializationService>();
+
 
 builder.Services.AddScoped<IMissionListClient, MissionListClient>();
 builder.Services.AddScoped<ISavedMissionScheduleService, SavedMissionScheduleService>();
@@ -126,12 +123,7 @@ builder.Services.AddScoped<IWorkflowScheduleService, WorkflowScheduleService>();
 builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
 
 // Mission Queue Services
-builder.Services.Configure<MissionQueueSettings>(
-    builder.Configuration.GetSection("MissionQueueSettings"));
-builder.Services.AddSingleton<IQueueService, QueueService>();
-builder.Services.AddHostedService<QueueProcessorBackgroundService>();
-builder.Services.AddHostedService<MissionSubmitterBackgroundService>();
-builder.Services.AddHostedService<JobStatusPollerBackgroundService>();
+
 builder.Services.AddHostedService<SavedMissionSchedulerBackgroundService>();
 builder.Services.AddHostedService<WorkflowSchedulerBackgroundService>();
 
@@ -141,26 +133,6 @@ builder.Services.Configure<LogCleanupOptions>(
 builder.Services.AddScoped<LogCleanupService>();
 
 var app = builder.Build();
-
-// Initialize and seed database on startup
-using (var scope = app.Services.CreateScope())
-{
-    var dbInitService = scope.ServiceProvider.GetRequiredService<QES_KUKA_AMR_API.Services.Database.IDatabaseInitializationService>();
-    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-    
-    try
-    {
-        logger.LogInformation("Starting database initialization...");
-        await dbInitService.EnsureDatabaseCreatedAsync();
-        await dbInitService.SeedInitialDataAsync();
-        logger.LogInformation("Database initialization completed successfully");
-    }
-    catch (Exception ex)
-    {
-        logger.LogError(ex, "An error occurred while initializing the database");
-        // Don't throw - allow app to start even if seeding fails
-    }
-}
 
 // Configure the HTTP request pipeline.
 // Swagger always enabled (no environment check needed)

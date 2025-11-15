@@ -393,11 +393,8 @@ public class SavedMissionScheduleService : ISavedMissionScheduleService
 
             _dbContext.SavedMissionScheduleLogs.Add(logEntry);
 
-            var hasActive = await _dbContext.MissionQueues
-                .AsNoTracking()
-                .AnyAsync(m => m.WorkflowId == missionId &&
-                               (m.Status == QueueStatus.Queued || m.Status == QueueStatus.Processing),
-                    cancellationToken);
+            // MissionQueues entity removed - no active missions to check
+            var hasActive = false;
 
             if (hasActive)
             {
@@ -427,7 +424,7 @@ public class SavedMissionScheduleService : ISavedMissionScheduleService
 
             try
             {
-                triggerResult = await _missionService.TriggerAsync(missionId, triggeredBy, MissionTriggerSource.Scheduled, cancellationToken);
+                triggerResult = await _missionService.TriggerAsync(missionId, triggeredBy, cancellationToken);
 
                 schedule.LastRunUtc = scheduledForUtc;
                 schedule.LastStatus = triggerResult?.Message;
