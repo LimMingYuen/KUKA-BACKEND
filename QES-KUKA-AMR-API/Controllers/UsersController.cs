@@ -92,6 +92,7 @@ public class UsersController : ControllerBase
             var entity = await _userService.CreateAsync(new User
             {
                 Username = request.Username,
+                PasswordHash = request.Password, // Will be hashed in service layer
                 Nickname = request.Nickname,
                 IsSuperAdmin = request.IsSuperAdmin,
                 Roles = request.Roles ?? new List<string>(),
@@ -138,6 +139,7 @@ public class UsersController : ControllerBase
             var updated = await _userService.UpdateAsync(id, new User
             {
                 Username = request.Username,
+                PasswordHash = request.Password, // Will be hashed in service layer (only if provided)
                 Nickname = request.Nickname,
                 IsSuperAdmin = request.IsSuperAdmin,
                 Roles = request.Roles ?? new List<string>(),
