@@ -12,6 +12,7 @@ using QES_KUKA_AMR_API.Services.Missions;
 using QES_KUKA_AMR_API.Services.MissionTypes;
 using QES_KUKA_AMR_API.Services.ResumeStrategies;
 using QES_KUKA_AMR_API.Services.RobotTypes;
+using QES_KUKA_AMR_API.Services.Roles;
 using QES_KUKA_AMR_API.Services.SavedCustomMissions;
 using QES_KUKA_AMR_API.Services.ShelfDecisionRules;
 using QES_KUKA_AMR_API.Services.Users;
@@ -105,6 +106,7 @@ builder.Services.AddScoped<IResumeStrategyService, ResumeStrategyService>();
 builder.Services.AddScoped<IAreaService, AreaService>();
 builder.Services.AddScoped<ISavedCustomMissionService, SavedCustomMissionService>();
 builder.Services.AddScoped<IUserService, UserService>();
+builder.Services.AddScoped<IRoleService, RoleService>();
 builder.Services.AddScoped<IRobotAnalyticsService, RobotAnalyticsService>();
 
 // WorkflowAnalyticsService needs HttpClient configured with base address
