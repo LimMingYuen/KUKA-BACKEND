@@ -7,8 +7,6 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "QES-KUKA-AMR-API", "QES-KUK
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "QES-KUKA-AMR-API-Simulator", "QES-KUKA-AMR-API-Simulator\QES-KUKA-AMR-API-Simulator.csproj", "{9C5869F1-67C7-4FAB-9E80-931435E3CAC4}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "QES-KUKA-AMR-WEB", "QES-KUKA-AMR-WEB\QES-KUKA-AMR-WEB.csproj", "{38B8E023-D7B3-4F1E-824B-8588A14C58A6}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -23,10 +21,6 @@ Global
 		{9C5869F1-67C7-4FAB-9E80-931435E3CAC4}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{9C5869F1-67C7-4FAB-9E80-931435E3CAC4}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{9C5869F1-67C7-4FAB-9E80-931435E3CAC4}.Release|Any CPU.Build.0 = Release|Any CPU
-		{38B8E023-D7B3-4F1E-824B-8588A14C58A6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{38B8E023-D7B3-4F1E-824B-8588A14C58A6}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{38B8E023-D7B3-4F1E-824B-8588A14C58A6}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{38B8E023-D7B3-4F1E-824B-8588A14C58A6}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
