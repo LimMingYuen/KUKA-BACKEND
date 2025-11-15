@@ -428,7 +428,6 @@ public class MissionsController : ControllerBase
     [HttpPost("resume-manual-waypoint")]
     public async Task<ActionResult<ResumeManualWaypointResponse>> ResumeManualWaypointAsync(
         [FromBody] ResumeManualWaypointRequest request,
-        [FromServices] IQueueService queueService,
         CancellationToken cancellationToken)
     {
         _logger.LogInformation("Resume manual waypoint request received for mission {MissionCode}", request.MissionCode);
@@ -442,43 +441,21 @@ public class MissionsController : ControllerBase
             });
         }
 
-        var result = await queueService.ResumeManualWaypointAsync(request.MissionCode, cancellationToken);
-
-        if (!result.Success)
-        {
-            return BadRequest(new ResumeManualWaypointResponse
-            {
-                Success = false,
-                Message = result.Message
-            });
-        }
-
+        // Queue functionality removed
         return Ok(new ResumeManualWaypointResponse
         {
-            Success = true,
-            Message = result.Message,
-            RequestId = result.RequestId
+            Success = false,
+            Message = "Queue functionality has been removed from the system",
+            RequestId = ""
         });
     }
 
     [HttpGet("waiting-for-resume")]
     public async Task<ActionResult<List<WaitingMissionDto>>> GetWaitingMissionsAsync(
-        [FromServices] ApplicationDbContext context,
         CancellationToken cancellationToken)
     {
-        var waitingMissions = await context.MissionQueues
-            .Where(m => m.IsWaitingForManualResume && m.Status == QueueStatus.Processing)
-            .Select(m => new WaitingMissionDto
-            {
-                MissionCode = m.MissionCode,
-                CurrentPosition = m.CurrentManualWaypointPosition,
-                RobotId = m.AssignedRobotId,
-                BatteryLevel = m.RobotBatteryLevel,
-                WaitingSince = m.LastRobotQueryTime
-            })
-            .ToListAsync(cancellationToken);
-
-        return Ok(waitingMissions);
+        // Queue functionality removed - return empty list
+        return Ok(new List<WaitingMissionDto>());
     }
 }
 

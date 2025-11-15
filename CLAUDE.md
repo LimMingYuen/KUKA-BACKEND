@@ -74,24 +74,7 @@ Database: SQL Server with connection string in `appsettings.json` pointing to `Q
 
 ### Mission Queue System (Core Feature)
 
-The application implements a sophisticated mission queue management system with concurrency control:
 
-**Key Components:**
-- **QueueService** (`Services/QueueService.cs`): Singleton service managing mission queue with static semaphores for global concurrency control (`_globalSemaphore`, `_dbLock`)
-- **MissionQueue entity** (`Data/Entities/MissionQueue.cs`): Tracks missions with statuses: Queued, Processing, Completed, Failed, Cancelled. Additional tracking includes robot info (AssignedRobotId, RobotNodeCode, RobotStatusCode, RobotBatteryLevel), manual waypoint handling (IsWaitingForManualResume, ManualWaypointsJson), and trigger source (Manual, Scheduled, Workflow, API, Direct)
-- **Background Services**:
-  - `QueueProcessorBackgroundService`: Processes queued missions based on priority and global concurrency limits
-  - `MissionSubmitterBackgroundService`: Submits missions to external AMR system
-  - `JobStatusPollerBackgroundService`: Polls job status from external system
-  - `SavedMissionSchedulerBackgroundService`: Handles scheduled mission execution
-
-**Critical Implementation Details:**
-- Global concurrency is controlled via `MissionQueueSettings.GlobalConcurrencyLimit` (default: 2 concurrent missions)
-- **QueueService.InitializeAsync()** MUST be called on startup to sync semaphore state with database (prevents SemaphoreFullException after app restart)
-- Semaphores are static and shared across all service instances to maintain global state
-- Priority-based queue processing with lower priority numbers processed first
-- Mission statuses flow: `Queued → Processing → Completed/Failed/Cancelled`
-- Missions track `SubmittedToAmr` flag separately from status to coordinate submission timing
 
 ### Service Layer Pattern
 
@@ -102,9 +85,9 @@ Services follow a consistent interface-based pattern organized by domain:
 - `Services/Missions/`: Mission operations (`JobStatusClient`)
 - `Services/MissionTypes/`, `Services/RobotTypes/`, `Services/ResumeStrategies/`, `Services/ShelfDecisionRules/`: Configuration entity services
 - `Services/SavedCustomMissions/`: Custom mission and scheduling services (`SavedCustomMissionService`, `SavedMissionScheduleService`)
-- `Services/Database/`: Database initialization (`DatabaseInitializationService`)
 
-All services are registered as scoped dependencies except `QueueService` (singleton) and `TimeProvider` (singleton).
+
+All services are registered as scoped dependencies except `TimeProvider` (singleton).
 
 **Common Service Pattern:**
 ```csharp
@@ -160,7 +143,7 @@ Swagger/OpenAPI enabled for both main API and simulator:
 
 ### Controllers
 Each controller handles a specific domain (19 controllers total):
-- Mission operations: `MissionsController`, `MissionQueueController`, `MissionHistoryController`
+- Mission operations: `MissionsController`, `MissionHistoryController`
 - Configuration: `ConfigController`, `MissionTypesController`, `RobotTypesController`, `ShelfDecisionRulesController`, `ResumeStrategiesController`, `AreasController`
 - Analytics: `RobotAnalyticsController`, `WorkflowAnalyticsController`
 - External system proxies: `LoginController`, `QrCodesController`, `MapZonesController`, `WorkflowsController`
@@ -183,7 +166,7 @@ Organized by domain with DTOs for request/response:
 ## Important Implementation Notes
 
 1. **Namespace Naming**: Root namespace is `QES_KUKA_AMR_API` (underscores, not hyphens) due to project name with dashes
-2. **Mission Queue Initialization**: Always ensure `QueueService.InitializeAsync()` is called during application startup in `Program.cs` (currently via background service). This syncs static semaphore state with database to prevent `SemaphoreFullException` after app restarts
+
 3. **Concurrency Control**: Do not modify semaphore logic without understanding global state implications across app restarts. The `_globalSemaphore` and `_dbLock` are static fields shared across all service instances
 4. **HTTP Client Usage**: Use `IHttpClientFactory` for all external HTTP calls to avoid socket exhaustion. All external service clients (`LoginServiceClient`, `JobStatusClient`) follow this pattern
 5. **JSON Serialization**: Mission data stored as JSON in `MissionDataJson` and `MissionStepsJson` columns (nvarchar(max)). Custom converters handle edge cases with empty strings and nullable numbers
@@ -208,7 +191,7 @@ The codebase includes 16 main entities:
 
 **Mission Entities:**
 - `WorkflowDiagram`: Workflow templates with codes and configurations
-- `MissionQueue`: Active mission queue with status tracking
+
 - `MissionHistory`: Archive of completed missions
 
 **Configuration Entities:**
@@ -230,40 +213,4 @@ The codebase includes 16 main entities:
 
 All entities include audit fields (`CreatedUtc`, `UpdatedUtc`) and use `datetime2` SQL Server column types.
 
-## Mission Queue Processing Flow
 
-Understanding the complete mission lifecycle is critical for debugging and enhancements:
-
-1. **Enqueue Phase** - Mission submission via `MissionsController.SubmitMissionAsync()`
-   - Validates mission data and configuration
-   - Creates `MissionQueue` record with `Status = Queued`
-   - Sets `SubmittedToAmr = false`
-   - Returns immediately to client
-
-2. **Processing Phase** - `QueueProcessorBackgroundService` (5-second interval)
-   - Queries missions with `Status = Queued` ordered by `(Priority ASC, CreatedDate ASC)`
-   - Attempts to acquire `_globalSemaphore` slot (max 2 concurrent by default)
-   - If acquired: Updates `Status = Processing`, sets `ProcessedDate`
-   - If not acquired: Mission remains `Queued`, retries next interval
-
-3. **Submission Phase** - `MissionSubmitterBackgroundService` (5-second interval)
-   - Queries missions with `Status = Processing AND SubmittedToAmr = false`
-   - POSTs mission to external AMR system via `MissionService.SubmitMissionUrl`
-   - On success: Sets `SubmittedToAmr = true`, `SubmittedToAmrDate = now`
-   - On failure: Logs error, mission remains in Processing state for retry
-
-4. **Status Polling Phase** - `JobStatusPollerBackgroundService` (10-second interval)
-   - Queries status from AMR via `MissionService.JobQueryUrl` for all Processing missions
-   - Updates robot tracking fields: `AssignedRobotId`, `RobotNodeCode`, `RobotStatusCode`, `RobotBatteryLevel`, `LastRobotQueryTime`
-   - Checks for terminal states (Complete=5, Cancelled=31, ManualComplete=32)
-   - On completion: Updates `Status = Completed/Failed`, sets `CompletedDate`, releases `_globalSemaphore` slot
-
-5. **Scheduled Missions** - `SavedMissionSchedulerBackgroundService` (60-second interval)
-   - Evaluates cron expressions and one-time schedules
-   - Triggers missions via `QueueService.EnqueueMissionAsync()` when schedule fires
-   - Creates `SavedMissionScheduleLog` records for audit trail
-
-**Important Notes:**
-- The separation of Processing and Submission phases allows for retry logic without losing the concurrency slot
-- Semaphore slots are held from Processing phase through completion
-- Robot status codes (Created=0, Executing=2, Waiting=3, Cancelling=4, Complete=5, Cancelled=31, ManualComplete=32, Warning=50, StartupError=99) are configured in `appsettings.json` under `JobStatusPolling.StatusCodes`

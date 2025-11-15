@@ -26,7 +26,7 @@ The system is built using a .NET 8 microservices architecture with three main co
 
 The system uses Entity Framework Core with SQL Server. Key database entities include:
 
-- `MissionQueues`: Manages the queue of missions to be processed
+
 - `MissionHistories`: Tracks completed mission history
 - `MobileRobots`: Contains information about active robots
 - `RobotManualPauses`: Handles manual pause/resume operations
@@ -87,18 +87,16 @@ The system is configured through appsettings.json files in each project:
 ### Code Structure
 
 - **API Project**: Follows standard ASP.NET Core Web API patterns with Entity Framework Core for data access
-- **Background Services**: Uses IHostedService for continuous operations like mission queue processing, job status polling, and scheduling
+- **Background Services**: Uses IHostedService for continuous operations like job status polling, and scheduling
 - **Dependency Injection**: Services are registered in Program.cs following SOLID principles
 - **Logging**: Uses log4net for structured logging
 - **Authentication**: JWT-based authentication with refresh token functionality
 
 ### Key Services
 
-- **MissionQueueService**: Handles queuing and processing of missions
 - **MissionSubmitterBackgroundService**: Submits missions to the AMR system
 - **JobStatusPollerBackgroundService**: Monitors mission progress
 - **SavedMissionSchedulerBackgroundService**: Manages scheduled missions
-- **QueueService**: Manages the mission queue with configurable concurrency limits
 
 ### Testing
 

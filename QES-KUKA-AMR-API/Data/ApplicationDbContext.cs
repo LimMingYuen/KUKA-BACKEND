@@ -14,7 +14,7 @@ public class ApplicationDbContext : DbContext
 
     public DbSet<MissionHistory> MissionHistories => Set<MissionHistory>();
 
-    public DbSet<MissionQueue> MissionQueues => Set<MissionQueue>();
+
 
     public DbSet<MobileRobot> MobileRobots => Set<MobileRobot>();
 
@@ -77,20 +77,7 @@ public class ApplicationDbContext : DbContext
             entity.HasIndex(e => new { e.TriggerSource, e.CompletedDate });
         });
 
-        modelBuilder.Entity<MissionQueue>(entity =>
-        {
-            entity.Property(e => e.CreatedDate).HasColumnType("datetime2");
-            entity.Property(e => e.ProcessedDate).HasColumnType("datetime2");
-            entity.Property(e => e.CompletedDate).HasColumnType("datetime2");
-            entity.Property(e => e.SubmittedToAmrDate).HasColumnType("datetime2");
-            entity.Property(e => e.MissionDataJson).HasColumnType("nvarchar(max)");
-            entity.HasIndex(e => e.MissionCode).IsUnique();
-            entity.HasIndex(e => new { e.Status, e.Priority, e.CreatedDate });
-            entity.HasIndex(e => e.WorkflowId);
-            entity.HasIndex(e => e.SavedMissionId);
-            entity.HasIndex(e => new { e.TriggerSource, e.CompletedDate });
-            entity.HasIndex(e => new { e.AssignedRobotId, e.CompletedDate });
-        });
+
 
         modelBuilder.Entity<MobileRobot>(entity =>
         {

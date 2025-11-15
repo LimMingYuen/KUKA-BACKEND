@@ -22,18 +22,18 @@ public interface IWorkflowScheduleService
 public class WorkflowScheduleService : IWorkflowScheduleService
 {
     private readonly ApplicationDbContext _dbContext;
-    private readonly IQueueService _queueService;
+
     private readonly ILogger<WorkflowScheduleService> _logger;
     private readonly TimeProvider _timeProvider;
 
     public WorkflowScheduleService(
         ApplicationDbContext dbContext,
-        IQueueService queueService,
+
         ILogger<WorkflowScheduleService> logger,
         TimeProvider timeProvider)
     {
         _dbContext = dbContext;
-        _queueService = queueService;
+
         _logger = logger;
         _timeProvider = timeProvider;
     }
@@ -394,11 +394,8 @@ public class WorkflowScheduleService : IWorkflowScheduleService
 
             _dbContext.WorkflowScheduleLogs.Add(logEntry);
 
-            var hasActive = await _dbContext.MissionQueues
-                .AsNoTracking()
-                .AnyAsync(m => m.WorkflowId == workflowId &&
-                               (m.Status == QueueStatus.Queued || m.Status == QueueStatus.Processing),
-                    cancellationToken);
+            // MissionQueues entity removed - no active missions to check
+            var hasActive = false;
 
             if (hasActive)
             {
@@ -441,32 +438,13 @@ public class WorkflowScheduleService : IWorkflowScheduleService
                 // Create enqueue request for the workflow
                 // Generate timestamp in same format as manual trigger: YYYYMMDDHHmmssSSS
                 var now = _timeProvider.GetUtcNow().UtcDateTime;
+                // Queue functionality was removed - skipping mission enqueuing
                 var timestamp = $"{now:yyyyMMddHHmmssfff}";
-
-                var enqueueRequest = new EnqueueRequest
-                {
-                    WorkflowId = workflowId,
-                    WorkflowCode = workflow.WorkflowCode,
-                    WorkflowName = workflow.WorkflowName,
-                    TemplateCode = workflow.WorkflowCode,
-                    MissionCode = $"mission{timestamp}",
-                    RequestId = $"request{timestamp}",
-                    CreatedBy = triggeredBy,
-                    Priority = workflow.WorkflowPriority,
-                    TriggerSource = MissionTriggerSource.Scheduled
-                };
-
-                var queueResult = await _queueService.EnqueueMissionAsync(enqueueRequest, cancellationToken);
-
-                if (!queueResult.Success)
-                {
-                    throw new InvalidOperationException($"Failed to enqueue workflow: {queueResult.Message}");
-                }
+                var missionCode = $"mission{timestamp}";
+                var requestId = $"request{timestamp}";
 
                 schedule.LastRunUtc = scheduledForUtc;
-                schedule.LastStatus = queueResult.Message?.Length > 30
-                    ? queueResult.Message.Substring(0, 30)
-                    : queueResult.Message;
+                schedule.LastStatus = "Enqueuing skipped (queue functionality removed)";
                 schedule.LastError = null;
                 schedule.UpdatedUtc = _timeProvider.GetUtcNow().UtcDateTime;
 
@@ -483,24 +461,22 @@ public class WorkflowScheduleService : IWorkflowScheduleService
                 schedule.QueueLockToken = null;
 
                 logEntry.EnqueuedUtc = _timeProvider.GetUtcNow().UtcDateTime;
-                logEntry.QueueId = queueResult.QueueId;
-                logEntry.ResultStatus = "Queued";
+                logEntry.QueueId = 0; // Not applicable without queue
+                logEntry.ResultStatus = "Enqueuing skipped";
 
                 triggerResult = new WorkflowTriggerResult
                 {
                     Success = true,
-                    Message = queueResult.Message,
-                    QueueId = queueResult.QueueId,
-                    MissionCode = enqueueRequest.MissionCode,
-                    ExecuteImmediately = queueResult.ExecuteImmediately
+                    Message = "Queue functionality removed",
+                    QueueId = 0,
+                    MissionCode = $"mission{now:yyyyMMddHHmmssfff}",
+                    ExecuteImmediately = false
                 };
 
                 _logger.LogInformation(
-                    "Schedule {ScheduleId} enqueued workflow {MissionCode} (QueueId {QueueId}, ExecuteImmediately={ExecuteImmediately})",
+                    "Schedule {ScheduleId} workflow {MissionCode}, queue functionality removed",
                     schedule.Id,
-                    enqueueRequest.MissionCode,
-                    queueResult.QueueId,
-                    queueResult.ExecuteImmediately);
+                    $"mission{now:yyyyMMddHHmmssfff}");
             }
             catch (Exception ex)
             {

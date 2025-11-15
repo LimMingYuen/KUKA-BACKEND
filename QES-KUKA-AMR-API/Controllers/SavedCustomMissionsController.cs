@@ -212,7 +212,7 @@ public class SavedCustomMissionsController : ControllerBase
 
         try
         {
-            var result = await _savedCustomMissionService.TriggerAsync(id, triggeredBy, MissionTriggerSource.Manual, cancellationToken);
+            var result = await _savedCustomMissionService.TriggerAsync(id, triggeredBy, cancellationToken);
 
             var response = new TriggerMissionResponse
             {

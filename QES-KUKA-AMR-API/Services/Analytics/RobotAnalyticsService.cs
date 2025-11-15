@@ -81,25 +81,9 @@ public class RobotAnalyticsService : IRobotAnalyticsService
             TotalAvailableMinutes = Math.Max(0, (normalizedEnd - normalizedStart).TotalMinutes)
         };
 
-        // Query completed missions from MissionQueues (active/recent missions)
-        var queueMissions = await _dbContext.MissionQueues
-            .AsNoTracking()
-            .Where(m =>
-                m.AssignedRobotId != null &&
-                m.AssignedRobotId == robotId &&
-                m.CompletedDate != null)
-            .Select(m => new
-            {
-                m.MissionCode,
-                m.WorkflowName,
-                m.SavedMissionId,
-                m.TriggerSource,
-                Start = (DateTime?)(m.ProcessedDate ?? m.SubmittedToAmrDate ?? m.CreatedDate),
-                End = m.CompletedDate,
-                Status = m.Status
-            })
-            .Where(m => m.Start != null && m.End != null && m.Start < normalizedEnd && m.End > normalizedStart)
-            .ToListAsync(cancellationToken);
+        // MissionQueues entity removed - no active/recent missions to query
+        var emptyMissions = new { MissionCode = "", WorkflowName = "", SavedMissionId = (int?)null, TriggerSource = MissionTriggerSource.Manual, Start = (DateTime?)null, End = (DateTime?)null, Status = QueueStatus.Completed };
+        var queueMissions = new[] { emptyMissions }.Where(x => false).ToList(); // Empty list with correct anonymous type
 
         // CRITICAL FIX: Also query MissionHistories (archived completed missions)
         var historyMissions = await _dbContext.MissionHistories
@@ -124,7 +108,7 @@ public class RobotAnalyticsService : IRobotAnalyticsService
         // Combine both sources
         var missionSnapshots = queueMissions.Concat(historyMissions).ToList();
 
-        _logger.LogInformation("Found {QueueCount} missions in MissionQueues and {HistoryCount} in MissionHistories for robot {RobotId}",
+        _logger.LogInformation("Found {QueueCount} missions in queue (removed) and {HistoryCount} in MissionHistories for robot {RobotId}",
             queueMissions.Count, historyMissions.Count, robotId);
 
         var manualPauses = await _dbContext.RobotManualPauses
@@ -412,22 +396,9 @@ public class RobotAnalyticsService : IRobotAnalyticsService
             QueryEndUtc = normalizedEnd
         };
 
-        // Get all missions from MissionQueues
-        var queueMissions = await _dbContext.MissionQueues
-            .AsNoTracking()
-            .Select(m => new
-            {
-                m.MissionCode,
-                m.AssignedRobotId,
-                m.ProcessedDate,
-                m.SubmittedToAmrDate,
-                m.CreatedDate,
-                m.CompletedDate,
-                m.WorkflowName,
-                Status = m.Status.ToString(),
-                Start = (DateTime?)(m.ProcessedDate ?? m.SubmittedToAmrDate ?? m.CreatedDate)
-            })
-            .ToListAsync(cancellationToken);
+        // MissionQueues entity removed - no active/recent missions to query
+        var emptyMissions = new { MissionCode = "", AssignedRobotId = "", ProcessedDate = (DateTime?)null, SubmittedToAmrDate = (DateTime?)null, CreatedDate = (DateTime?)null, CompletedDate = (DateTime?)null, WorkflowName = "", Status = "", Start = (DateTime?)null };
+        var queueMissions = new[] { emptyMissions }.Where(x => false).ToList(); // Empty list with correct anonymous type
 
         // ALSO get missions from MissionHistories
         var historyMissions = await _dbContext.MissionHistories
@@ -446,11 +417,11 @@ public class RobotAnalyticsService : IRobotAnalyticsService
             })
             .ToListAsync(cancellationToken);
 
-        // Combine both sources
-        var allMissions = queueMissions.Concat(historyMissions).ToList();
+        // MissionQueues removed, only using history missions now
+        var allMissions = historyMissions.ToList();
 
         diagnostics.TotalMissionsInDatabase = allMissions.Count;
-        _logger.LogInformation("Diagnostic found {QueueCount} in MissionQueues + {HistoryCount} in MissionHistories = {Total} total",
+        _logger.LogInformation("Diagnostic found {QueueCount} in queue (removed) + {HistoryCount} in MissionHistories = {Total} total",
             queueMissions.Count, historyMissions.Count, allMissions.Count);
         diagnostics.MissionsWithAssignedRobotId = allMissions.Count(m => m.AssignedRobotId != null);
         diagnostics.MissionsWithCompletedDate = allMissions.Count(m => m.CompletedDate != null);
