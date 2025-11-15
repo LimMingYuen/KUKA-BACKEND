@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using QES_KUKA_AMR_API.Models.Login;
 using QES_KUKA_AMR_API.Services.Login;
 
@@ -5,7 +6,7 @@ namespace QES_KUKA_AMR_API.Services.Auth;
 
 public class ExternalApiTokenService : IExternalApiTokenService
 {
-    private readonly ILoginServiceClient _loginServiceClient;
+    private readonly IServiceScopeFactory _serviceScopeFactory;
     private readonly ILogger<ExternalApiTokenService> _logger;
     private readonly TimeProvider _timeProvider;
     private readonly SemaphoreSlim _semaphore = new(1, 1);
@@ -20,11 +21,11 @@ public class ExternalApiTokenService : IExternalApiTokenService
     private DateTime? _tokenExpiresAt;
 
     public ExternalApiTokenService(
-        ILoginServiceClient loginServiceClient,
+        IServiceScopeFactory serviceScopeFactory,
         ILogger<ExternalApiTokenService> logger,
         TimeProvider timeProvider)
     {
-        _loginServiceClient = loginServiceClient;
+        _serviceScopeFactory = serviceScopeFactory;
         _logger = logger;
         _timeProvider = timeProvider;
     }
@@ -72,7 +73,11 @@ public class ExternalApiTokenService : IExternalApiTokenService
                 Password = ExternalApiPassword
             };
 
-            var response = await _loginServiceClient.LoginAsync(loginRequest, cancellationToken);
+            // Create a scope to resolve scoped ILoginServiceClient
+            using var scope = _serviceScopeFactory.CreateScope();
+            var loginServiceClient = scope.ServiceProvider.GetRequiredService<ILoginServiceClient>();
+
+            var response = await loginServiceClient.LoginAsync(loginRequest, cancellationToken);
 
             if (response.Body?.Success == true && response.Body.Data?.Token != null)
             {
