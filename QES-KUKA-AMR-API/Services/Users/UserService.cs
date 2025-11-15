@@ -67,6 +67,12 @@ public class UserService : IUserService
             throw new UserConflictException($"User with username '{normalized.Username}' already exists.");
         }
 
+        // Hash the password if provided (PasswordHash field contains plain password at this point)
+        if (!string.IsNullOrWhiteSpace(normalized.PasswordHash))
+        {
+            normalized.PasswordHash = BCrypt.Net.BCrypt.HashPassword(normalized.PasswordHash);
+        }
+
         var now = _timeProvider.GetUtcNow().UtcDateTime;
         normalized.CreateTime = now;
         normalized.LastUpdateTime = now;
@@ -99,6 +105,13 @@ public class UserService : IUserService
         existing.Nickname = normalized.Nickname;
         existing.IsSuperAdmin = normalized.IsSuperAdmin;
         existing.Roles = normalized.Roles;
+
+        // Update password only if provided (PasswordHash field contains plain password at this point)
+        if (!string.IsNullOrWhiteSpace(normalized.PasswordHash))
+        {
+            existing.PasswordHash = BCrypt.Net.BCrypt.HashPassword(normalized.PasswordHash);
+        }
+
         existing.LastUpdateTime = _timeProvider.GetUtcNow().UtcDateTime;
         existing.LastUpdateBy = normalized.LastUpdateBy;
         existing.LastUpdateApp = normalized.LastUpdateApp;
