@@ -10,4 +10,5 @@ public class MissionServiceOptions
     public string? WorkflowQueryUrl { get; set; }
     public string? OperationFeedbackUrl { get; set; }
     public string? RobotQueryUrl { get; set; }
+    public string? NodeCodeQueryUrl { get; set; }
 }
