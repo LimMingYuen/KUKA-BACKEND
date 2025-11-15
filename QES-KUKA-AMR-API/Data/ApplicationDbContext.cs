@@ -12,6 +12,8 @@ public class ApplicationDbContext : DbContext
 
     public DbSet<WorkflowDiagram> WorkflowDiagrams => Set<WorkflowDiagram>();
 
+    public DbSet<WorkflowNodeCode> WorkflowNodeCodes => Set<WorkflowNodeCode>();
+
     public DbSet<MissionHistory> MissionHistories => Set<MissionHistory>();
 
 
@@ -53,6 +55,14 @@ public class ApplicationDbContext : DbContext
             entity.HasIndex(e => e.WorkflowCode).IsUnique();
             entity.Property(e => e.CreateTime).HasColumnType("datetime2");
             entity.Property(e => e.UpdateTime).HasColumnType("datetime2");
+        });
+
+        modelBuilder.Entity<WorkflowNodeCode>(entity =>
+        {
+            // Composite index for efficient querying by workflow and node code
+            entity.HasIndex(e => new { e.ExternalWorkflowId, e.NodeCode }).IsUnique();
+            // Index for querying all node codes for a specific workflow
+            entity.HasIndex(e => e.ExternalWorkflowId);
         });
 
         modelBuilder.Entity<MissionHistory>(entity =>

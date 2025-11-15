@@ -1,0 +1,334 @@
+using System.Collections.Concurrent;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using QES_KUKA_AMR_API.Data;
+using QES_KUKA_AMR_API.Data.Entities;
+using QES_KUKA_AMR_API.Models.Config;
+using QES_KUKA_AMR_API.Options;
+using QES_KUKA_AMR_API.Services.Auth;
+
+namespace QES_KUKA_AMR_API.Services.WorkflowNodeCodes;
+
+public class WorkflowNodeCodeService : IWorkflowNodeCodeService
+{
+    private readonly ApplicationDbContext _dbContext;
+    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IExternalApiTokenService _externalApiTokenService;
+    private readonly ILogger<WorkflowNodeCodeService> _logger;
+    private readonly TimeProvider _timeProvider;
+    private readonly MissionServiceOptions _options;
+
+    public WorkflowNodeCodeService(
+        ApplicationDbContext dbContext,
+        IHttpClientFactory httpClientFactory,
+        IExternalApiTokenService externalApiTokenService,
+        ILogger<WorkflowNodeCodeService> logger,
+        TimeProvider timeProvider,
+        IOptions<MissionServiceOptions> options)
+    {
+        _dbContext = dbContext;
+        _httpClientFactory = httpClientFactory;
+        _externalApiTokenService = externalApiTokenService;
+        _logger = logger;
+        _timeProvider = timeProvider;
+        _options = options.Value;
+    }
+
+    public async Task<WorkflowNodeCodeSyncResult> SyncAllWorkflowNodeCodesAsync(
+        int maxConcurrency = 10,
+        CancellationToken cancellationToken = default)
+    {
+        var result = new WorkflowNodeCodeSyncResult();
+
+        // Get all workflows that have an external workflow ID
+        var workflows = await _dbContext.WorkflowDiagrams
+            .Where(w => w.ExternalWorkflowId != null)
+            .Select(w => new { w.ExternalWorkflowId, w.WorkflowCode })
+            .ToListAsync(cancellationToken);
+
+        result.TotalWorkflows = workflows.Count;
+
+        if (workflows.Count == 0)
+        {
+            _logger.LogInformation("No workflows with external IDs found to sync");
+            return result;
+        }
+
+        _logger.LogInformation("Starting sync for {Count} workflows with max concurrency {MaxConcurrency}",
+            workflows.Count, maxConcurrency);
+
+        // Use SemaphoreSlim to control concurrency
+        using var semaphore = new SemaphoreSlim(maxConcurrency, maxConcurrency);
+        var tasks = new List<Task>();
+
+        // Track results across all parallel tasks
+        var successCount = 0;
+        var failureCount = 0;
+        var nodeCodesInserted = 0;
+        var nodeCodesDeleted = 0;
+        var failedWorkflowIds = new ConcurrentBag<int>();
+        var errors = new ConcurrentDictionary<int, string>();
+
+        foreach (var workflow in workflows)
+        {
+            if (!workflow.ExternalWorkflowId.HasValue)
+                continue;
+
+            var externalId = workflow.ExternalWorkflowId.Value;
+
+            // Wait for a slot to become available
+            await semaphore.WaitAsync(cancellationToken);
+
+            var task = Task.Run(async () =>
+            {
+                try
+                {
+                    _logger.LogDebug("Syncing workflow {WorkflowCode} (External ID: {ExternalId})",
+                        workflow.WorkflowCode, externalId);
+
+                    var syncResult = await SyncWorkflowNodeCodesInternalAsync(externalId, cancellationToken);
+
+                    if (syncResult.Success)
+                    {
+                        Interlocked.Increment(ref successCount);
+                        Interlocked.Add(ref nodeCodesInserted, syncResult.NodeCodesInserted);
+                        Interlocked.Add(ref nodeCodesDeleted, syncResult.NodeCodesDeleted);
+                    }
+                    else
+                    {
+                        Interlocked.Increment(ref failureCount);
+                        failedWorkflowIds.Add(externalId);
+                        errors.TryAdd(externalId, syncResult.ErrorMessage ?? "Unknown error");
+                        _logger.LogWarning("Failed to sync workflow {WorkflowCode} (External ID: {ExternalId}): {Error}",
+                            workflow.WorkflowCode, externalId, syncResult.ErrorMessage);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Interlocked.Increment(ref failureCount);
+                    failedWorkflowIds.Add(externalId);
+                    var errorMsg = $"Exception: {ex.Message}";
+                    errors.TryAdd(externalId, errorMsg);
+                    _logger.LogError(ex, "Exception while syncing workflow {WorkflowCode} (External ID: {ExternalId})",
+                        workflow.WorkflowCode, externalId);
+                }
+                finally
+                {
+                    semaphore.Release();
+                }
+            }, cancellationToken);
+
+            tasks.Add(task);
+        }
+
+        // Wait for all tasks to complete
+        await Task.WhenAll(tasks);
+
+        result.SuccessCount = successCount;
+        result.FailureCount = failureCount;
+        result.NodeCodesInserted = nodeCodesInserted;
+        result.NodeCodesDeleted = nodeCodesDeleted;
+        result.FailedWorkflowIds = failedWorkflowIds.ToList();
+        result.Errors = new Dictionary<int, string>(errors);
+
+        _logger.LogInformation("Sync completed: {Total} workflows, {Success} succeeded, {Failed} failed, " +
+            "{Inserted} node codes inserted, {Deleted} node codes deleted",
+            result.TotalWorkflows, result.SuccessCount, result.FailureCount,
+            result.NodeCodesInserted, result.NodeCodesDeleted);
+
+        return result;
+    }
+
+    public async Task<bool> SyncWorkflowNodeCodesAsync(
+        int externalWorkflowId,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await SyncWorkflowNodeCodesInternalAsync(externalWorkflowId, cancellationToken);
+        return result.Success;
+    }
+
+    public async Task<List<string>> GetWorkflowNodeCodesAsync(
+        int externalWorkflowId,
+        CancellationToken cancellationToken = default)
+    {
+        return await _dbContext.WorkflowNodeCodes
+            .Where(wnc => wnc.ExternalWorkflowId == externalWorkflowId)
+            .Select(wnc => wnc.NodeCode)
+            .OrderBy(nc => nc)
+            .ToListAsync(cancellationToken);
+    }
+
+    private async Task<SyncInternalResult> SyncWorkflowNodeCodesInternalAsync(
+        int externalWorkflowId,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            // Validate configuration
+            if (string.IsNullOrWhiteSpace(_options.NodeCodeQueryUrl))
+            {
+                return new SyncInternalResult
+                {
+                    Success = false,
+                    ErrorMessage = "NodeCodeQueryUrl is not configured"
+                };
+            }
+
+            // Get JWT token
+            string token;
+            try
+            {
+                token = await _externalApiTokenService.GetTokenAsync(cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                return new SyncInternalResult
+                {
+                    Success = false,
+                    ErrorMessage = $"Failed to obtain authentication token: {ex.Message}"
+                };
+            }
+
+            // Call external API
+            var httpClient = _httpClientFactory.CreateClient();
+            var requestUrl = $"{_options.NodeCodeQueryUrl}?workflowConfigId={externalWorkflowId}";
+
+            var request = new HttpRequestMessage(HttpMethod.Get, requestUrl);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            request.Headers.Add("language", "en");
+            request.Headers.Add("accept", "*/*");
+            request.Headers.Add("wizards", "FRONT_END");
+
+            HttpResponseMessage response;
+            try
+            {
+                response = await httpClient.SendAsync(request, cancellationToken);
+            }
+            catch (HttpRequestException ex)
+            {
+                return new SyncInternalResult
+                {
+                    Success = false,
+                    ErrorMessage = $"HTTP request failed: {ex.Message}"
+                };
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                return new SyncInternalResult
+                {
+                    Success = false,
+                    ErrorMessage = $"API returned status code {response.StatusCode}"
+                };
+            }
+
+            // Parse response
+            SimulatorApiResponse<List<string>>? apiResponse;
+            try
+            {
+                apiResponse = await response.Content.ReadFromJsonAsync<SimulatorApiResponse<List<string>>>(
+                    cancellationToken: cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                return new SyncInternalResult
+                {
+                    Success = false,
+                    ErrorMessage = $"Failed to parse API response: {ex.Message}"
+                };
+            }
+
+            if (apiResponse == null || !apiResponse.Succ)
+            {
+                return new SyncInternalResult
+                {
+                    Success = false,
+                    ErrorMessage = apiResponse?.Msg ?? "API returned unsuccessful response"
+                };
+            }
+
+            var nodeCodes = apiResponse.Data ?? new List<string>();
+
+            // Update database
+            var now = _timeProvider.GetUtcNow().UtcDateTime;
+
+            // Get existing node codes for this workflow
+            var existingNodeCodes = await _dbContext.WorkflowNodeCodes
+                .Where(wnc => wnc.ExternalWorkflowId == externalWorkflowId)
+                .ToListAsync(cancellationToken);
+
+            var existingNodeCodeSet = existingNodeCodes
+                .Select(wnc => wnc.NodeCode)
+                .ToHashSet();
+
+            var newNodeCodeSet = nodeCodes.ToHashSet();
+
+            // Calculate insertions and deletions
+            var nodeCodesToInsert = nodeCodes
+                .Where(nc => !existingNodeCodeSet.Contains(nc))
+                .ToList();
+
+            var nodeCodesToDelete = existingNodeCodes
+                .Where(wnc => !newNodeCodeSet.Contains(wnc.NodeCode))
+                .ToList();
+
+            // Delete removed node codes
+            if (nodeCodesToDelete.Any())
+            {
+                _dbContext.WorkflowNodeCodes.RemoveRange(nodeCodesToDelete);
+            }
+
+            // Insert new node codes
+            if (nodeCodesToInsert.Any())
+            {
+                var newEntities = nodeCodesToInsert.Select(nc => new WorkflowNodeCode
+                {
+                    ExternalWorkflowId = externalWorkflowId,
+                    NodeCode = nc,
+                    CreatedUtc = now,
+                    UpdatedUtc = now
+                }).ToList();
+
+                await _dbContext.WorkflowNodeCodes.AddRangeAsync(newEntities, cancellationToken);
+            }
+
+            // Update timestamp for existing node codes
+            var existingToUpdate = existingNodeCodes
+                .Where(wnc => newNodeCodeSet.Contains(wnc.NodeCode))
+                .ToList();
+
+            foreach (var entity in existingToUpdate)
+            {
+                entity.UpdatedUtc = now;
+            }
+
+            await _dbContext.SaveChangesAsync(cancellationToken);
+
+            return new SyncInternalResult
+            {
+                Success = true,
+                NodeCodesInserted = nodeCodesToInsert.Count,
+                NodeCodesDeleted = nodeCodesToDelete.Count
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error syncing workflow {ExternalWorkflowId}", externalWorkflowId);
+            return new SyncInternalResult
+            {
+                Success = false,
+                ErrorMessage = $"Unexpected error: {ex.Message}"
+            };
+        }
+    }
+
+    private class SyncInternalResult
+    {
+        public bool Success { get; set; }
+        public string? ErrorMessage { get; set; }
+        public int NodeCodesInserted { get; set; }
+        public int NodeCodesDeleted { get; set; }
+    }
+}
