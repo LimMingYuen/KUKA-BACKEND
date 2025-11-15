@@ -5,17 +5,20 @@ These endpoints allow you to sync and retrieve node codes (QR code positions) fo
 
 **IMPORTANT:** All endpoints require JWT authentication. You must include a valid bearer token in the Authorization header.
 
-## Recent Fixes (2024-11-15)
+## Recent Updates (2024-11-15)
 
-### Fixed: DbContext Thread-Safety Issues
-- **Problem:** Entity tracking conflicts and "DataReader already open" errors when syncing in parallel
-- **Solution:** Each parallel task now uses its own DbContext instance via service scopes
-- **Result:** 100% reliable parallel processing with no race conditions
+### ✅ Simplified to Sequential Processing
+- **Change:** Workflows are now synced **one by one sequentially** instead of in parallel
+- **Reason:** Simpler, more reliable, and eliminates all concurrency complexity
+- **Benefit:** No thread-safety issues, easier to debug, and progress tracking shows "X/Total"
 
-### Fixed: Missing JWT Authentication
-- **Problem:** Endpoints were publicly accessible without authentication
+### ✅ Fixed: DbContext Thread-Safety
+- **Solution:** Each workflow sync gets its own DbContext instance via service scopes
+- **Result:** Zero entity tracking conflicts or connection issues
+
+### ✅ Added: JWT Authentication
 - **Solution:** Added `[Authorize]` attribute to controller
-- **Result:** All endpoints now require valid JWT token
+- **Result:** All endpoints now require valid JWT token for security
 
 ---
 
@@ -24,12 +27,11 @@ These endpoints allow you to sync and retrieve node codes (QR code positions) fo
 ### 1. Sync All Workflows (Recommended for Initial Load)
 **Endpoint:** `POST /api/workflow-node-codes/sync`
 
-**Query Parameters:**
-- `maxConcurrency` (optional): Number of concurrent API calls (default: 10, max: 50)
+**Processing:** Workflows are synced **sequentially** (one by one) for maximum reliability.
 
 **Example Request:**
 ```http
-POST http://localhost:5109/api/workflow-node-codes/sync?maxConcurrency=20
+POST http://localhost:5109/api/workflow-node-codes/sync
 Authorization: Bearer YOUR_JWT_TOKEN
 ```
 
@@ -161,7 +163,7 @@ async function syncAllWorkflowNodeCodes() {
   }
 
   try {
-    const response = await fetch('/api/workflow-node-codes/sync?maxConcurrency=20', {
+    const response = await fetch('/api/workflow-node-codes/sync', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`
@@ -175,10 +177,11 @@ async function syncAllWorkflowNodeCodes() {
     }
 
     const result = await response.json();
-    console.log(`Synced ${result.successCount} workflows`);
+    console.log(`Synced ${result.successCount}/${result.totalWorkflows} workflows`);
+    console.log(`Inserted: ${result.nodeCodesInserted}, Deleted: ${result.nodeCodesDeleted}`);
 
     if (result.failureCount > 0) {
-      console.warn('Some workflows failed:', result.errors);
+      console.warn(`${result.failureCount} workflows failed:`, result.errors);
     }
   } catch (error) {
     console.error('Sync failed:', error);
@@ -252,11 +255,13 @@ async function refreshWorkflow(externalWorkflowId) {
 
 2. **ExternalWorkflowId**: This is NOT the local database workflow ID, it's the ID from the external AMR system (stored in `WorkflowDiagram.ExternalWorkflowId`)
 
-3. **Rate Limiting**: The sync endpoint processes requests in parallel with concurrency control to avoid overloading the external API
+3. **Sequential Processing**: Workflows are synced one by one for maximum reliability. The sync shows progress in logs: "Syncing workflow 1/301", "Syncing workflow 2/301", etc.
 
 4. **Data Freshness**: Node codes are cached in the database. Call sync endpoints to refresh data from the external system
 
 5. **Error Handling**: Always check the response for errors and handle failed syncs appropriately
+
+6. **Sync Duration**: For 301 workflows, expect the full sync to take a few minutes since it processes sequentially
 
 ---
 

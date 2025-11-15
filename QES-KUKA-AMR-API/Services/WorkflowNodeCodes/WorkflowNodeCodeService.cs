@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Microsoft.EntityFrameworkCore;
@@ -62,82 +61,68 @@ public class WorkflowNodeCodeService : IWorkflowNodeCodeService
             return result;
         }
 
-        _logger.LogInformation("Starting sync for {Count} unique external workflow IDs with max concurrency {MaxConcurrency}",
-            distinctExternalIds.Count, maxConcurrency);
+        _logger.LogInformation("Starting sequential sync for {Count} unique external workflow IDs",
+            distinctExternalIds.Count);
 
-        // Use SemaphoreSlim to control concurrency
-        using var semaphore = new SemaphoreSlim(maxConcurrency, maxConcurrency);
-        var tasks = new List<Task>();
-
-        // Track results across all parallel tasks
+        // Process workflows one by one sequentially
         var successCount = 0;
         var failureCount = 0;
         var nodeCodesInserted = 0;
         var nodeCodesDeleted = 0;
-        var failedWorkflowIds = new ConcurrentBag<int>();
-        var errors = new ConcurrentDictionary<int, string>();
+        var failedWorkflowIds = new List<int>();
+        var errors = new Dictionary<int, string>();
 
-        foreach (var externalId in distinctExternalIds)
+        for (int i = 0; i < distinctExternalIds.Count; i++)
         {
-            // Wait for a slot to become available
-            await semaphore.WaitAsync(cancellationToken);
+            var externalId = distinctExternalIds[i];
 
-            var task = Task.Run(async () =>
+            try
             {
-                try
+                _logger.LogInformation("Syncing workflow {Current}/{Total}: External ID {ExternalId}",
+                    i + 1, distinctExternalIds.Count, externalId);
+
+                // Create a new scope for this workflow to get its own DbContext
+                using var scope = _serviceScopeFactory.CreateScope();
+                var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+                var syncResult = await SyncWorkflowNodeCodesInternalAsync(
+                    externalId,
+                    dbContext,
+                    cancellationToken);
+
+                if (syncResult.Success)
                 {
-                    _logger.LogDebug("Syncing external workflow ID: {ExternalId}", externalId);
-
-                    // Create a new scope for this task to get its own DbContext
-                    using var scope = _serviceScopeFactory.CreateScope();
-                    var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-
-                    var syncResult = await SyncWorkflowNodeCodesInternalAsync(
-                        externalId,
-                        dbContext,
-                        cancellationToken);
-
-                    if (syncResult.Success)
-                    {
-                        Interlocked.Increment(ref successCount);
-                        Interlocked.Add(ref nodeCodesInserted, syncResult.NodeCodesInserted);
-                        Interlocked.Add(ref nodeCodesDeleted, syncResult.NodeCodesDeleted);
-                    }
-                    else
-                    {
-                        Interlocked.Increment(ref failureCount);
-                        failedWorkflowIds.Add(externalId);
-                        errors.TryAdd(externalId, syncResult.ErrorMessage ?? "Unknown error");
-                        _logger.LogWarning("Failed to sync external workflow ID {ExternalId}: {Error}",
-                            externalId, syncResult.ErrorMessage);
-                    }
+                    successCount++;
+                    nodeCodesInserted += syncResult.NodeCodesInserted;
+                    nodeCodesDeleted += syncResult.NodeCodesDeleted;
+                    _logger.LogInformation("Successfully synced workflow {ExternalId}: {Inserted} inserted, {Deleted} deleted",
+                        externalId, syncResult.NodeCodesInserted, syncResult.NodeCodesDeleted);
                 }
-                catch (Exception ex)
+                else
                 {
-                    Interlocked.Increment(ref failureCount);
+                    failureCount++;
                     failedWorkflowIds.Add(externalId);
-                    var errorMsg = $"Exception: {ex.Message}";
-                    errors.TryAdd(externalId, errorMsg);
-                    _logger.LogError(ex, "Exception while syncing external workflow ID {ExternalId}", externalId);
+                    errors[externalId] = syncResult.ErrorMessage ?? "Unknown error";
+                    _logger.LogWarning("Failed to sync external workflow ID {ExternalId}: {Error}",
+                        externalId, syncResult.ErrorMessage);
                 }
-                finally
-                {
-                    semaphore.Release();
-                }
-            }, cancellationToken);
-
-            tasks.Add(task);
+            }
+            catch (Exception ex)
+            {
+                failureCount++;
+                failedWorkflowIds.Add(externalId);
+                var errorMsg = $"Exception: {ex.Message}";
+                errors[externalId] = errorMsg;
+                _logger.LogError(ex, "Exception while syncing external workflow ID {ExternalId}", externalId);
+            }
         }
-
-        // Wait for all tasks to complete
-        await Task.WhenAll(tasks);
 
         result.SuccessCount = successCount;
         result.FailureCount = failureCount;
         result.NodeCodesInserted = nodeCodesInserted;
         result.NodeCodesDeleted = nodeCodesDeleted;
-        result.FailedWorkflowIds = failedWorkflowIds.ToList();
-        result.Errors = new Dictionary<int, string>(errors);
+        result.FailedWorkflowIds = failedWorkflowIds;
+        result.Errors = errors;
 
         _logger.LogInformation("Sync completed: {Total} workflows, {Success} succeeded, {Failed} failed, " +
             "{Inserted} node codes inserted, {Deleted} node codes deleted",

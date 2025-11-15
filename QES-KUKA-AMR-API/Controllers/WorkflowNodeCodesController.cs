@@ -22,34 +22,20 @@ public class WorkflowNodeCodesController : ControllerBase
 
     /// <summary>
     /// Syncs node codes for all workflows from the external AMR API.
-    /// This will query the external API for each workflow in parallel (with concurrency control)
-    /// and update the database with the latest node codes.
+    /// Processes workflows sequentially (one by one) to ensure reliability.
     /// </summary>
-    /// <param name="maxConcurrency">Maximum number of concurrent API calls (default: 10, max: 50)</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Sync result with statistics</returns>
     [HttpPost("sync")]
     public async Task<ActionResult<WorkflowNodeCodeSyncResult>> SyncAllAsync(
-        [FromQuery] int maxConcurrency = 10,
         CancellationToken cancellationToken = default)
     {
-        // Validate and cap concurrency
-        if (maxConcurrency < 1)
-        {
-            maxConcurrency = 1;
-        }
-        else if (maxConcurrency > 50)
-        {
-            maxConcurrency = 50;
-        }
-
-        _logger.LogInformation("Starting sync of all workflow node codes with max concurrency {MaxConcurrency}",
-            maxConcurrency);
+        _logger.LogInformation("Starting sequential sync of all workflow node codes");
 
         try
         {
             var result = await _workflowNodeCodeService.SyncAllWorkflowNodeCodesAsync(
-                maxConcurrency,
+                maxConcurrency: 1, // Sequential processing
                 cancellationToken);
 
             return Ok(result);
