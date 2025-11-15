@@ -14,7 +14,6 @@ using QES_KUKA_AMR_API.Services.ResumeStrategies;
 using QES_KUKA_AMR_API.Services.RobotTypes;
 using QES_KUKA_AMR_API.Services.SavedCustomMissions;
 using QES_KUKA_AMR_API.Services.ShelfDecisionRules;
-using QES_KUKA_AMR_API.Services.Workflows;
 using log4net;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -118,12 +117,9 @@ builder.Services.AddScoped<IJobStatusClient, JobStatusClient>();
 
 
 builder.Services.AddScoped<IMissionListClient, MissionListClient>();
-builder.Services.AddScoped<IWorkflowScheduleService, WorkflowScheduleService>();
 builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
 
 // Mission Queue Services
-
-builder.Services.AddHostedService<WorkflowSchedulerBackgroundService>();
 
 // Log Cleanup Services
 builder.Services.Configure<LogCleanupOptions>(
