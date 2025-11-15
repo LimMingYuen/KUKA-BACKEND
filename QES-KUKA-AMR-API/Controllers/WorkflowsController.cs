@@ -336,8 +336,7 @@ public class WorkflowsController : ControllerBase
                 ExternalCode = w.WorkflowCode,
                 Status = w.Status,
                 LayoutCode = w.MapCode,
-                ActiveSchedulesCount = _dbContext.WorkflowSchedules
-                    .Count(s => s.WorkflowId == w.Id && s.IsEnabled)
+                ActiveSchedulesCount = 0  // Workflow schedule functionality removed
             })
             .ToListAsync(cancellationToken);
 
