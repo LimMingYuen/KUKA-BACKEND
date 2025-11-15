@@ -263,6 +263,7 @@ public class QrCodesController : ControllerBase
                 updated++;
             }
 
+            entity.ExternalQrCodeId = qrCode.Id;
             entity.CreateTime = ParseDateTime(qrCode.CreateTime) ??
                                 (entity.CreateTime == default ? DateTime.UtcNow : entity.CreateTime);
             entity.CreateBy = qrCode.CreateBy ?? string.Empty;

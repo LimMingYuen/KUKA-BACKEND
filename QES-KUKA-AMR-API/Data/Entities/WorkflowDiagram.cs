@@ -10,6 +10,11 @@ public class WorkflowDiagram
     [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
     public int Id { get; set; }
 
+    /// <summary>
+    /// The workflow ID from the external AMR system API
+    /// </summary>
+    public int? ExternalWorkflowId { get; set; }
+
     [Required]
     [MaxLength(64)]
     public string WorkflowCode { get; set; } = string.Empty;

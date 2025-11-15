@@ -215,6 +215,7 @@ public class MobileRobotController : ControllerBase
                 updated++;
             }
 
+            entity.ExternalMobileRobotId = robot.Id;
             entity.CreateTime = ParseDateTime(robot.CreateTime) ?? (entity.CreateTime == default ? DateTime.UtcNow : entity.CreateTime);
             entity.CreateBy = robot.CreateBy ?? string.Empty;
             entity.CreateApp = robot.CreateApp ?? string.Empty;

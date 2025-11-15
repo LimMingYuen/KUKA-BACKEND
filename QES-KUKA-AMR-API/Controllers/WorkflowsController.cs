@@ -287,6 +287,7 @@ public class WorkflowsController : ControllerBase
                 updated++;
             }
 
+            entity.ExternalWorkflowId = workflow.Id;
             entity.WorkflowOuterCode = workflow.WorkflowOuterCode ?? string.Empty;
             entity.WorkflowName = workflow.WorkflowName ?? string.Empty;
             entity.WorkflowModel = workflow.WorkflowModel;

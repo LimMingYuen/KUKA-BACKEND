@@ -10,6 +10,11 @@ namespace QES_KUKA_AMR_API.Data.Entities
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
         public int Id { get; set; }
 
+        /// <summary>
+        /// The mobile robot ID from the external AMR system API
+        /// </summary>
+        public int? ExternalMobileRobotId { get; set; }
+
         public DateTime CreateTime { get; set; }
 
         [MaxLength(100)]
