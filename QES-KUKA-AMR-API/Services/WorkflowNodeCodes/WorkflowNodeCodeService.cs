@@ -42,22 +42,23 @@ public class WorkflowNodeCodeService : IWorkflowNodeCodeService
     {
         var result = new WorkflowNodeCodeSyncResult();
 
-        // Get all workflows that have an external workflow ID
-        var workflows = await _dbContext.WorkflowDiagrams
+        // Get all DISTINCT external workflow IDs to avoid duplicate processing
+        var distinctExternalIds = await _dbContext.WorkflowDiagrams
             .Where(w => w.ExternalWorkflowId != null)
-            .Select(w => new { w.ExternalWorkflowId, w.WorkflowCode })
+            .Select(w => w.ExternalWorkflowId!.Value)
+            .Distinct()
             .ToListAsync(cancellationToken);
 
-        result.TotalWorkflows = workflows.Count;
+        result.TotalWorkflows = distinctExternalIds.Count;
 
-        if (workflows.Count == 0)
+        if (distinctExternalIds.Count == 0)
         {
             _logger.LogInformation("No workflows with external IDs found to sync");
             return result;
         }
 
-        _logger.LogInformation("Starting sync for {Count} workflows with max concurrency {MaxConcurrency}",
-            workflows.Count, maxConcurrency);
+        _logger.LogInformation("Starting sync for {Count} unique external workflow IDs with max concurrency {MaxConcurrency}",
+            distinctExternalIds.Count, maxConcurrency);
 
         // Use SemaphoreSlim to control concurrency
         using var semaphore = new SemaphoreSlim(maxConcurrency, maxConcurrency);
@@ -71,13 +72,8 @@ public class WorkflowNodeCodeService : IWorkflowNodeCodeService
         var failedWorkflowIds = new ConcurrentBag<int>();
         var errors = new ConcurrentDictionary<int, string>();
 
-        foreach (var workflow in workflows)
+        foreach (var externalId in distinctExternalIds)
         {
-            if (!workflow.ExternalWorkflowId.HasValue)
-                continue;
-
-            var externalId = workflow.ExternalWorkflowId.Value;
-
             // Wait for a slot to become available
             await semaphore.WaitAsync(cancellationToken);
 
@@ -85,8 +81,7 @@ public class WorkflowNodeCodeService : IWorkflowNodeCodeService
             {
                 try
                 {
-                    _logger.LogDebug("Syncing workflow {WorkflowCode} (External ID: {ExternalId})",
-                        workflow.WorkflowCode, externalId);
+                    _logger.LogDebug("Syncing external workflow ID: {ExternalId}", externalId);
 
                     var syncResult = await SyncWorkflowNodeCodesInternalAsync(externalId, cancellationToken);
 
@@ -101,8 +96,8 @@ public class WorkflowNodeCodeService : IWorkflowNodeCodeService
                         Interlocked.Increment(ref failureCount);
                         failedWorkflowIds.Add(externalId);
                         errors.TryAdd(externalId, syncResult.ErrorMessage ?? "Unknown error");
-                        _logger.LogWarning("Failed to sync workflow {WorkflowCode} (External ID: {ExternalId}): {Error}",
-                            workflow.WorkflowCode, externalId, syncResult.ErrorMessage);
+                        _logger.LogWarning("Failed to sync external workflow ID {ExternalId}: {Error}",
+                            externalId, syncResult.ErrorMessage);
                     }
                 }
                 catch (Exception ex)
@@ -111,8 +106,7 @@ public class WorkflowNodeCodeService : IWorkflowNodeCodeService
                     failedWorkflowIds.Add(externalId);
                     var errorMsg = $"Exception: {ex.Message}";
                     errors.TryAdd(externalId, errorMsg);
-                    _logger.LogError(ex, "Exception while syncing workflow {WorkflowCode} (External ID: {ExternalId})",
-                        workflow.WorkflowCode, externalId);
+                    _logger.LogError(ex, "Exception while syncing external workflow ID {ExternalId}", externalId);
                 }
                 finally
                 {
