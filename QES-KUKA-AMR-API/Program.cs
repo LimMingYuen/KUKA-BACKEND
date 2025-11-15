@@ -1,12 +1,16 @@
 using System.IO;
+using System.Text;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using QES_KUKA_AMR_API.Data;
 using QES_KUKA_AMR_API.Options;
 using QES_KUKA_AMR_API.Services;
 using QES_KUKA_AMR_API.Services.Analytics;
 using QES_KUKA_AMR_API.Services.Areas;
+using QES_KUKA_AMR_API.Services.Auth;
 using QES_KUKA_AMR_API.Services.Login;
 using QES_KUKA_AMR_API.Services.Missions;
 using QES_KUKA_AMR_API.Services.MissionTypes;
@@ -38,6 +42,39 @@ builder.Services.AddCors(options =>
               .AllowAnyHeader();
     });
 });
+
+// Configure JWT Authentication
+builder.Services.Configure<JwtOptions>(
+    builder.Configuration.GetSection("Jwt"));
+
+var jwtOptions = builder.Configuration.GetSection("Jwt").Get<JwtOptions>();
+if (jwtOptions == null || string.IsNullOrWhiteSpace(jwtOptions.SecretKey))
+{
+    throw new InvalidOperationException("JWT configuration is missing or invalid");
+}
+
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(options =>
+{
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuerSigningKey = true,
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.SecretKey)),
+        ValidateIssuer = true,
+        ValidIssuer = jwtOptions.Issuer,
+        ValidateAudience = true,
+        ValidAudience = jwtOptions.Audience,
+        ValidateLifetime = true,
+        ClockSkew = TimeSpan.Zero
+    };
+});
+
+builder.Services.AddAuthorization();
 
 builder.Services.AddControllers();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
@@ -109,6 +146,10 @@ builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IRoleService, RoleService>();
 builder.Services.AddScoped<IRobotAnalyticsService, RobotAnalyticsService>();
 
+// Authentication Services
+builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddSingleton<IExternalApiTokenService, ExternalApiTokenService>();
+
 // WorkflowAnalyticsService needs HttpClient configured with base address
 builder.Services.AddHttpClient<IWorkflowAnalyticsService, WorkflowAnalyticsService>(client =>
 {
@@ -142,6 +183,7 @@ app.UseSwaggerUI();
 
 app.UseCors();
 
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
