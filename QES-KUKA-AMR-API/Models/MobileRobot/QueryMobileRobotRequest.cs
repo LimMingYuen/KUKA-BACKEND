@@ -2,7 +2,7 @@
 
 public class QueryMobileRobotRequest
 {
-    public object Query { get; set; } = new { }; // Changed to object to accept {} or filters
+    public List<string>? Query { get; set; } = new List<string>(); // Must be List<string> to match simulator API
     public int PageNum { get; set; } = 1;
     public int PageSize { get; set; } = 100000;
     public string OrderBy { get; set; } = "lastUpdateTime";
