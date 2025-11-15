@@ -10,6 +10,7 @@ using QES_KUKA_AMR_API.Data.Entities;
 using QES_KUKA_AMR_API.Models.Config;
 using QES_KUKA_AMR_API.Models.MapZone;
 using QES_KUKA_AMR_API.Options;
+using QES_KUKA_AMR_API.Services.Auth;
 
 namespace QES_KUKA_AMR_API.Controllers;
 
@@ -24,38 +25,25 @@ public class MapZonesController : ControllerBase
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<MapZonesController> _logger;
     private readonly MapZoneServiceOptions _mapZoneOptions;
+    private readonly IExternalApiTokenService _externalApiTokenService;
 
     public MapZonesController(
         ApplicationDbContext dbContext,
         IHttpClientFactory httpClientFactory,
         ILogger<MapZonesController> logger,
-        IOptions<MapZoneServiceOptions> mapZoneOptions)
+        IOptions<MapZoneServiceOptions> mapZoneOptions,
+        IExternalApiTokenService externalApiTokenService)
     {
         _dbContext = dbContext;
         _httpClientFactory = httpClientFactory;
         _logger = logger;
         _mapZoneOptions = mapZoneOptions.Value;
+        _externalApiTokenService = externalApiTokenService;
     }
 
     [HttpPost("sync")]
     public async Task<ActionResult<MapZoneSyncResultDto>> SyncAsync(CancellationToken cancellationToken)
     {
-        if (!AuthenticationHeaderValue.TryParse(Request.Headers.Authorization, out var authHeader) ||
-            string.IsNullOrWhiteSpace(authHeader.Parameter))
-        {
-            return StatusCode(StatusCodes.Status401Unauthorized, new
-            {
-                Code = StatusCodes.Status401Unauthorized,
-                Message = "Missing or invalid Authorization header."
-            });
-        }
-
-        var token = authHeader.Parameter;
-        if (token.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
-        {
-            token = token.Substring(7).Trim();
-        }
-
         if (string.IsNullOrWhiteSpace(_mapZoneOptions.MapZoneListUrl) ||
             !Uri.TryCreate(_mapZoneOptions.MapZoneListUrl, UriKind.Absolute, out var requestUri))
         {
@@ -64,6 +52,23 @@ public class MapZonesController : ControllerBase
             {
                 Code = StatusCodes.Status500InternalServerError,
                 Message = "Map Zone list URL is not configured."
+            });
+        }
+
+        // Get token for external API authentication
+        string token;
+        try
+        {
+            token = await _externalApiTokenService.GetTokenAsync(cancellationToken);
+            _logger.LogInformation("Successfully obtained external API token");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to obtain external API token");
+            return StatusCode(StatusCodes.Status502BadGateway, new
+            {
+                Code = StatusCodes.Status502BadGateway,
+                Message = "Failed to authenticate with external API."
             });
         }
 
@@ -87,13 +92,9 @@ public class MapZonesController : ControllerBase
         apiRequest.Headers.Add("accept", "*/*");
         apiRequest.Headers.Add("wizards", "FRONT_END");
 
-        if (Request.Headers.TryGetValue("Cookie", out var cookies))
-        {
-            apiRequest.Headers.Add("Cookie", cookies.ToString());
-        }
-
         _logger.LogInformation("=== Map Zone Sync Request Debug ===");
         _logger.LogInformation("Target URI: {Uri}", requestUri);
+        _logger.LogInformation("Token Length: {Length}", token.Length);
         _logger.LogInformation("=== End Request Debug ===");
 
         try

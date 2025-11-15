@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using QES_KUKA_AMR_API.Models.Missions;
 using QES_KUKA_AMR_API.Options;
+using QES_KUKA_AMR_API.Services.Auth;
 
 namespace QES_KUKA_AMR_API.Controllers;
 
@@ -14,15 +15,18 @@ public class MissionDataController : ControllerBase
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<MissionDataController> _logger;
     private readonly MissionListServiceOptions _missionListOptions;
+    private readonly IExternalApiTokenService _externalApiTokenService;
 
     public MissionDataController(
         IHttpClientFactory httpClientFactory,
         ILogger<MissionDataController> logger,
-        IOptions<MissionListServiceOptions> missionListOptions)
+        IOptions<MissionListServiceOptions> missionListOptions,
+        IExternalApiTokenService externalApiTokenService)
     {
         _httpClientFactory = httpClientFactory;
         _logger = logger;
         _missionListOptions = missionListOptions.Value;
+        _externalApiTokenService = externalApiTokenService;
     }
 
     [HttpPost("mission/list")]
@@ -32,20 +36,6 @@ public class MissionDataController : ControllerBase
     {
         try
         {
-            // Extract JWT token from request header
-            if (!AuthenticationHeaderValue.TryParse(Request.Headers.Authorization, out var authHeader) ||
-                string.IsNullOrWhiteSpace(authHeader.Parameter))
-            {
-                return StatusCode(StatusCodes.Status401Unauthorized, new
-                {
-                    success = false,
-                    code = "401",
-                    message = "Unauthorized: Missing or invalid authorization token"
-                });
-            }
-
-            var token = authHeader.Parameter;
-
             // Validate configuration
             if (string.IsNullOrEmpty(_missionListOptions.MissionListUrl))
             {
@@ -55,6 +45,24 @@ public class MissionDataController : ControllerBase
                     success = false,
                     code = "500",
                     message = "Service configuration error"
+                });
+            }
+
+            // Get token for external API authentication
+            string token;
+            try
+            {
+                token = await _externalApiTokenService.GetTokenAsync(cancellationToken);
+                _logger.LogInformation("Successfully obtained external API token");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to obtain external API token");
+                return StatusCode(StatusCodes.Status502BadGateway, new
+                {
+                    success = false,
+                    code = "502",
+                    message = "Failed to authenticate with external API."
                 });
             }
 

@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using QES_KUKA_AMR_API.Models.Config;
 using QES_KUKA_AMR_API.Options;
+using QES_KUKA_AMR_API.Services.Auth;
 
 namespace QES_KUKA_AMR_API.Controllers;
 
@@ -16,15 +17,18 @@ public class ConfigController : ControllerBase
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<ConfigController> _logger;
     private readonly MissionServiceOptions _missionOptions;
+    private readonly IExternalApiTokenService _externalApiTokenService;
 
     public ConfigController(
         IHttpClientFactory httpClientFactory,
         ILogger<ConfigController> logger,
-        IOptions<MissionServiceOptions> missionOptions)
+        IOptions<MissionServiceOptions> missionOptions,
+        IExternalApiTokenService externalApiTokenService)
     {
         _httpClientFactory = httpClientFactory;
         _logger = logger;
         _missionOptions = missionOptions.Value;
+        _externalApiTokenService = externalApiTokenService;
     }
 
     [HttpPost("queryWorkflowDiagrams")]
@@ -32,24 +36,6 @@ public class ConfigController : ControllerBase
         [FromBody] QueryWorkflowDiagramsRequest request,
         CancellationToken cancellationToken)
     {
-        if (!AuthenticationHeaderValue.TryParse(Request.Headers.Authorization, out var authHeader) ||
-            string.IsNullOrWhiteSpace(authHeader.Parameter))
-        {
-            return StatusCode(StatusCodes.Status401Unauthorized, new SimulatorApiResponse<WorkflowDiagramPage>
-            {
-                Code = StatusCodes.Status401Unauthorized,
-                Msg = "Missing or invalid Authorization header.",
-                Succ = false
-            });
-        }
-
-        // Strip "Bearer " prefix if it was accidentally included in the parameter
-        var token = authHeader.Parameter;
-        if (token.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
-        {
-            token = token.Substring(7).Trim();
-        }
-
         if (string.IsNullOrWhiteSpace(_missionOptions.WorkflowQueryUrl) ||
             !Uri.TryCreate(_missionOptions.WorkflowQueryUrl, UriKind.Absolute, out var requestUri))
         {
@@ -59,6 +45,24 @@ public class ConfigController : ControllerBase
             {
                 Code = StatusCodes.Status500InternalServerError,
                 Msg = "Workflow query URL is not configured.",
+                Succ = false
+            });
+        }
+
+        // Get token for external API authentication
+        string token;
+        try
+        {
+            token = await _externalApiTokenService.GetTokenAsync(cancellationToken);
+            _logger.LogInformation("Successfully obtained external API token");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to obtain external API token");
+            return StatusCode(StatusCodes.Status502BadGateway, new SimulatorApiResponse<WorkflowDiagramPage>
+            {
+                Code = StatusCodes.Status502BadGateway,
+                Msg = "Failed to authenticate with external API.",
                 Succ = false
             });
         }
