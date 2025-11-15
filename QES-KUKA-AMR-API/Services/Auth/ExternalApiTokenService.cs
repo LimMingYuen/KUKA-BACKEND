@@ -81,7 +81,14 @@ public class ExternalApiTokenService : IExternalApiTokenService
 
             if (response.Body?.Success == true && response.Body.Data?.Token != null)
             {
-                _cachedToken = response.Body.Data.Token;
+                // Strip "Bearer " prefix if present (simulator returns token with "Bearer " prefix)
+                var token = response.Body.Data.Token;
+                if (token.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+                {
+                    token = token.Substring(7);
+                }
+
+                _cachedToken = token;
                 _tokenExpiresAt = _timeProvider.GetUtcNow().AddMinutes(TokenValidityMinutes).UtcDateTime;
 
                 _logger.LogInformation(
