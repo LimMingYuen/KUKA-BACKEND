@@ -9,6 +9,7 @@ using QES_KUKA_AMR_API.Data.Entities;
 using QES_KUKA_AMR_API.Models.Config;
 using QES_KUKA_AMR_API.Models.QrCode;
 using QES_KUKA_AMR_API.Options;
+using QES_KUKA_AMR_API.Services.Auth;
 
 namespace QES_KUKA_AMR_API.Controllers;
 
@@ -23,39 +24,25 @@ public class QrCodesController : ControllerBase
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<QrCodesController> _logger;
     private readonly QrCodeServiceOptions _qrCodeOptions;
+    private readonly IExternalApiTokenService _externalApiTokenService;
 
     public QrCodesController(
         ApplicationDbContext dbContext,
         IHttpClientFactory httpClientFactory,
         ILogger<QrCodesController> logger,
-        IOptions<QrCodeServiceOptions> qrCodeOptions)
+        IOptions<QrCodeServiceOptions> qrCodeOptions,
+        IExternalApiTokenService externalApiTokenService)
     {
         _dbContext = dbContext;
         _httpClientFactory = httpClientFactory;
         _logger = logger;
         _qrCodeOptions = qrCodeOptions.Value;
+        _externalApiTokenService = externalApiTokenService;
     }
 
     [HttpPost("sync")]
     public async Task<ActionResult<QrCodeSyncResultDto>> SyncAsync(CancellationToken cancellationToken)
     {
-        if (!AuthenticationHeaderValue.TryParse(Request.Headers.Authorization, out var authHeader) ||
-            string.IsNullOrWhiteSpace(authHeader.Parameter))
-        {
-            return StatusCode(StatusCodes.Status401Unauthorized, new
-            {
-                Code = StatusCodes.Status401Unauthorized,
-                Message = "Missing or invalid Authorization header."
-            });
-        }
-
-        // Strip "Bearer " prefix if it was accidentally included in the parameter
-        var token = authHeader.Parameter;
-        if (token.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
-        {
-            token = token.Substring(7).Trim();
-        }
-
         if (string.IsNullOrWhiteSpace(_qrCodeOptions.QrCodeListUrl) ||
             !Uri.TryCreate(_qrCodeOptions.QrCodeListUrl, UriKind.Absolute, out var requestUri))
         {
@@ -64,6 +51,23 @@ public class QrCodesController : ControllerBase
             {
                 Code = StatusCodes.Status500InternalServerError,
                 Message = "QR Code list URL is not configured."
+            });
+        }
+
+        // Get token for external API authentication
+        string token;
+        try
+        {
+            token = await _externalApiTokenService.GetTokenAsync(cancellationToken);
+            _logger.LogInformation("Successfully obtained external API token");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to obtain external API token");
+            return StatusCode(StatusCodes.Status502BadGateway, new
+            {
+                Code = StatusCodes.Status502BadGateway,
+                Message = "Failed to authenticate with external API."
             });
         }
 
@@ -88,17 +92,10 @@ public class QrCodesController : ControllerBase
         apiRequest.Headers.Add("accept", "*/*");
         apiRequest.Headers.Add("wizards", "FRONT_END");
 
-        // Forward any cookies from the original request
-        if (Request.Headers.TryGetValue("Cookie", out var cookies))
-        {
-            apiRequest.Headers.Add("Cookie", cookies.ToString());
-        }
-
         // Log request details for debugging
         _logger.LogInformation("=== QR Code Sync Request Debug ===");
         _logger.LogInformation("Target URI: {Uri}", requestUri);
-        _logger.LogInformation("Auth Scheme: {Scheme}", authHeader.Scheme);
-        _logger.LogInformation("Cleaned Token: {Token}", token);
+        _logger.LogInformation("Token Length: {Length}", token.Length);
         _logger.LogInformation("=== End Request Debug ===");
 
         try

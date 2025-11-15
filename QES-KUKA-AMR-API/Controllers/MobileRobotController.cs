@@ -7,6 +7,7 @@ using QES_KUKA_AMR_API.Models.Config;
 using QES_KUKA_AMR_API.Models.MapZone;
 using QES_KUKA_AMR_API.Models.MobileRobot;
 using QES_KUKA_AMR_API.Options;
+using QES_KUKA_AMR_API.Services.Auth;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
@@ -23,17 +24,20 @@ public class MobileRobotController : ControllerBase
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<MobileRobotController> _logger;
     private readonly MobileRobotServiceOptions _mobileRobotOptions;
+    private readonly IExternalApiTokenService _externalApiTokenService;
 
     public MobileRobotController(
         ApplicationDbContext dbContext,
         IHttpClientFactory httpClientFactory,
         ILogger<MobileRobotController> logger,
-        IOptions<MobileRobotServiceOptions> mobileRobotOptions)
+        IOptions<MobileRobotServiceOptions> mobileRobotOptions,
+        IExternalApiTokenService externalApiTokenService)
     {
         _dbContext = dbContext;
         _httpClientFactory = httpClientFactory;
         _logger = logger;
         _mobileRobotOptions = mobileRobotOptions.Value;
+        _externalApiTokenService = externalApiTokenService;
     }
 
     [HttpPost("sync")]
@@ -41,21 +45,6 @@ public class MobileRobotController : ControllerBase
         [FromBody] QueryMobileRobotRequest? request,
         CancellationToken cancellationToken)
     {
-        if(!AuthenticationHeaderValue.TryParse(Request.Headers.Authorization, out var authHeader) || string.IsNullOrWhiteSpace(authHeader.Parameter))
-        {
-            return StatusCode(StatusCodes.Status401Unauthorized, new
-            {
-                Code = StatusCodes.Status401Unauthorized,
-                Message = "Missing or invalid Authorization header."
-            });
-        }
-
-        var token = authHeader.Parameter;
-        if (token.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
-        {
-            token = token.Substring(7).Trim();
-        }
-
         if (string.IsNullOrWhiteSpace(_mobileRobotOptions.MobileRobotListUrl) ||
             !Uri.TryCreate(_mobileRobotOptions.MobileRobotListUrl, UriKind.Absolute, out var requestUri))
         {
@@ -64,6 +53,23 @@ public class MobileRobotController : ControllerBase
             {
                 Code = StatusCodes.Status500InternalServerError,
                 Message = "Mobile Robot list URL is not configured."
+            });
+        }
+
+        // Get token for external API authentication
+        string token;
+        try
+        {
+            token = await _externalApiTokenService.GetTokenAsync(cancellationToken);
+            _logger.LogInformation("Successfully obtained external API token");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to obtain external API token");
+            return StatusCode(StatusCodes.Status502BadGateway, new
+            {
+                Code = StatusCodes.Status502BadGateway,
+                Message = "Failed to authenticate with external API."
             });
         }
 
@@ -93,13 +99,9 @@ public class MobileRobotController : ControllerBase
         apiRequest.Headers.Add("accept", "*/*");
         apiRequest.Headers.Add("wizards", "FRONT_END");
 
-        if (Request.Headers.TryGetValue("Cookie", out var cookies))
-        {
-            apiRequest.Headers.Add("Cookie", cookies.ToString());
-        }
-
         _logger.LogInformation("=== Mobile Robot Sync Request Debug ===");
         _logger.LogInformation("Target URI: {Uri}", requestUri);
+        _logger.LogInformation("Token Length: {Length}", token.Length);
         _logger.LogInformation("=== End Request Debug ===");
 
         try
