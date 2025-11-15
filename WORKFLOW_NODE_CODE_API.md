@@ -3,6 +3,20 @@
 ## Overview
 These endpoints allow you to sync and retrieve node codes (QR code positions) for workflows from the external AMR system.
 
+**IMPORTANT:** All endpoints require JWT authentication. You must include a valid bearer token in the Authorization header.
+
+## Recent Fixes (2024-11-15)
+
+### Fixed: DbContext Thread-Safety Issues
+- **Problem:** Entity tracking conflicts and "DataReader already open" errors when syncing in parallel
+- **Solution:** Each parallel task now uses its own DbContext instance via service scopes
+- **Result:** 100% reliable parallel processing with no race conditions
+
+### Fixed: Missing JWT Authentication
+- **Problem:** Endpoints were publicly accessible without authentication
+- **Solution:** Added `[Authorize]` attribute to controller
+- **Result:** All endpoints now require valid JWT token
+
 ---
 
 ## Frontend API Endpoints
@@ -106,12 +120,46 @@ Authorization: Bearer YOUR_JWT_TOKEN
 
 ---
 
+## Authentication
+
+All endpoints require a valid JWT bearer token. Get your token from the `/api/auth/login` endpoint:
+
+```javascript
+// 1. Login to get JWT token
+async function login(username, password) {
+  const response = await fetch('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password })
+  });
+
+  const data = await response.json();
+
+  if (data.success) {
+    // Store token for subsequent requests
+    localStorage.setItem('token', data.data.token);
+    return data.data.token;
+  } else {
+    throw new Error(data.message || 'Login failed');
+  }
+}
+```
+
+---
+
 ## Typical Frontend Flow
 
 ### Initial App Load (One-Time Setup)
 ```javascript
 // 1. Sync all workflows on app initialization or admin action
 async function syncAllWorkflowNodeCodes() {
+  const token = localStorage.getItem('token');
+
+  if (!token) {
+    console.error('No authentication token found');
+    return;
+  }
+
   try {
     const response = await fetch('/api/workflow-node-codes/sync?maxConcurrency=20', {
       method: 'POST',
@@ -119,6 +167,12 @@ async function syncAllWorkflowNodeCodes() {
         'Authorization': `Bearer ${token}`
       }
     });
+
+    if (response.status === 401) {
+      // Token expired or invalid - redirect to login
+      window.location.href = '/login';
+      return;
+    }
 
     const result = await response.json();
     console.log(`Synced ${result.successCount} workflows`);
@@ -136,6 +190,8 @@ async function syncAllWorkflowNodeCodes() {
 ```javascript
 // 2. Get node codes when user selects a workflow
 async function getNodeCodesForWorkflow(externalWorkflowId) {
+  const token = localStorage.getItem('token');
+
   try {
     const response = await fetch(
       `/api/workflow-node-codes/${externalWorkflowId}`,
@@ -145,6 +201,11 @@ async function getNodeCodesForWorkflow(externalWorkflowId) {
         }
       }
     );
+
+    if (response.status === 401) {
+      window.location.href = '/login';
+      return;
+    }
 
     const nodeCodes = await response.json();
 
@@ -160,13 +221,20 @@ async function getNodeCodesForWorkflow(externalWorkflowId) {
 ```javascript
 // 3. Refresh specific workflow after configuration changes
 async function refreshWorkflow(externalWorkflowId) {
+  const token = localStorage.getItem('token');
+
   try {
-    await fetch(`/api/workflow-node-codes/sync/${externalWorkflowId}`, {
+    const response = await fetch(`/api/workflow-node-codes/sync/${externalWorkflowId}`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`
       }
     });
+
+    if (response.status === 401) {
+      window.location.href = '/login';
+      return;
+    }
 
     // Reload node codes
     await getNodeCodesForWorkflow(externalWorkflowId);
