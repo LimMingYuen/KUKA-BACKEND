@@ -5481,5 +5481,33 @@ namespace QES_KUKA_AMR_API_Simulator.Controllers
 
             return Ok(response);
         }
+
+        [HttpGet("queryNodeCodesByWorkflowConfig")]
+        [HttpGet("~/wcs/api/config/queryNodeCodesByWorkflowConfig")]
+        public ActionResult<ApiResponse<List<string>>> QueryNodeCodesByWorkflowConfig([FromQuery] int workflowConfigId)
+        {
+            // Sample data mapping workflowConfigId to node codes
+            var nodeCodesMap = new Dictionary<int, List<string>>
+            {
+                { 1, new List<string> { "Sim1-1-1", "Sim1-1-2", "Sim1-1-3", "Sim1-1-14", "Sim1-1-34", "Sim1-1-33", "Sim1-1-19", "Sim1-1-20", "Sim1-1-24", "Sim1-1-25", "Sim1-1-37", "Sim1-1-38" } },
+                { 2, new List<string> { "Sim1-1-5", "Sim1-1-6", "Sim1-1-7", "Sim1-1-8" } },
+                { 3, new List<string> { "Sim1-1-9", "Sim1-1-10", "Sim1-1-11" } },
+                { 4, new List<string> { "Sim1-1-12", "Sim1-1-13", "Sim1-1-15", "Sim1-1-16" } }
+            };
+
+            var nodeCodes = nodeCodesMap.ContainsKey(workflowConfigId)
+                ? nodeCodesMap[workflowConfigId]
+                : new List<string>();
+
+            var response = new ApiResponse<List<string>>
+            {
+                Code = 0,
+                Msg = "SUCCESS",
+                Succ = true,
+                Data = nodeCodes
+            };
+
+            return Ok(response);
+        }
     }
 }
