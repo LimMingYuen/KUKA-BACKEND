@@ -203,6 +203,7 @@ public class MapZonesController : ControllerBase
                 updated++;
             }
 
+            entity.ExternalMapZoneId = mapZone.Id;
             entity.CreateTime = ParseDateTime(mapZone.CreateTime) ??
                                 (entity.CreateTime == default ? DateTime.UtcNow : entity.CreateTime);
             entity.CreateBy = mapZone.CreateBy ?? string.Empty;

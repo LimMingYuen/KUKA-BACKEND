@@ -10,6 +10,11 @@ public class QrCode
     [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
     public int Id { get; set; }
 
+    /// <summary>
+    /// The QR code ID from the external AMR system API
+    /// </summary>
+    public int? ExternalQrCodeId { get; set; }
+
     [Required]
     public DateTime CreateTime { get; set; }
 

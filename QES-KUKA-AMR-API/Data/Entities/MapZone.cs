@@ -10,6 +10,11 @@ public class MapZone
     [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
     public int Id { get; set; }
 
+    /// <summary>
+    /// The map zone ID from the external AMR system API
+    /// </summary>
+    public int? ExternalMapZoneId { get; set; }
+
     [Required]
     public DateTime CreateTime { get; set; }
 
