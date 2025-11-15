@@ -3,6 +3,23 @@
 ## Overview
 These endpoints allow you to sync and retrieve node codes (QR code positions) for workflows from the external AMR system.
 
+**IMPORTANT:** All endpoints require JWT authentication. You must include a valid bearer token in the Authorization header.
+
+## Recent Updates (2024-11-15)
+
+### ✅ Simplified to Sequential Processing
+- **Change:** Workflows are now synced **one by one sequentially** instead of in parallel
+- **Reason:** Simpler, more reliable, and eliminates all concurrency complexity
+- **Benefit:** No thread-safety issues, easier to debug, and progress tracking shows "X/Total"
+
+### ✅ Fixed: DbContext Thread-Safety
+- **Solution:** Each workflow sync gets its own DbContext instance via service scopes
+- **Result:** Zero entity tracking conflicts or connection issues
+
+### ✅ Added: JWT Authentication
+- **Solution:** Added `[Authorize]` attribute to controller
+- **Result:** All endpoints now require valid JWT token for security
+
 ---
 
 ## Frontend API Endpoints
@@ -10,12 +27,11 @@ These endpoints allow you to sync and retrieve node codes (QR code positions) fo
 ### 1. Sync All Workflows (Recommended for Initial Load)
 **Endpoint:** `POST /api/workflow-node-codes/sync`
 
-**Query Parameters:**
-- `maxConcurrency` (optional): Number of concurrent API calls (default: 10, max: 50)
+**Processing:** Workflows are synced **sequentially** (one by one) for maximum reliability.
 
 **Example Request:**
 ```http
-POST http://localhost:5109/api/workflow-node-codes/sync?maxConcurrency=20
+POST http://localhost:5109/api/workflow-node-codes/sync
 Authorization: Bearer YOUR_JWT_TOKEN
 ```
 
@@ -106,25 +122,66 @@ Authorization: Bearer YOUR_JWT_TOKEN
 
 ---
 
+## Authentication
+
+All endpoints require a valid JWT bearer token. Get your token from the `/api/auth/login` endpoint:
+
+```javascript
+// 1. Login to get JWT token
+async function login(username, password) {
+  const response = await fetch('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password })
+  });
+
+  const data = await response.json();
+
+  if (data.success) {
+    // Store token for subsequent requests
+    localStorage.setItem('token', data.data.token);
+    return data.data.token;
+  } else {
+    throw new Error(data.message || 'Login failed');
+  }
+}
+```
+
+---
+
 ## Typical Frontend Flow
 
 ### Initial App Load (One-Time Setup)
 ```javascript
 // 1. Sync all workflows on app initialization or admin action
 async function syncAllWorkflowNodeCodes() {
+  const token = localStorage.getItem('token');
+
+  if (!token) {
+    console.error('No authentication token found');
+    return;
+  }
+
   try {
-    const response = await fetch('/api/workflow-node-codes/sync?maxConcurrency=20', {
+    const response = await fetch('/api/workflow-node-codes/sync', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`
       }
     });
 
+    if (response.status === 401) {
+      // Token expired or invalid - redirect to login
+      window.location.href = '/login';
+      return;
+    }
+
     const result = await response.json();
-    console.log(`Synced ${result.successCount} workflows`);
+    console.log(`Synced ${result.successCount}/${result.totalWorkflows} workflows`);
+    console.log(`Inserted: ${result.nodeCodesInserted}, Deleted: ${result.nodeCodesDeleted}`);
 
     if (result.failureCount > 0) {
-      console.warn('Some workflows failed:', result.errors);
+      console.warn(`${result.failureCount} workflows failed:`, result.errors);
     }
   } catch (error) {
     console.error('Sync failed:', error);
@@ -136,6 +193,8 @@ async function syncAllWorkflowNodeCodes() {
 ```javascript
 // 2. Get node codes when user selects a workflow
 async function getNodeCodesForWorkflow(externalWorkflowId) {
+  const token = localStorage.getItem('token');
+
   try {
     const response = await fetch(
       `/api/workflow-node-codes/${externalWorkflowId}`,
@@ -145,6 +204,11 @@ async function getNodeCodesForWorkflow(externalWorkflowId) {
         }
       }
     );
+
+    if (response.status === 401) {
+      window.location.href = '/login';
+      return;
+    }
 
     const nodeCodes = await response.json();
 
@@ -160,13 +224,20 @@ async function getNodeCodesForWorkflow(externalWorkflowId) {
 ```javascript
 // 3. Refresh specific workflow after configuration changes
 async function refreshWorkflow(externalWorkflowId) {
+  const token = localStorage.getItem('token');
+
   try {
-    await fetch(`/api/workflow-node-codes/sync/${externalWorkflowId}`, {
+    const response = await fetch(`/api/workflow-node-codes/sync/${externalWorkflowId}`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`
       }
     });
+
+    if (response.status === 401) {
+      window.location.href = '/login';
+      return;
+    }
 
     // Reload node codes
     await getNodeCodesForWorkflow(externalWorkflowId);
@@ -184,11 +255,13 @@ async function refreshWorkflow(externalWorkflowId) {
 
 2. **ExternalWorkflowId**: This is NOT the local database workflow ID, it's the ID from the external AMR system (stored in `WorkflowDiagram.ExternalWorkflowId`)
 
-3. **Rate Limiting**: The sync endpoint processes requests in parallel with concurrency control to avoid overloading the external API
+3. **Sequential Processing**: Workflows are synced one by one for maximum reliability. The sync shows progress in logs: "Syncing workflow 1/301", "Syncing workflow 2/301", etc.
 
 4. **Data Freshness**: Node codes are cached in the database. Call sync endpoints to refresh data from the external system
 
 5. **Error Handling**: Always check the response for errors and handle failed syncs appropriately
+
+6. **Sync Duration**: For 301 workflows, expect the full sync to take a few minutes since it processes sequentially
 
 ---
 
