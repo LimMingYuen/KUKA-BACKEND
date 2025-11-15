@@ -36,7 +36,7 @@ public class ApplicationDbContext : DbContext
 
     public DbSet<RobotManualPause> RobotManualPauses => Set<RobotManualPause>();
 
-
+    public DbSet<User> Users => Set<User>();
 
 
 
@@ -165,7 +165,22 @@ public class ApplicationDbContext : DbContext
             entity.HasIndex(e => new { e.RobotId, e.PauseStartUtc });
             entity.HasIndex(e => new { e.MissionCode, e.PauseStartUtc });
         });
-     
+
+        modelBuilder.Entity<User>(entity =>
+        {
+            entity.ToTable("Users");
+            entity.HasIndex(e => e.Username).IsUnique();
+            entity.Property(e => e.Username).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.Nickname).HasMaxLength(100);
+            entity.Property(e => e.RolesJson).HasColumnType("nvarchar(max)");
+            entity.Property(e => e.CreateTime).HasColumnType("datetime2");
+            entity.Property(e => e.LastUpdateTime).HasColumnType("datetime2");
+            entity.Property(e => e.CreateBy).HasMaxLength(100);
+            entity.Property(e => e.CreateApp).HasMaxLength(100);
+            entity.Property(e => e.LastUpdateBy).HasMaxLength(100);
+            entity.Property(e => e.LastUpdateApp).HasMaxLength(100);
+        });
+
         modelBuilder.Entity<SystemSetting>(entity =>
         {
             entity.ToTable("SystemSetting");
