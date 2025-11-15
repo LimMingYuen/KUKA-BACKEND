@@ -15,6 +15,10 @@ public class User
     [MaxLength(100)]
     public string Username { get; set; } = string.Empty;
 
+    [Required]
+    [MaxLength(255)]
+    public string PasswordHash { get; set; } = string.Empty;
+
     [MaxLength(100)]
     public string? Nickname { get; set; }
 
