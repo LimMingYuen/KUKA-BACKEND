@@ -40,13 +40,7 @@ public class ApplicationDbContext : DbContext
 
 
 
-    public DbSet<User> Users => Set<User>();
 
-    public DbSet<Role> Roles => Set<Role>();
-
-    public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
-
-    public DbSet<Page> Pages => Set<Page>();
 
     public DbSet<SystemSetting> SystemSettings => Set<SystemSetting>();
 
@@ -171,31 +165,7 @@ public class ApplicationDbContext : DbContext
             entity.HasIndex(e => new { e.RobotId, e.PauseStartUtc });
             entity.HasIndex(e => new { e.MissionCode, e.PauseStartUtc });
         });
-
-
-
-
-
-        modelBuilder.Entity<User>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.CreateTime).HasColumnType("datetime2");
-            entity.Property(e => e.LastUpdateTime).HasColumnType("datetime2");
-            entity.HasIndex(e => e.Username).IsUnique();
-        });
-
-        modelBuilder.Entity<Role>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.HasIndex(e => e.RoleCode).IsUnique();
-        });
-
-        modelBuilder.Entity<RolePermission>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.HasIndex(e => new { e.RoleId, e.PageId }).IsUnique();
-        });
-
+     
         modelBuilder.Entity<SystemSetting>(entity =>
         {
             entity.ToTable("SystemSetting");
@@ -203,13 +173,6 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.Key).HasMaxLength(100).IsRequired();
             entity.Property(e => e.Value).HasMaxLength(255).IsRequired();
             entity.Property(e => e.LastUpdated).HasColumnType("datetime2");
-        });
-
-        modelBuilder.Entity<Page>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.CreatedAt).HasColumnType("datetime2");
-            entity.HasIndex(e => e.PagePath).IsUnique();
         });
     }
 }
