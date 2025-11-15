@@ -188,6 +188,13 @@ app.UseAuthorization();
 
 app.MapControllers();
 
+// Seed database with default admin user
+using (var scope = app.Services.CreateScope())
+{
+    var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    await DbInitializer.SeedAsync(context);
+}
+
 app.Run();
 
 public partial class Program;
