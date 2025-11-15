@@ -46,6 +46,17 @@ public interface IWorkflowNodeCodeService
     Task<WorkflowZoneClassification?> ClassifyWorkflowByZoneAsync(
         int externalWorkflowId,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Syncs workflow node codes from external API and immediately classifies the workflow by zone.
+    /// This is a convenience method that combines sync + classify in one call.
+    /// </summary>
+    /// <param name="externalWorkflowId">The external workflow ID</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Zone classification result after sync, or null if sync failed or no zone match</returns>
+    Task<WorkflowZoneClassification?> SyncAndClassifyWorkflowAsync(
+        int externalWorkflowId,
+        CancellationToken cancellationToken = default);
 }
 
 /// <summary>

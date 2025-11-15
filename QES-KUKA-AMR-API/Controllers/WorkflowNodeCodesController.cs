@@ -158,4 +158,47 @@ public class WorkflowNodeCodesController : ControllerBase
             });
         }
     }
+
+    /// <summary>
+    /// Syncs node codes from external API and immediately classifies the workflow by zone.
+    /// This combined operation ensures classification uses fresh data without requiring
+    /// separate sync and classify API calls.
+    /// </summary>
+    /// <param name="externalWorkflowId">The external workflow ID</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Zone classification result after sync, or 404 if sync failed or no zone found</returns>
+    [HttpPost("{externalWorkflowId}/sync-and-classify")]
+    public async Task<ActionResult<WorkflowZoneClassification>> SyncAndClassifyAsync(
+        int externalWorkflowId,
+        CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Sync and classify request for workflow {ExternalWorkflowId}", externalWorkflowId);
+
+        try
+        {
+            var classification = await _workflowNodeCodeService.SyncAndClassifyWorkflowAsync(
+                externalWorkflowId,
+                cancellationToken);
+
+            if (classification == null)
+            {
+                return NotFound(new
+                {
+                    Error = $"Failed to sync and classify workflow {externalWorkflowId}",
+                    Message = "Either the sync failed or the workflow's node codes do not match any zone's nodes"
+                });
+            }
+
+            return Ok(classification);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error syncing and classifying workflow {ExternalWorkflowId}", externalWorkflowId);
+            return StatusCode(StatusCodes.Status500InternalServerError, new
+            {
+                Error = $"Failed to sync and classify workflow {externalWorkflowId}",
+                Message = ex.Message
+            });
+        }
+    }
 }

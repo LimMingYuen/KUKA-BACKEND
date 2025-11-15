@@ -161,7 +161,40 @@ public class WorkflowNodeCodeService : IWorkflowNodeCodeService
     {
         using var scope = _serviceScopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        return await ClassifyWorkflowByZoneInternalAsync(externalWorkflowId, dbContext, cancellationToken);
+    }
 
+    public async Task<WorkflowZoneClassification?> SyncAndClassifyWorkflowAsync(
+        int externalWorkflowId,
+        CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Sync and classify workflow {ExternalWorkflowId}", externalWorkflowId);
+
+        using var scope = _serviceScopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        // Step 1: Sync node codes from external API
+        var syncResult = await SyncWorkflowNodeCodesInternalAsync(externalWorkflowId, dbContext, cancellationToken);
+
+        if (!syncResult.Success)
+        {
+            _logger.LogWarning("Sync failed for workflow {ExternalWorkflowId}: {Error}",
+                externalWorkflowId, syncResult.ErrorMessage);
+            return null;
+        }
+
+        _logger.LogInformation("Synced workflow {ExternalWorkflowId}: {Inserted} inserted, {Deleted} deleted",
+            externalWorkflowId, syncResult.NodeCodesInserted, syncResult.NodeCodesDeleted);
+
+        // Step 2: Classify by zone using the freshly synced data
+        return await ClassifyWorkflowByZoneInternalAsync(externalWorkflowId, dbContext, cancellationToken);
+    }
+
+    private async Task<WorkflowZoneClassification?> ClassifyWorkflowByZoneInternalAsync(
+        int externalWorkflowId,
+        ApplicationDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
         // Get workflow node codes in order (already sorted from external API)
         var workflowNodeCodes = await dbContext.WorkflowNodeCodes
             .Where(wnc => wnc.ExternalWorkflowId == externalWorkflowId)
