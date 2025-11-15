@@ -260,18 +260,8 @@ public class SavedCustomMissionsController : ControllerBase
 
     private static SavedCustomMissionDto MapToDto(SavedCustomMission mission)
     {
-        var schedules = mission.Schedules ?? new List<SavedMissionSchedule>();
-        var activeSchedules = schedules.Where(s => s.IsEnabled).ToList();
-        var nextRunUtc = activeSchedules
-            .Where(s => s.NextRunUtc.HasValue)
-            .Select(s => s.NextRunUtc!.Value)
-            .OrderBy(dt => dt)
-            .FirstOrDefault();
-
-        var lastRun = schedules
-            .Where(s => s.LastRunUtc.HasValue)
-            .OrderByDescending(s => s.LastRunUtc)
-            .FirstOrDefault();
+        // Schedule functionality removed - return default values
+        DateTime? nextRunUtc = null;
 
         return new SavedCustomMissionDto
         {
@@ -292,11 +282,11 @@ public class SavedCustomMissionsController : ControllerBase
             UpdatedUtc = mission.UpdatedUtc,
             ScheduleSummary = new SavedMissionScheduleSummaryDto
             {
-                TotalSchedules = schedules.Count,
-                ActiveSchedules = activeSchedules.Count,
-                NextRunUtc = nextRunUtc == default ? null : nextRunUtc,
-                LastStatus = lastRun?.LastStatus,
-                LastRunUtc = lastRun?.LastRunUtc
+                TotalSchedules = 0,
+                ActiveSchedules = 0,
+                NextRunUtc = null,
+                LastStatus = null,
+                LastRunUtc = null
             }
         };
     }

@@ -36,9 +36,7 @@ public class ApplicationDbContext : DbContext
 
     public DbSet<RobotManualPause> RobotManualPauses => Set<RobotManualPause>();
 
-    public DbSet<SavedMissionSchedule> SavedMissionSchedules => Set<SavedMissionSchedule>();
 
-    public DbSet<SavedMissionScheduleLog> SavedMissionScheduleLogs => Set<SavedMissionScheduleLog>();
 
     public DbSet<WorkflowSchedule> WorkflowSchedules => Set<WorkflowSchedule>();
 
@@ -176,26 +174,7 @@ public class ApplicationDbContext : DbContext
             entity.HasIndex(e => new { e.MissionCode, e.PauseStartUtc });
         });
 
-        modelBuilder.Entity<SavedMissionSchedule>(entity =>
-        {
-            entity.Property(e => e.CreatedUtc).HasColumnType("datetime2");
-            entity.Property(e => e.UpdatedUtc).HasColumnType("datetime2");
-            entity.Property(e => e.LastRunUtc).HasColumnType("datetime2");
-            entity.Property(e => e.NextRunUtc).HasColumnType("datetime2");
-            entity.Property(e => e.OneTimeRunUtc).HasColumnType("datetime2");
-            entity.HasIndex(e => new { e.SavedMissionId, e.IsEnabled });
-            entity.HasIndex(e => e.NextRunUtc);
-        });
 
-        modelBuilder.Entity<SavedMissionScheduleLog>(entity =>
-        {
-            entity.Property(e => e.ScheduledForUtc).HasColumnType("datetime2");
-            entity.Property(e => e.EnqueuedUtc).HasColumnType("datetime2");
-            entity.Property(e => e.CreatedUtc).HasColumnType("datetime2");
-            entity.HasIndex(e => e.ScheduleId);
-            entity.HasIndex(e => new { e.ScheduleId, e.CreatedUtc });  // Composite index for filtering by schedule
-            entity.HasIndex(e => new { e.SavedMissionId, e.CreatedUtc });  // Composite index for GetLogsAsync query without JOIN
-        });
 
         modelBuilder.Entity<WorkflowSchedule>(entity =>
         {

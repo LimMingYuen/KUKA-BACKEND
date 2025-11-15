@@ -118,13 +118,11 @@ builder.Services.AddScoped<IJobStatusClient, JobStatusClient>();
 
 
 builder.Services.AddScoped<IMissionListClient, MissionListClient>();
-builder.Services.AddScoped<ISavedMissionScheduleService, SavedMissionScheduleService>();
 builder.Services.AddScoped<IWorkflowScheduleService, WorkflowScheduleService>();
 builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
 
 // Mission Queue Services
 
-builder.Services.AddHostedService<SavedMissionSchedulerBackgroundService>();
 builder.Services.AddHostedService<WorkflowSchedulerBackgroundService>();
 
 // Log Cleanup Services
