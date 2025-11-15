@@ -5486,14 +5486,23 @@ namespace QES_KUKA_AMR_API_Simulator.Controllers
         [HttpGet("~/wcs/api/config/queryNodeCodesByWorkflowConfig")]
         public ActionResult<ApiResponse<List<string>>> QueryNodeCodesByWorkflowConfig([FromQuery] int workflowConfigId)
         {
-            // Sample data mapping workflowConfigId to node codes
-            var nodeCodesMap = new Dictionary<int, List<string>>
+            // Define the repeating pattern for each of the 4 positions
+            var pattern = new List<List<string>>
             {
-                { 1, new List<string> { "Sim1-1-1", "Sim1-1-2", "Sim1-1-3", "Sim1-1-14", "Sim1-1-34", "Sim1-1-33", "Sim1-1-19", "Sim1-1-20", "Sim1-1-24", "Sim1-1-25", "Sim1-1-37", "Sim1-1-38" } },
-                { 2, new List<string> { "Sim1-1-5", "Sim1-1-6", "Sim1-1-7", "Sim1-1-8" } },
-                { 3, new List<string> { "Sim1-1-9", "Sim1-1-10", "Sim1-1-11" } },
-                { 4, new List<string> { "Sim1-1-12", "Sim1-1-13", "Sim1-1-15", "Sim1-1-16" } }
+                new List<string> { "Sim1-1-1", "Sim1-1-19", "Sim1-1-20", "Sim1-1-24", "Sim1-1-25", "Sim1-1-37", "Sim1-1-38" },
+                new List<string> { "Sim1-1-5", "Sim1-1-6", "Sim1-1-16", "Sim1-1-17" },
+                new List<string> { "Sim1-1-22", "Sim1-1-23", "Sim1-1-27", "Sim1-1-28" },
+                new List<string> { "Sim1-1-1", "Sim1-1-2", "Sim1-1-3", "Sim1-1-14", "Sim1-1-33", "Sim1-1-34" }
             };
+
+            // Create the node codes map dynamically (you could also make this a static field for performance)
+            var nodeCodesMap = new Dictionary<int, List<string>>();
+
+            for (int i = 1; i <= 301; i++)
+            {
+                int patternIndex = (i - 1) % 4; // This will cycle through 0, 1, 2, 3
+                nodeCodesMap[i] = new List<string>(pattern[patternIndex]);
+            }
 
             var nodeCodes = nodeCodesMap.ContainsKey(workflowConfigId)
                 ? nodeCodesMap[workflowConfigId]
