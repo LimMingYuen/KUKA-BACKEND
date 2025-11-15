@@ -38,7 +38,7 @@ public class ApplicationDbContext : DbContext
 
     public DbSet<User> Users => Set<User>();
 
-
+    public DbSet<Role> Roles => Set<Role>();
 
 
 
@@ -179,6 +179,16 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.CreateApp).HasMaxLength(100);
             entity.Property(e => e.LastUpdateBy).HasMaxLength(100);
             entity.Property(e => e.LastUpdateApp).HasMaxLength(100);
+        });
+
+        modelBuilder.Entity<Role>(entity =>
+        {
+            entity.ToTable("Roles");
+            entity.HasIndex(e => e.RoleCode).IsUnique();
+            entity.Property(e => e.Name).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.RoleCode).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.CreatedUtc).HasColumnType("datetime2");
+            entity.Property(e => e.UpdatedUtc).HasColumnType("datetime2");
         });
 
         modelBuilder.Entity<SystemSetting>(entity =>
