@@ -107,6 +107,4 @@ public class SavedCustomMission
     /// </summary>
     [Required]
     public bool IsDeleted { get; set; } = false;
-
-    public ICollection<SavedMissionSchedule> Schedules { get; set; } = new List<SavedMissionSchedule>();
 }

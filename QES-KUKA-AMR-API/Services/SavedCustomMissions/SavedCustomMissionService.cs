@@ -35,7 +35,6 @@ public class SavedCustomMissionService : ISavedCustomMissionService
     public async Task<List<SavedCustomMission>> GetAllAsync(CancellationToken cancellationToken = default)
     {
         return await _dbContext.SavedCustomMissions
-            .Include(m => m.Schedules)
             .AsNoTracking()
             .OrderByDescending(m => m.CreatedUtc)
             .ToListAsync(cancellationToken);
@@ -44,7 +43,6 @@ public class SavedCustomMissionService : ISavedCustomMissionService
     public async Task<SavedCustomMission?> GetByIdAsync(int id, CancellationToken cancellationToken = default)
     {
         return await _dbContext.SavedCustomMissions
-            .Include(m => m.Schedules)
             .AsNoTracking()
             .FirstOrDefaultAsync(m => m.Id == id, cancellationToken);
     }
