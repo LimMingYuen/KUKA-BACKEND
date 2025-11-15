@@ -43,11 +43,16 @@ dotnet ef database update --project QES-KUKA-AMR-API/QES-KUKA-AMR-API.csproj
 # Generate migration SQL script (for deployment)
 dotnet ef migrations script --project QES-KUKA-AMR-API/QES-KUKA-AMR-API.csproj --output migration.sql
 
+# Drop database (use with caution!)
+dotnet ef database drop --project QES-KUKA-AMR-API/QES-KUKA-AMR-API.csproj --force
+
 # Restore packages
 dotnet restore
 ```
 
-Database: SQL Server with connection string in `appsettings.json` pointing to `QES_KUKA_AMR_Penang` database. The codebase includes 21 entities across multiple domains (missions, configuration, locations, scheduling, user management, mobile robots, and system settings).
+**Migration History:** The database migrations were reset in November 2025 to resolve inconsistencies. The current migration is `InitialCreate` which creates all 17 entity tables in a clean state.
+
+Database: SQL Server with connection string in `appsettings.json` pointing to `QES_KUKA_AMR_Penang` database. The codebase includes 17 entities across multiple domains (missions, configuration, locations, user management, mobile robots, and system settings).
 
 ## Architecture Overview
 
@@ -206,7 +211,7 @@ Organized by domain with DTOs for request/response:
 
 10. **CORS Policy**: Current policy allows all origins - **MUST** be restricted for production deployment
 
-11. **Database Migrations**: The codebase has extensive migration history (33+ migrations). Always review generated migration code before applying to ensure proper index and constraint creation.
+11. **Database Migrations**: After migration reset (November 2025), the codebase has a single clean InitialCreate migration. Always review generated migration code before applying to ensure proper index and constraint creation.
 
 ## Development Workflow
 
@@ -221,7 +226,7 @@ When working with this codebase:
 
 ## Key Database Entities
 
-The codebase includes 21 main entities organized across multiple domains:
+The codebase includes 17 main entities organized across multiple domains:
 
 **Mission & Workflow Entities:**
 - `WorkflowDiagram`: Workflow templates with unique WorkflowCode and configurations (CreateTime, UpdateTime)
