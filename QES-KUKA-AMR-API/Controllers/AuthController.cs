@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using QES_KUKA_AMR_API.Data;
 using QES_KUKA_AMR_API.Models;
 using QES_KUKA_AMR_API.Models.Auth;
 using QES_KUKA_AMR_API.Services.Auth;
+using QES_KUKA_AMR_API.Services.Users;
 
 namespace QES_KUKA_AMR_API.Controllers;
 
@@ -12,15 +14,21 @@ public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
     private readonly IExternalApiTokenService _externalApiTokenService;
+    private readonly IUserService _userService;
+    private readonly ApplicationDbContext _dbContext;
     private readonly ILogger<AuthController> _logger;
 
     public AuthController(
         IAuthService authService,
         IExternalApiTokenService externalApiTokenService,
+        IUserService userService,
+        ApplicationDbContext dbContext,
         ILogger<AuthController> logger)
     {
         _authService = authService;
         _externalApiTokenService = externalApiTokenService;
+        _userService = userService;
+        _dbContext = dbContext;
         _logger = logger;
     }
 
@@ -225,4 +233,160 @@ public class AuthController : ControllerBase
             });
         }
     }
+
+    /// <summary>
+    /// DEBUG: Check if admin user exists and password hash format
+    /// </summary>
+    [HttpGet("_debug/check-admin")]
+    [AllowAnonymous]
+    public async Task<ActionResult<ApiResponse<object>>> CheckAdminUser()
+    {
+        try
+        {
+            var adminUser = await _userService.GetByUsernameAsync("admin");
+
+            if (adminUser == null)
+            {
+                return Ok(new ApiResponse<object>
+                {
+                    Success = false,
+                    Code = "USER_NOT_FOUND",
+                    Msg = "Admin user does not exist in database",
+                    Data = new
+                    {
+                        userExists = false,
+                        suggestion = "Run: POST /api/auth/_debug/create-admin to create the admin user"
+                    }
+                });
+            }
+
+            var hashPreview = adminUser.PasswordHash.Length > 30
+                ? $"{adminUser.PasswordHash.Substring(0, 30)}..."
+                : adminUser.PasswordHash;
+
+            var isValidBCryptFormat = adminUser.PasswordHash.StartsWith("$2a$") ||
+                                     adminUser.PasswordHash.StartsWith("$2b$") ||
+                                     adminUser.PasswordHash.StartsWith("$2y$");
+
+            return Ok(new ApiResponse<object>
+            {
+                Success = true,
+                Code = "USER_FOUND",
+                Msg = "Admin user found",
+                Data = new
+                {
+                    userExists = true,
+                    username = adminUser.Username,
+                    nickname = adminUser.Nickname,
+                    isSuperAdmin = adminUser.IsSuperAdmin,
+                    passwordHashPreview = hashPreview,
+                    passwordHashLength = adminUser.PasswordHash.Length,
+                    isValidBCryptFormat = isValidBCryptFormat,
+                    expectedHashLength = 60,
+                    roles = adminUser.Roles
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error checking admin user");
+            return StatusCode(StatusCodes.Status500InternalServerError, new ApiResponse<object>
+            {
+                Success = false,
+                Code = "ERROR",
+                Msg = ex.Message
+            });
+        }
+    }
+
+    /// <summary>
+    /// DEBUG: Create admin user manually
+    /// </summary>
+    [HttpPost("_debug/create-admin")]
+    [AllowAnonymous]
+    public async Task<ActionResult<ApiResponse<object>>> CreateAdminUser()
+    {
+        try
+        {
+            await DbInitializer.SeedAsync(_dbContext);
+
+            return Ok(new ApiResponse<object>
+            {
+                Success = true,
+                Code = "ADMIN_CREATED",
+                Msg = "Admin user created or already exists",
+                Data = new
+                {
+                    username = "admin",
+                    password = "admin",
+                    note = "Check console output for confirmation"
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating admin user");
+            return StatusCode(StatusCodes.Status500InternalServerError, new ApiResponse<object>
+            {
+                Success = false,
+                Code = "ERROR",
+                Msg = ex.Message
+            });
+        }
+    }
+
+    /// <summary>
+    /// DEBUG: Test password verification
+    /// </summary>
+    [HttpPost("_debug/test-password")]
+    [AllowAnonymous]
+    public async Task<ActionResult<ApiResponse<object>>> TestPassword([FromBody] TestPasswordRequest request)
+    {
+        try
+        {
+            var user = await _userService.GetByUsernameAsync(request.Username);
+
+            if (user == null)
+            {
+                return Ok(new ApiResponse<object>
+                {
+                    Success = false,
+                    Code = "USER_NOT_FOUND",
+                    Msg = $"User '{request.Username}' not found"
+                });
+            }
+
+            var isPasswordCorrect = BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash);
+
+            return Ok(new ApiResponse<object>
+            {
+                Success = true,
+                Code = "TEST_COMPLETE",
+                Msg = "Password verification test complete",
+                Data = new
+                {
+                    username = user.Username,
+                    passwordMatches = isPasswordCorrect,
+                    passwordHashPreview = user.PasswordHash.Substring(0, Math.Min(30, user.PasswordHash.Length)) + "...",
+                    testedPassword = request.Password
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error testing password");
+            return StatusCode(StatusCodes.Status500InternalServerError, new ApiResponse<object>
+            {
+                Success = false,
+                Code = "ERROR",
+                Msg = ex.Message
+            });
+        }
+    }
+}
+
+public class TestPasswordRequest
+{
+    public string Username { get; set; } = string.Empty;
+    public string Password { get; set; } = string.Empty;
 }
