@@ -13,7 +13,7 @@ namespace QES_KUKA_AMR_API.Services.WorkflowNodeCodes;
 
 public class WorkflowNodeCodeService : IWorkflowNodeCodeService
 {
-    private readonly ApplicationDbContext _dbContext;
+    private readonly IServiceScopeFactory _serviceScopeFactory;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IExternalApiTokenService _externalApiTokenService;
     private readonly ILogger<WorkflowNodeCodeService> _logger;
@@ -21,14 +21,14 @@ public class WorkflowNodeCodeService : IWorkflowNodeCodeService
     private readonly MissionServiceOptions _options;
 
     public WorkflowNodeCodeService(
-        ApplicationDbContext dbContext,
+        IServiceScopeFactory serviceScopeFactory,
         IHttpClientFactory httpClientFactory,
         IExternalApiTokenService externalApiTokenService,
         ILogger<WorkflowNodeCodeService> logger,
         TimeProvider timeProvider,
         IOptions<MissionServiceOptions> options)
     {
-        _dbContext = dbContext;
+        _serviceScopeFactory = serviceScopeFactory;
         _httpClientFactory = httpClientFactory;
         _externalApiTokenService = externalApiTokenService;
         _logger = logger;
@@ -43,11 +43,16 @@ public class WorkflowNodeCodeService : IWorkflowNodeCodeService
         var result = new WorkflowNodeCodeSyncResult();
 
         // Get all DISTINCT external workflow IDs to avoid duplicate processing
-        var distinctExternalIds = await _dbContext.WorkflowDiagrams
-            .Where(w => w.ExternalWorkflowId != null)
-            .Select(w => w.ExternalWorkflowId!.Value)
-            .Distinct()
-            .ToListAsync(cancellationToken);
+        List<int> distinctExternalIds;
+        using (var scope = _serviceScopeFactory.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            distinctExternalIds = await dbContext.WorkflowDiagrams
+                .Where(w => w.ExternalWorkflowId != null)
+                .Select(w => w.ExternalWorkflowId!.Value)
+                .Distinct()
+                .ToListAsync(cancellationToken);
+        }
 
         result.TotalWorkflows = distinctExternalIds.Count;
 
@@ -83,7 +88,14 @@ public class WorkflowNodeCodeService : IWorkflowNodeCodeService
                 {
                     _logger.LogDebug("Syncing external workflow ID: {ExternalId}", externalId);
 
-                    var syncResult = await SyncWorkflowNodeCodesInternalAsync(externalId, cancellationToken);
+                    // Create a new scope for this task to get its own DbContext
+                    using var scope = _serviceScopeFactory.CreateScope();
+                    var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+                    var syncResult = await SyncWorkflowNodeCodesInternalAsync(
+                        externalId,
+                        dbContext,
+                        cancellationToken);
 
                     if (syncResult.Success)
                     {
@@ -139,7 +151,9 @@ public class WorkflowNodeCodeService : IWorkflowNodeCodeService
         int externalWorkflowId,
         CancellationToken cancellationToken = default)
     {
-        var result = await SyncWorkflowNodeCodesInternalAsync(externalWorkflowId, cancellationToken);
+        using var scope = _serviceScopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var result = await SyncWorkflowNodeCodesInternalAsync(externalWorkflowId, dbContext, cancellationToken);
         return result.Success;
     }
 
@@ -147,7 +161,9 @@ public class WorkflowNodeCodeService : IWorkflowNodeCodeService
         int externalWorkflowId,
         CancellationToken cancellationToken = default)
     {
-        return await _dbContext.WorkflowNodeCodes
+        using var scope = _serviceScopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        return await dbContext.WorkflowNodeCodes
             .Where(wnc => wnc.ExternalWorkflowId == externalWorkflowId)
             .Select(wnc => wnc.NodeCode)
             .OrderBy(nc => nc)
@@ -156,6 +172,7 @@ public class WorkflowNodeCodeService : IWorkflowNodeCodeService
 
     private async Task<SyncInternalResult> SyncWorkflowNodeCodesInternalAsync(
         int externalWorkflowId,
+        ApplicationDbContext dbContext,
         CancellationToken cancellationToken)
     {
         try
@@ -249,7 +266,7 @@ public class WorkflowNodeCodeService : IWorkflowNodeCodeService
             var now = _timeProvider.GetUtcNow().UtcDateTime;
 
             // Get existing node codes for this workflow
-            var existingNodeCodes = await _dbContext.WorkflowNodeCodes
+            var existingNodeCodes = await dbContext.WorkflowNodeCodes
                 .Where(wnc => wnc.ExternalWorkflowId == externalWorkflowId)
                 .ToListAsync(cancellationToken);
 
@@ -271,7 +288,7 @@ public class WorkflowNodeCodeService : IWorkflowNodeCodeService
             // Delete removed node codes
             if (nodeCodesToDelete.Any())
             {
-                _dbContext.WorkflowNodeCodes.RemoveRange(nodeCodesToDelete);
+                dbContext.WorkflowNodeCodes.RemoveRange(nodeCodesToDelete);
             }
 
             // Insert new node codes
@@ -285,7 +302,7 @@ public class WorkflowNodeCodeService : IWorkflowNodeCodeService
                     UpdatedUtc = now
                 }).ToList();
 
-                await _dbContext.WorkflowNodeCodes.AddRangeAsync(newEntities, cancellationToken);
+                await dbContext.WorkflowNodeCodes.AddRangeAsync(newEntities, cancellationToken);
             }
 
             // Update timestamp for existing node codes
@@ -298,7 +315,7 @@ public class WorkflowNodeCodeService : IWorkflowNodeCodeService
                 entity.UpdatedUtc = now;
             }
 
-            await _dbContext.SaveChangesAsync(cancellationToken);
+            await dbContext.SaveChangesAsync(cancellationToken);
 
             return new SyncInternalResult
             {
