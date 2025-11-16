@@ -105,6 +105,74 @@ Get statistics about a map file.
 }
 ```
 
+#### GET /api/mapimport/sync-status?mapCode=Sim1
+Check sync status between external API data and JSON coordinate data.
+
+**Query Parameters:**
+- `mapCode` (optional) - Filter by specific map code
+
+**Response:**
+```json
+{
+  "summary": {
+    "totalQrCodes": 100,
+    "withCoordinates": 62,
+    "withoutCoordinates": 38,
+    "coordinateCoverage": 62.0,
+    "partialDataCount": 0
+  },
+  "byMapCode": [
+    {
+      "mapCode": "Sim1",
+      "total": 62,
+      "withCoordinates": 62,
+      "withoutCoordinates": 0,
+      "coveragePercent": 100.0
+    },
+    {
+      "mapCode": "Sim2",
+      "total": 38,
+      "withCoordinates": 0,
+      "withoutCoordinates": 38,
+      "coveragePercent": 0.0
+    }
+  ],
+  "qrCodesWithCoordinates": [
+    {
+      "nodeLabel": "RackPark1",
+      "mapCode": "Sim1",
+      "coordinates": { "x": 19.003, "y": 49.548 },
+      "nodeUuid": "Sim1-1-1",
+      "hasExternalId": true,
+      "hasFunctions": true
+    }
+  ],
+  "qrCodesMissingCoordinates": [
+    {
+      "nodeLabel": "SomeNode",
+      "mapCode": "Sim2",
+      "floorNumber": "1",
+      "hasExternalId": true,
+      "reliability": 95,
+      "lastUpdate": "2025-11-16 10:30:00"
+    }
+  ],
+  "warnings": [
+    {
+      "type": "MISSING_COORDINATES",
+      "message": "38 QR code(s) are missing coordinate data",
+      "recommendation": "Import coordinates from map JSON file using /api/mapimport/import"
+    }
+  ]
+}
+```
+
+**Use Cases:**
+- Check data completeness after syncing from external API
+- Identify which QR codes need coordinate data
+- Verify import success
+- Monitor coordinate coverage across multiple maps
+
 ## Setup Instructions
 
 ### 1. Run Database Migration
@@ -162,7 +230,31 @@ curl -X POST "http://localhost:5109/api/mapimport/import" \
 
 ## Usage Examples
 
-### Example 1: Import New Map
+### Example 1: Complete Integration Workflow
+
+```bash
+# Step 1: Sync QR codes from external API
+curl -X POST "http://localhost:5109/api/qrcodes/sync"
+
+# Step 2: Check sync status (see what's missing coordinates)
+curl -X GET "http://localhost:5109/api/mapimport/sync-status"
+
+# Step 3: Preview map file statistics
+curl -X GET "http://localhost:5109/api/mapimport/statistics?filePath=/path/to/map.json"
+
+# Step 4: Import coordinates from JSON file
+curl -X POST "http://localhost:5109/api/mapimport/import" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "filePath": "/path/to/map.json",
+    "overwriteExisting": true
+  }'
+
+# Step 5: Verify coordinate coverage
+curl -X GET "http://localhost:5109/api/mapimport/sync-status"
+```
+
+### Example 2: Import New Map
 
 ```bash
 # First, preview the statistics
@@ -175,9 +267,12 @@ curl -X POST "http://localhost:5109/api/mapimport/import" \
     "filePath": "/path/to/map.json",
     "overwriteExisting": false
   }'
+
+# Check what was imported
+curl -X GET "http://localhost:5109/api/mapimport/sync-status?mapCode=Sim1"
 ```
 
-### Example 2: Update Existing Map Data
+### Example 3: Update Existing Map Data
 
 Use `overwriteExisting: true` to update coordinates of existing QR codes:
 
@@ -188,9 +283,23 @@ curl -X POST "http://localhost:5109/api/mapimport/import" \
     "filePath": "/path/to/updated_map.json",
     "overwriteExisting": true
   }'
+
+# Verify the update worked
+curl -X GET "http://localhost:5109/api/mapimport/sync-status?mapCode=Sim1"
 ```
 
-### Example 3: Preview Full Map Structure
+### Example 4: Monitor Coverage Across Multiple Maps
+
+```bash
+# Get overall sync status across all maps
+curl -X GET "http://localhost:5109/api/mapimport/sync-status"
+
+# Check specific map
+curl -X GET "http://localhost:5109/api/mapimport/sync-status?mapCode=Sim1"
+curl -X GET "http://localhost:5109/api/mapimport/sync-status?mapCode=Sim2"
+```
+
+### Example 5: Preview Full Map Structure
 
 ```bash
 curl -X GET "http://localhost:5109/api/mapimport/preview?filePath=/path/to/map.json" > map_preview.json

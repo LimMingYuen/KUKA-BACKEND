@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using QES_KUKA_AMR_API.Data;
 using QES_KUKA_AMR_API.Models.MapImport;
 using QES_KUKA_AMR_API.Services.MapImport;
 
@@ -14,13 +16,16 @@ namespace QES_KUKA_AMR_API.Controllers;
 public class MapImportController : ControllerBase
 {
     private readonly IMapImportService _mapImportService;
+    private readonly ApplicationDbContext _dbContext;
     private readonly ILogger<MapImportController> _logger;
 
     public MapImportController(
         IMapImportService mapImportService,
+        ApplicationDbContext dbContext,
         ILogger<MapImportController> logger)
     {
         _mapImportService = mapImportService;
+        _dbContext = dbContext;
         _logger = logger;
     }
 
@@ -155,5 +160,149 @@ public class MapImportController : ControllerBase
         };
 
         return Ok(stats);
+    }
+
+    /// <summary>
+    /// Get sync status showing which QR codes have coordinates vs. which don't
+    /// </summary>
+    /// <param name="mapCode">Optional filter by map code</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Sync status summary</returns>
+    [HttpGet("sync-status")]
+    public async Task<ActionResult<object>> GetSyncStatus(
+        [FromQuery] string? mapCode = null,
+        CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Getting sync status for map: {MapCode}", mapCode ?? "All");
+
+        // Query all QR codes, optionally filtered by map code
+        var query = _dbContext.QrCodes.AsNoTracking();
+
+        if (!string.IsNullOrWhiteSpace(mapCode))
+        {
+            query = query.Where(q => q.MapCode == mapCode);
+        }
+
+        var allQrCodes = await query.ToListAsync(cancellationToken);
+
+        // Categorize QR codes
+        var withCoordinates = allQrCodes
+            .Where(q => q.XCoordinate.HasValue && q.YCoordinate.HasValue)
+            .ToList();
+
+        var withoutCoordinates = allQrCodes
+            .Where(q => !q.XCoordinate.HasValue || !q.YCoordinate.HasValue)
+            .ToList();
+
+        // Group by map code
+        var byMapCode = allQrCodes
+            .GroupBy(q => q.MapCode)
+            .Select(g => new
+            {
+                mapCode = g.Key,
+                total = g.Count(),
+                withCoordinates = g.Count(q => q.XCoordinate.HasValue && q.YCoordinate.HasValue),
+                withoutCoordinates = g.Count(q => !q.XCoordinate.HasValue || !q.YCoordinate.HasValue),
+                coveragePercent = g.Count() > 0
+                    ? Math.Round((double)g.Count(q => q.XCoordinate.HasValue && q.YCoordinate.HasValue) / g.Count() * 100, 2)
+                    : 0
+            })
+            .OrderBy(x => x.mapCode)
+            .ToList();
+
+        // Find nodes with incomplete data (some fields but not all)
+        var partialData = allQrCodes
+            .Where(q =>
+                (q.XCoordinate.HasValue && !q.YCoordinate.HasValue) ||
+                (!q.XCoordinate.HasValue && q.YCoordinate.HasValue))
+            .Select(q => new
+            {
+                nodeLabel = q.NodeLabel,
+                mapCode = q.MapCode,
+                hasX = q.XCoordinate.HasValue,
+                hasY = q.YCoordinate.HasValue
+            })
+            .ToList();
+
+        var status = new
+        {
+            summary = new
+            {
+                totalQrCodes = allQrCodes.Count,
+                withCoordinates = withCoordinates.Count,
+                withoutCoordinates = withoutCoordinates.Count,
+                coordinateCoverage = allQrCodes.Count > 0
+                    ? Math.Round((double)withCoordinates.Count / allQrCodes.Count * 100, 2)
+                    : 0,
+                partialDataCount = partialData.Count
+            },
+            byMapCode = byMapCode,
+            qrCodesWithCoordinates = withCoordinates
+                .Select(q => new
+                {
+                    nodeLabel = q.NodeLabel,
+                    mapCode = q.MapCode,
+                    coordinates = new
+                    {
+                        x = q.XCoordinate,
+                        y = q.YCoordinate
+                    },
+                    nodeUuid = q.NodeUuid,
+                    hasExternalId = q.ExternalQrCodeId.HasValue,
+                    hasFunctions = !string.IsNullOrEmpty(q.FunctionListJson)
+                })
+                .OrderBy(q => q.mapCode)
+                .ThenBy(q => q.nodeLabel)
+                .ToList(),
+            qrCodesMissingCoordinates = withoutCoordinates
+                .Select(q => new
+                {
+                    nodeLabel = q.NodeLabel,
+                    mapCode = q.MapCode,
+                    floorNumber = q.FloorNumber,
+                    hasExternalId = q.ExternalQrCodeId.HasValue,
+                    reliability = q.Reliability,
+                    lastUpdate = q.LastUpdateTime.ToString("yyyy-MM-dd HH:mm:ss")
+                })
+                .OrderBy(q => q.mapCode)
+                .ThenBy(q => q.nodeLabel)
+                .ToList(),
+            warnings = new List<object>()
+        };
+
+        // Add warnings
+        var warnings = (List<object>)status.warnings;
+
+        if (partialData.Any())
+        {
+            warnings.Add(new
+            {
+                type = "PARTIAL_DATA",
+                message = $"{partialData.Count} QR code(s) have incomplete coordinate data (X or Y missing)",
+                affectedNodes = partialData
+            });
+        }
+
+        if (withoutCoordinates.Any())
+        {
+            warnings.Add(new
+            {
+                type = "MISSING_COORDINATES",
+                message = $"{withoutCoordinates.Count} QR code(s) are missing coordinate data",
+                recommendation = "Import coordinates from map JSON file using /api/mapimport/import"
+            });
+        }
+
+        if (allQrCodes.Count == 0)
+        {
+            warnings.Add(new
+            {
+                type = "NO_DATA",
+                message = "No QR codes found in database",
+                recommendation = "Sync from external API using /api/qrcodes/sync"
+            });
+        }
+
+        return Ok(status);
     }
 }
