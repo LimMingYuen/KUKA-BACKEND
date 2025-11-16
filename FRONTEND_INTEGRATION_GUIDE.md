@@ -292,11 +292,11 @@ Content-Type: application/json
 
 ### 3.1 Query Job Status
 
-**Purpose:** Query job status from the AMR system.
+**Purpose:** Query job status from the AMR system to get robot assignment and execution status.
 
 **Endpoint:** `POST /api/missions/jobs/query`
 
-**⚠️ Important:** Always specify `jobCode` to query a specific job. Do NOT query without filters.
+**⚠️ CRITICAL:** Always specify `jobCode` parameter. **NEVER** send request with all null fields!
 
 **Request:**
 ```http
@@ -304,32 +304,28 @@ POST /api/missions/jobs/query
 Content-Type: application/json
 ```
 
-**Request Body (Query Specific Job - Recommended):**
+**Request Body (Correct - Query Specific Job):**
 ```json
 {
   "jobCode": "MISSION_20250116_001",
-  "limit": 1
-}
-```
-
-**Request Body (Query by Robot):**
-```json
-{
-  "robotId": "Robot_A",
   "limit": 10
 }
 ```
 
-**Request Body (Query by Status):**
+**❌ WRONG - Do NOT send this:**
 ```json
 {
-  "status": "2",
-  "limit": 50
+  "workflowId": null,
+  "containerCode": null,
+  "jobCode": null,
+  "status": null,
+  "robotId": null,
+  "limit": 1
 }
 ```
 
 **Request Fields (All Optional):**
-- `jobCode` (string): Specific mission code
+- `jobCode` (string): **REQUIRED for tracking** - Specific mission code
 - `workflowId` (number): Workflow template ID
 - `workflowCode` (string): Workflow template code
 - `workflowName` (string): Workflow name
@@ -338,18 +334,20 @@ Content-Type: application/json
 - `containerCode` (string): Container code
 - `targetCellCode` (string): Destination cell
 - `createUsername` (string): User who created the mission
+- `sourceValue` (number): Source type (2=Interface, 3=PDA, 4=Device, 5=MLS, 6=Fleet, 7=Workflow event)
+- `maps` (array of strings): Filter by map codes
 - `limit` (number): Maximum results (default: 10)
 
-**Job Status Codes:**
-- `0` = Created
-- `2` = Executing
-- `3` = Waiting
-- `4` = Cancelling
-- `5` = Complete
+**Job Status Codes (from AMR System):**
+- `10` = Created
+- `20` = Executing
+- `25` = Waiting
+- `28` = Cancelling
+- `30` = Complete
 - `31` = Cancelled
-- `32` = Manual Complete
+- `35` = Manual Complete
 - `50` = Warning
-- `99` = Startup Error
+- `60` = Startup Error
 
 **Response:**
 ```json
@@ -360,20 +358,26 @@ Content-Type: application/json
   "data": [
     {
       "jobCode": "MISSION_20250116_001",
-      "workflowId": 123,
+      "workflowId": 100218,
       "workflowCode": "WF001",
       "workflowName": "Rack Move",
       "robotId": "Robot_A",
-      "status": 2,
+      "status": 20,
+      "workflowPriority": 50,
       "mapCode": "Floor1",
       "targetCellCode": "C100",
       "beginCellCode": "A001",
+      "targetCellCodeForeign": "DROPPOINT",
+      "beginCellCodeForeign": "PICKPOINT",
+      "finalNodeCode": "C100",
       "completeTime": null,
       "spendTime": 45,
       "createTime": "2025-01-16 12:00:00",
       "createUsername": "admin",
+      "source": "INTERFACE",
       "warnFlag": 0,
-      "warnCode": null
+      "warnCode": null,
+      "materialsInfo": "-"
     }
   ]
 }
@@ -381,17 +385,21 @@ Content-Type: application/json
 
 **Response Fields:**
 - `data` (array): Array of job objects
-- `data[].jobCode` (string): Mission code
-- `data[].robotId` (string): Assigned robot ID
+- `data[].jobCode` (string): Mission code (same as mission code)
+- `data[].robotId` (string): **Assigned robot ID** - Use this for Robot Query
 - `data[].status` (number): Current status (see status codes above)
-- `data[].completeTime` (string): Completion timestamp ("yyyy-MM-dd HH:mm:ss")
+- `data[].createTime` (string): Job creation time ("yyyy-MM-dd HH:mm:ss")
+- `data[].completeTime` (string): Completion time ("yyyy-MM-dd HH:mm:ss")
 - `data[].spendTime` (number): Execution time in seconds
-- `data[].warnFlag` (number): Warning indicator (0 = no warning)
+- `data[].mapCode` (string): Map code where job is executing
+- `data[].targetCellCode` (string): Target node code
+- `data[].beginCellCode` (string): Start node code
+- `data[].warnFlag` (number): Warning indicator (0 = Normal, 1 = Warning)
 
-**When to call:**
-- ❌ **DON'T:** Poll every minute without filters (causes unnecessary load)
-- ✅ **DO:** Query specific job code after submission
-- ✅ **DO:** Use Queue Status API instead (see section 5)
+**Use Case:**
+1. After submitting a mission, poll this endpoint to check status
+2. Extract `robotId` from response
+3. Use `robotId` to call Robot Query API (section 4) to get robot's current node
 
 ---
 
@@ -399,17 +407,20 @@ Content-Type: application/json
 
 ### 4.1 Query Robot Position & Status
 
-**Purpose:** Get real-time robot position and status.
+**Purpose:** Get real-time robot position, current node, and status. **Use the `robotId` from Job Query response.**
 
 **Endpoint:** `POST /api/missions/robot-query`
 
-**Request (Specific Robot):**
+**⚠️ Important:** Use `robotId` and `robotType` from Job Query response (section 3.1).
+
+**Request (Specific Robot - Recommended):**
 ```http
 POST /api/missions/robot-query
 Content-Type: application/json
 
 {
-  "robotId": "Robot_A"
+  "robotId": "Robot_A",
+  "robotType": "KMP600I"
 }
 ```
 
@@ -417,15 +428,18 @@ Content-Type: application/json
 ```json
 {
   "robotId": "",
-  "mapCode": "Floor1"
+  "mapCode": "Floor1",
+  "floorNumber": "1"
 }
 ```
 
-**Request Fields:**
-- `robotId` (string): Specific robot ID (empty = all robots)
-- `robotType` (string): Filter by robot type
-- `mapCode` (string): Filter by map/floor
+**Request Fields (All Optional):**
+- `robotId` (string): Specific robot ID (empty = query all robots)
+- `robotType` (string): Robot type code (e.g., "KMP600I", "LIFT")
+- `mapCode` (string): Filter by map code
 - `floorNumber` (string): Filter by floor number
+
+**Note:** If querying all robots, `mapCode` and `floorNumber` must be passed together.
 
 **Response:**
 ```json
@@ -436,22 +450,38 @@ Content-Type: application/json
   "data": [
     {
       "robotId": "Robot_A",
-      "robotType": "LIFT",
+      "robotType": "KMP600I",
       "mapCode": "Floor1",
       "floorNumber": "1",
-      "status": 2,
+      "buildingCode": "W001",
+      "containerCode": "",
+      "status": 4,
       "occupyStatus": 1,
       "batteryLevel": 85,
       "nodeCode": "A050",
       "nodeLabel": "A050",
-      "x": "125.5",
-      "y": "340.2",
+      "nodeNumber": 50,
+      "x": "3000.0",
+      "y": "15000.0",
       "robotOrientation": "90.0",
       "missionCode": "MISSION_20250116_001",
       "liftStatus": 0,
-      "reliability": 100,
+      "reliability": 1,
+      "runTime": "6745",
       "karOsVersion": "2.1.0",
-      "mileage": "1250.5"
+      "mileage": "1250.5",
+      "leftMotorTemperature": "0.0",
+      "rightMotorTemperature": "0.0",
+      "rotateMotorTemperature": "0.0",
+      "liftMtrTemp": "0.0",
+      "leftFrtMovMtrTemp": "0.0",
+      "rightFrtMovMtrTemp": "0.0",
+      "leftReMovMtrTemp": "0.0",
+      "rightReMovMtrTemp": "0.0",
+      "rotateTimes": 0,
+      "liftTimes": 0,
+      "nodeForeignCode": "",
+      "errorMessage": null
     }
   ]
 }
@@ -459,23 +489,40 @@ Content-Type: application/json
 
 **Response Fields:**
 - `robotId` (string): Robot identifier
+- `robotType` (string): Robot type code
+- `mapCode` (string): Current map code
+- `floorNumber` (string): Current floor number
 - `status` (number): Robot status
-  - `1` = Idle
-  - `2` = Executing
-  - `3` = Charging
-  - `4` = Error
+  - `1` = Departure
+  - `2` = Offline
+  - `3` = Idle
+  - `4` = Executing
+  - `5` = Charging
+  - `6` = Updating
+  - `7` = Abnormal
 - `occupyStatus` (number): Occupancy status
-  - `0` = Available
-  - `1` = Occupied/Busy
+  - `0` = Idle
+  - `1` = Occupied
 - `batteryLevel` (number): Battery percentage (0-100)
-- `x`, `y` (string): Robot coordinates
+- `nodeCode` (string): **Current node code**
+- `nodeLabel` (string): **Current node label**
+- `x`, `y` (string): Robot coordinates in millimeters
 - `robotOrientation` (string): Robot angle in degrees (0-360)
-- `missionCode` (string): Current mission (null if idle)
-- `nodeLabel` (string): Current QR code/node
+- `missionCode` (string): Current mission code (null if idle)
+- `liftStatus` (number): Lift status (1 = Lifted, 0 = Down)
+- `reliability` (number): Location reliability (0 = Unreliable, 1 = Reliable)
+- `runTime` (string): Total run time
+- `mileage` (string): Total mileage
+
+**Use Case:**
+1. After Job Query returns `robotId` (section 3.1)
+2. Call Robot Query with that `robotId`
+3. Get robot's current `nodeCode` to track position
+4. Display robot on map using `x`, `y`, `robotOrientation`
 
 **When to call:**
+- After getting `robotId` from Job Query
 - To display robot positions on map
-- Before assigning missions manually
 - For robot status dashboard
 - **Note:** Backend auto-caches robot positions every 30 seconds
 
@@ -676,9 +723,9 @@ POST /api/queue/123/cancel
 
 ## 6. Polling Patterns
 
-### 6.1 Recommended: Queue Status Polling
+### 6.1 Correct Pattern: Job Query + Robot Query Polling
 
-**Use Case:** Track mission progress after submission
+**Use Case:** Track mission execution and robot position after submission
 
 **Pattern:**
 ```javascript
@@ -701,59 +748,167 @@ async function submitAndTrackMission(missionRequest) {
   const missionCode = missionRequest.missionCode;
   console.log('Mission queued:', submitResult.data.queueItemCodes);
 
-  // 2. Poll for status every 3 seconds
-  const pollInterval = setInterval(async () => {
-    const statusResponse = await fetch(`/api/queue/status/${missionCode}`);
-    const statusResult = await statusResponse.json();
+  let currentRobotId = null;
+  let currentRobotType = null;
 
-    console.log(`Mission ${missionCode} status:`, statusResult.overallStatus);
+  // 2. Poll Job Query every 3 seconds
+  const jobPollInterval = setInterval(async () => {
+    // ✅ CORRECT: Always specify jobCode
+    const jobResponse = await fetch('/api/missions/jobs/query', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jobCode: missionCode,
+        limit: 10
+      })
+    });
 
-    // 3. Stop polling when complete/failed/cancelled
-    const terminalStatuses = ['Completed', 'Failed', 'Cancelled'];
-    if (terminalStatuses.includes(statusResult.overallStatus)) {
-      clearInterval(pollInterval);
-      console.log(`Mission ${missionCode} finished with status:`, statusResult.overallStatus);
+    const jobResult = await jobResponse.json();
 
-      // Handle completion
-      if (statusResult.overallStatus === 'Completed') {
-        onMissionComplete(missionCode);
-      } else {
-        onMissionFailed(missionCode, statusResult.queueItems[0].errorMessage);
+    if (jobResult.success && jobResult.data && jobResult.data.length > 0) {
+      const job = jobResult.data[0];
+
+      console.log(`Job ${missionCode} status:`, job.status);
+      console.log(`Create time:`, job.createTime);
+
+      // Update UI with job status
+      updateJobStatus(job);
+
+      // Extract robotId and robotType
+      if (job.robotId && job.status === 20) { // 20 = Executing
+        currentRobotId = job.robotId;
+        currentRobotType = job.robotType || 'LIFT';
+
+        // Start robot position polling
+        if (!robotPollInterval) {
+          startRobotPolling(currentRobotId, currentRobotType);
+        }
+      }
+
+      // 3. Stop polling when complete
+      if (job.status === 30 || job.status === 31) { // 30 = Complete, 31 = Cancelled
+        clearInterval(jobPollInterval);
+        if (robotPollInterval) {
+          clearInterval(robotPollInterval);
+        }
+
+        console.log(`Mission ${missionCode} finished with status:`, job.status);
+        onMissionComplete(job);
       }
     }
   }, 3000); // Poll every 3 seconds
+
+  // Robot position polling
+  let robotPollInterval = null;
+
+  function startRobotPolling(robotId, robotType) {
+    robotPollInterval = setInterval(async () => {
+      // Query robot position
+      const robotResponse = await fetch('/api/missions/robot-query', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          robotId: robotId,
+          robotType: robotType
+        })
+      });
+
+      const robotResult = await robotResponse.json();
+
+      if (robotResult.success && robotResult.data && robotResult.data.length > 0) {
+        const robot = robotResult.data[0];
+
+        console.log(`Robot ${robotId} at node:`, robot.nodeCode);
+        console.log(`Robot position: (${robot.x}, ${robot.y})`);
+        console.log(`Battery: ${robot.batteryLevel}%`);
+
+        // Update robot position on map
+        updateRobotOnMap(robot);
+      }
+    }, 5000); // Poll every 5 seconds
+  }
+
+  // Auto-stop after 10 minutes
+  setTimeout(() => {
+    clearInterval(jobPollInterval);
+    if (robotPollInterval) {
+      clearInterval(robotPollInterval);
+    }
+  }, 600000);
 }
 ```
 
 **Polling Interval Recommendations:**
-- Mission tracking: 3-5 seconds
+- Job Query (status tracking): 3-5 seconds
+- Robot Query (position tracking): 5 seconds
 - Dashboard statistics: 10-15 seconds
-- Robot positions (for map display): 5-10 seconds
 
 **Stop Polling When:**
-- Status is `Completed`, `Failed`, or `Cancelled`
+- Job status is `30` (Complete), `31` (Cancelled), or `35` (Manual Complete)
 - User navigates away from the page
 - Maximum polling time reached (e.g., 10 minutes)
 
 ---
 
-### 6.2 Not Recommended: Generic Job Query Polling
+### 6.2 ❌ WRONG: Generic Job Query Without jobCode
 
-**❌ Bad Practice:**
+**Bad Practice:**
 ```javascript
-// DON'T DO THIS - Querying without filters
+// ❌ DON'T DO THIS - Querying without jobCode
 setInterval(async () => {
   const response = await fetch('/api/missions/jobs/query', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ limit: 1 })  // ❌ No jobCode filter
+    body: JSON.stringify({
+      workflowId: null,
+      containerCode: null,
+      jobCode: null,      // ❌ Missing jobCode!
+      status: null,
+      robotId: null,
+      limit: 1
+    })
   });
 }, 60000);
 ```
 
-**Problem:** This queries ALL jobs, causing unnecessary load on the AMR system.
+**Problem:** This queries ALL jobs with no filters, causing:
+- Unnecessary load on the AMR system
+- Returns empty data if no jobs exist
+- Wastes bandwidth and resources
 
-**✅ Better Alternative:** Use Queue Status API (section 5.1)
+**✅ Correct:** Always specify `jobCode`:
+```javascript
+// ✅ DO THIS
+const response = await fetch('/api/missions/jobs/query', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    jobCode: "MISSION_20250116_001",  // ✅ Always specify jobCode
+    limit: 10
+  })
+});
+```
+
+---
+
+### 6.3 Alternative: Queue Status API Polling (Simpler)
+
+If you prefer a simpler approach, use the Queue Status API instead of Job Query:
+
+```javascript
+// Simpler alternative using Queue Status API
+const pollInterval = setInterval(async () => {
+  const response = await fetch(`/api/queue/status/${missionCode}`);
+  const status = await response.json();
+
+  console.log('Overall status:', status.overallStatus);
+  console.log('Robot:', status.queueItems[0].assignedRobotId);
+
+  if (['Completed', 'Failed', 'Cancelled'].includes(status.overallStatus)) {
+    clearInterval(pollInterval);
+  }
+}, 3000);
+```
 
 ---
 
@@ -984,5 +1139,110 @@ try {
 
 ---
 
-**Document Version:** 1.0
-**Generated:** 2025-01-16
+---
+
+## 11. Troubleshooting Common Issues
+
+### 11.1 Problem: Job Query Returns Empty Data
+
+**Symptoms:**
+```
+QueryJobsAsync Response - Status: OK, Body: {"data":[],"code":null,"message":null,"success":true}
+```
+
+**Root Cause:**
+Frontend is calling `/api/missions/jobs/query` with **ALL NULL FIELDS**:
+```json
+{
+  "workflowId": null,
+  "containerCode": null,
+  "jobCode": null,      // ❌ Problem: No filter!
+  "status": null,
+  "robotId": null,
+  "limit": 1
+}
+```
+
+**Solution:**
+Always specify `jobCode` parameter:
+```json
+{
+  "jobCode": "MISSION_20250116_001",  // ✅ Correct
+  "limit": 10
+}
+```
+
+**What to check in frontend code:**
+1. Search for `fetch('/api/missions/jobs/query'`
+2. Find the request body construction
+3. Ensure `jobCode` is always set to the mission code you're tracking
+4. Remove any code that sends null/undefined values for all fields
+
+**Example Fix:**
+```javascript
+// ❌ BEFORE (Wrong)
+const jobQueryRequest = {
+  workflowId: null,
+  jobCode: null,
+  status: null,
+  limit: 1
+};
+
+// ✅ AFTER (Correct)
+const jobQueryRequest = {
+  jobCode: missionCode,  // Use the mission code from submit response
+  limit: 10
+};
+```
+
+---
+
+### 11.2 Problem: Don't Know Robot's Current Node
+
+**Solution:** Use the **Job Query → Robot Query** pattern:
+
+```javascript
+// 1. Query job status to get robotId
+const jobResponse = await fetch('/api/missions/jobs/query', {
+  method: 'POST',
+  body: JSON.stringify({ jobCode: missionCode, limit: 10 })
+});
+
+const jobData = await jobResponse.json();
+const robotId = jobData.data[0].robotId;
+const robotType = jobData.data[0].robotType;
+
+// 2. Query robot to get current node
+const robotResponse = await fetch('/api/missions/robot-query', {
+  method: 'POST',
+  body: JSON.stringify({ robotId: robotId, robotType: robotType })
+});
+
+const robotData = await robotResponse.json();
+const currentNode = robotData.data[0].nodeCode;
+
+console.log(`Robot ${robotId} is at node ${currentNode}`);
+```
+
+---
+
+### 11.3 Quick Fix Checklist
+
+If your frontend is experiencing the empty job query issue:
+
+- [ ] Find where `/api/missions/jobs/query` is called
+- [ ] Verify `jobCode` parameter is set to the mission code
+- [ ] Remove any code setting all fields to `null`
+- [ ] Test with a specific mission code
+- [ ] Verify response contains job data
+- [ ] Extract `robotId` from job response
+- [ ] Use `robotId` in robot query to get current node
+
+---
+
+**Document Version:** 1.1
+**Last Updated:** 2025-01-16
+**Changelog:**
+- v1.1: Added correct job query and robot query patterns based on AMR system API documentation
+- v1.1: Added troubleshooting section for common frontend issues
+- v1.0: Initial version
