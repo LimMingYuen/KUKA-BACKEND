@@ -105,7 +105,10 @@ public class EdgeDto
     public double MaxVelocity { get; set; }
     public double MaxAccelerationVelocity { get; set; }
     public double MaxDecelerationVelocity { get; set; }
+
+    [System.Text.Json.Serialization.JsonConverter(typeof(IntStringConverter))]
     public int Orientation { get; set; }
+
     public double Radius { get; set; }
     public string RoadType { get; set; } = string.Empty;
     public int Status { get; set; }
