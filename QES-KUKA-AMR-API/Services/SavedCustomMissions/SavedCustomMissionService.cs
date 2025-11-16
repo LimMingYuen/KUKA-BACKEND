@@ -1,8 +1,12 @@
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using QES_KUKA_AMR_API.Data;
 using QES_KUKA_AMR_API.Data.Entities;
 using QES_KUKA_AMR_API.Models.Missions;
+using QES_KUKA_AMR_API.Options;
 
 namespace QES_KUKA_AMR_API.Services.SavedCustomMissions;
 
@@ -19,16 +23,19 @@ public interface ISavedCustomMissionService
 public class SavedCustomMissionService : ISavedCustomMissionService
 {
     private readonly ApplicationDbContext _dbContext;
-
+    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly MissionServiceOptions _missionOptions;
     private readonly ILogger<SavedCustomMissionService> _logger;
 
     public SavedCustomMissionService(
         ApplicationDbContext dbContext,
-
+        IHttpClientFactory httpClientFactory,
+        IOptions<MissionServiceOptions> missionOptions,
         ILogger<SavedCustomMissionService> logger)
     {
         _dbContext = dbContext;
-
+        _httpClientFactory = httpClientFactory;
+        _missionOptions = missionOptions.Value;
         _logger = logger;
     }
 
@@ -124,6 +131,12 @@ public class SavedCustomMissionService : ISavedCustomMissionService
         existing.ContainerModelCode = mission.ContainerModelCode;
         existing.ContainerCode = mission.ContainerCode;
         existing.IdleNode = mission.IdleNode;
+        existing.OrgId = mission.OrgId;
+        existing.ViewBoardType = mission.ViewBoardType;
+        existing.TemplateCode = mission.TemplateCode;
+        existing.LockRobotAfterFinish = mission.LockRobotAfterFinish;
+        existing.UnlockRobotId = mission.UnlockRobotId;
+        existing.UnlockMissionCode = mission.UnlockMissionCode;
         existing.MissionStepsJson = mission.MissionStepsJson;
         existing.UpdatedUtc = DateTime.UtcNow;
 
@@ -155,7 +168,7 @@ public class SavedCustomMissionService : ISavedCustomMissionService
     }
 
     /// <summary>
-    /// Triggers a saved custom mission by creating a new MissionQueue entry with fresh IDs
+    /// Triggers a saved custom mission by submitting it to the external AMR system
     /// </summary>
     public async Task<TriggerResult> TriggerAsync(
         int id,
@@ -213,20 +226,88 @@ public class SavedCustomMissionService : ISavedCustomMissionService
                 .ToList();
         }
 
-        // Queue functionality removed - skipping mission enqueuing
-        _logger.LogInformation("Triggered saved custom mission {Id} ('{MissionName}'). " +
-            "Generated MissionCode: {MissionCode}, RequestId: {RequestId} (queue functionality removed)",
-            id, savedMission.MissionName, missionCode, requestId);
-
-        return new TriggerResult
+        // Build the submission request
+        var submitRequest = new SubmitMissionRequest
         {
-            Success = true,
-            MissionCode = missionCode,
+            OrgId = savedMission.OrgId ?? string.Empty,
             RequestId = requestId,
-            QueueId = 0, // Not applicable without queue
-            ExecuteImmediately = true, // Default value
-            Message = "Queue functionality removed"
+            MissionCode = missionCode,
+            MissionType = savedMission.MissionType,
+            ViewBoardType = savedMission.ViewBoardType ?? string.Empty,
+            RobotModels = robotModels?.AsReadOnly() ?? Array.Empty<string>(),
+            RobotIds = robotIds?.AsReadOnly() ?? Array.Empty<string>(),
+            RobotType = savedMission.RobotType,
+            Priority = savedMission.Priority,
+            ContainerModelCode = savedMission.ContainerModelCode ?? string.Empty,
+            ContainerCode = savedMission.ContainerCode ?? string.Empty,
+            TemplateCode = savedMission.TemplateCode ?? string.Empty,
+            LockRobotAfterFinish = savedMission.LockRobotAfterFinish,
+            UnlockRobotId = savedMission.UnlockRobotId ?? string.Empty,
+            UnlockMissionCode = savedMission.UnlockMissionCode ?? string.Empty,
+            IdleNode = savedMission.IdleNode ?? string.Empty,
+            MissionData = missionData?.AsReadOnly()
         };
+
+        // Submit to external AMR system
+        if (string.IsNullOrWhiteSpace(_missionOptions.SubmitMissionUrl) ||
+            !Uri.TryCreate(_missionOptions.SubmitMissionUrl, UriKind.Absolute, out var requestUri))
+        {
+            _logger.LogError("Submit mission URL is not configured correctly.");
+            throw new InvalidOperationException("Submit mission URL is not configured.");
+        }
+
+        var httpClient = _httpClientFactory.CreateClient();
+        var apiRequest = new HttpRequestMessage(HttpMethod.Post, requestUri)
+        {
+            Content = JsonContent.Create(submitRequest)
+        };
+
+        // Add custom headers required by real backend
+        apiRequest.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json")
+        {
+            CharSet = "UTF-8"
+        };
+        apiRequest.Headers.Add("language", "en");
+        apiRequest.Headers.Add("accept", "*/*");
+        apiRequest.Headers.Add("wizards", "FRONT_END");
+
+        try
+        {
+            using var response = await httpClient.SendAsync(apiRequest, cancellationToken);
+            var serviceResponse = await response.Content.ReadFromJsonAsync<SubmitMissionResponse>(cancellationToken: cancellationToken);
+
+            if (serviceResponse is null)
+            {
+                _logger.LogError("Mission service returned no content for submit mission. Status: {StatusCode}", response.StatusCode);
+                throw new InvalidOperationException("Failed to retrieve a response from the mission service.");
+            }
+
+            if (!serviceResponse.Success)
+            {
+                _logger.LogWarning("Mission submission failed for saved mission {Id}. Code: {Code}, Message: {Message}",
+                    id, serviceResponse.Code, serviceResponse.Message);
+                throw new SavedCustomMissionSubmissionException($"Mission submission failed: {serviceResponse.Message}");
+            }
+
+            _logger.LogInformation("Successfully triggered saved custom mission {Id} ('{MissionName}'). " +
+                "MissionCode: {MissionCode}, RequestId: {RequestId}",
+                id, savedMission.MissionName, missionCode, requestId);
+
+            return new TriggerResult
+            {
+                Success = true,
+                MissionCode = missionCode,
+                RequestId = requestId,
+                QueueId = null,
+                ExecuteImmediately = true,
+                Message = serviceResponse.Message ?? "Mission submitted successfully"
+            };
+        }
+        catch (HttpRequestException httpRequestException)
+        {
+            _logger.LogError(httpRequestException, "Error while calling mission submit endpoint");
+            throw new SavedCustomMissionSubmissionException("Unable to reach the mission submit endpoint.", httpRequestException);
+        }
     }
 
     private async Task ValidateAreaStepsAsync(string? missionStepsJson, CancellationToken cancellationToken)
@@ -329,6 +410,17 @@ public class SavedCustomMissionNotFoundException : Exception
 public class SavedCustomMissionValidationException : Exception
 {
     public SavedCustomMissionValidationException(string message) : base(message)
+    {
+    }
+}
+
+public class SavedCustomMissionSubmissionException : Exception
+{
+    public SavedCustomMissionSubmissionException(string message) : base(message)
+    {
+    }
+
+    public SavedCustomMissionSubmissionException(string message, Exception innerException) : base(message, innerException)
     {
     }
 }

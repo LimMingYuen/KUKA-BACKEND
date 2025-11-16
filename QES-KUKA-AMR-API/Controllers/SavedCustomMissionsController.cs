@@ -81,6 +81,12 @@ public class SavedCustomMissionsController : ControllerBase
                 ContainerModelCode = request.ContainerModelCode,
                 ContainerCode = request.ContainerCode,
                 IdleNode = request.IdleNode,
+                OrgId = request.OrgId,
+                ViewBoardType = request.ViewBoardType,
+                TemplateCode = request.TemplateCode,
+                LockRobotAfterFinish = request.LockRobotAfterFinish,
+                UnlockRobotId = request.UnlockRobotId,
+                UnlockMissionCode = request.UnlockMissionCode,
                 MissionStepsJson = request.MissionStepsJson
             }, createdBy, cancellationToken);
 
@@ -141,6 +147,12 @@ public class SavedCustomMissionsController : ControllerBase
                 ContainerModelCode = request.ContainerModelCode,
                 ContainerCode = request.ContainerCode,
                 IdleNode = request.IdleNode,
+                OrgId = request.OrgId,
+                ViewBoardType = request.ViewBoardType,
+                TemplateCode = request.TemplateCode,
+                LockRobotAfterFinish = request.LockRobotAfterFinish,
+                UnlockRobotId = request.UnlockRobotId,
+                UnlockMissionCode = request.UnlockMissionCode,
                 MissionStepsJson = request.MissionStepsJson
             }, cancellationToken);
 
@@ -245,6 +257,17 @@ public class SavedCustomMissionsController : ControllerBase
                 Type = "https://httpstatuses.com/400"
             });
         }
+        catch (SavedCustomMissionSubmissionException ex)
+        {
+            _logger.LogError(ex, "Error submitting mission for saved custom mission {Id}", id);
+            return StatusCode(StatusCodes.Status502BadGateway, new ProblemDetails
+            {
+                Title = "Mission submission failed.",
+                Detail = ex.Message,
+                Status = StatusCodes.Status502BadGateway,
+                Type = "https://httpstatuses.com/502"
+            });
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error triggering saved custom mission {Id}", id);
@@ -276,6 +299,12 @@ public class SavedCustomMissionsController : ControllerBase
             ContainerModelCode = mission.ContainerModelCode,
             ContainerCode = mission.ContainerCode,
             IdleNode = mission.IdleNode,
+            OrgId = mission.OrgId,
+            ViewBoardType = mission.ViewBoardType,
+            TemplateCode = mission.TemplateCode,
+            LockRobotAfterFinish = mission.LockRobotAfterFinish,
+            UnlockRobotId = mission.UnlockRobotId,
+            UnlockMissionCode = mission.UnlockMissionCode,
             MissionStepsJson = mission.MissionStepsJson,
             CreatedBy = mission.CreatedBy,
             CreatedUtc = mission.CreatedUtc,

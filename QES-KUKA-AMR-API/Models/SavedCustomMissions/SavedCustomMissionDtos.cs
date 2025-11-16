@@ -18,6 +18,12 @@ public class SavedCustomMissionDto
     public string? ContainerModelCode { get; set; }
     public string? ContainerCode { get; set; }
     public string? IdleNode { get; set; }
+    public string? OrgId { get; set; }
+    public string? ViewBoardType { get; set; }
+    public string? TemplateCode { get; set; }
+    public bool LockRobotAfterFinish { get; set; }
+    public string? UnlockRobotId { get; set; }
+    public string? UnlockMissionCode { get; set; }
     public string MissionStepsJson { get; set; } = string.Empty;
     public string CreatedBy { get; set; } = string.Empty;
     public DateTime CreatedUtc { get; set; }
@@ -63,6 +69,23 @@ public class SavedCustomMissionCreateRequest
     [MaxLength(100)]
     public string? IdleNode { get; set; }
 
+    [MaxLength(100)]
+    public string? OrgId { get; set; }
+
+    [MaxLength(100)]
+    public string? ViewBoardType { get; set; }
+
+    [MaxLength(100)]
+    public string? TemplateCode { get; set; }
+
+    public bool LockRobotAfterFinish { get; set; }
+
+    [MaxLength(100)]
+    public string? UnlockRobotId { get; set; }
+
+    [MaxLength(100)]
+    public string? UnlockMissionCode { get; set; }
+
     [Required(ErrorMessage = "At least one mission step is required")]
     public string MissionStepsJson { get; set; } = string.Empty;
 }
@@ -104,6 +127,23 @@ public class SavedCustomMissionUpdateRequest
 
     [MaxLength(100)]
     public string? IdleNode { get; set; }
+
+    [MaxLength(100)]
+    public string? OrgId { get; set; }
+
+    [MaxLength(100)]
+    public string? ViewBoardType { get; set; }
+
+    [MaxLength(100)]
+    public string? TemplateCode { get; set; }
+
+    public bool LockRobotAfterFinish { get; set; }
+
+    [MaxLength(100)]
+    public string? UnlockRobotId { get; set; }
+
+    [MaxLength(100)]
+    public string? UnlockMissionCode { get; set; }
 
     [Required(ErrorMessage = "At least one mission step is required")]
     public string MissionStepsJson { get; set; } = string.Empty;

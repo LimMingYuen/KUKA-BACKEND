@@ -78,6 +78,41 @@ public class SavedCustomMission
     public string? IdleNode { get; set; }
 
     /// <summary>
+    /// Organization ID for mission submission
+    /// </summary>
+    [MaxLength(100)]
+    public string? OrgId { get; set; }
+
+    /// <summary>
+    /// View board type for mission display
+    /// </summary>
+    [MaxLength(100)]
+    public string? ViewBoardType { get; set; }
+
+    /// <summary>
+    /// Template code for workflow-based missions
+    /// </summary>
+    [MaxLength(100)]
+    public string? TemplateCode { get; set; }
+
+    /// <summary>
+    /// Whether to lock the robot after mission completion
+    /// </summary>
+    public bool LockRobotAfterFinish { get; set; }
+
+    /// <summary>
+    /// Robot ID to unlock after mission completion
+    /// </summary>
+    [MaxLength(100)]
+    public string? UnlockRobotId { get; set; }
+
+    /// <summary>
+    /// Mission code that will unlock the robot
+    /// </summary>
+    [MaxLength(100)]
+    public string? UnlockMissionCode { get; set; }
+
+    /// <summary>
     /// JSON array of mission steps (sequence, position, type, putDown, passStrategy, waitingMillis)
     /// </summary>
     [Required]
