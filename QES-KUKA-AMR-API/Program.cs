@@ -22,6 +22,7 @@ using QES_KUKA_AMR_API.Services.ShelfDecisionRules;
 using QES_KUKA_AMR_API.Services.Users;
 using QES_KUKA_AMR_API.Services.WorkflowNodeCodes;
 using QES_KUKA_AMR_API.Services.MapImport;
+using QES_KUKA_AMR_API.Services.Queue;
 using log4net;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -169,6 +170,9 @@ builder.Services.AddScoped<IMissionListClient, MissionListClient>();
 builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
 
 // Mission Queue Services
+builder.Services.AddScoped<IMapCodeQueueManager, MapCodeQueueManager>();
+builder.Services.AddScoped<IRobotAssignmentService, RobotAssignmentService>();
+builder.Services.AddScoped<IJobOpportunityEvaluator, JobOpportunityEvaluator>();
 
 // Log Cleanup Services
 builder.Services.Configure<LogCleanupOptions>(

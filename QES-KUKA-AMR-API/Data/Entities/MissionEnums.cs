@@ -36,3 +36,74 @@ public enum MissionTriggerSource
     /// </summary>
     Direct = 4
 }
+
+public enum MissionQueueStatus
+{
+    /// <summary>
+    /// Mission waiting in queue
+    /// </summary>
+    Pending = 0,
+
+    /// <summary>
+    /// Mission eligible for robot assignment
+    /// </summary>
+    ReadyToAssign = 1,
+
+    /// <summary>
+    /// Robot assigned, not yet submitted to AMR
+    /// </summary>
+    Assigned = 2,
+
+    /// <summary>
+    /// Submitted to external AMR system
+    /// </summary>
+    SubmittedToAmr = 3,
+
+    /// <summary>
+    /// Robot currently executing mission
+    /// </summary>
+    Executing = 4,
+
+    /// <summary>
+    /// Mission successfully finished
+    /// </summary>
+    Completed = 5,
+
+    /// <summary>
+    /// Mission execution failed
+    /// </summary>
+    Failed = 6,
+
+    /// <summary>
+    /// Mission cancelled by user or system
+    /// </summary>
+    Cancelled = 7
+}
+
+public enum OpportunityDecision
+{
+    /// <summary>
+    /// Evaluation pending
+    /// </summary>
+    Pending = 0,
+
+    /// <summary>
+    /// Found and chained next job
+    /// </summary>
+    JobChained = 1,
+
+    /// <summary>
+    /// No suitable job, returning to original map
+    /// </summary>
+    ReturnToOriginal = 2,
+
+    /// <summary>
+    /// Hit consecutive job limit
+    /// </summary>
+    LimitReached = 3,
+
+    /// <summary>
+    /// No pending jobs available in current map
+    /// </summary>
+    NoJobsAvailable = 4
+}
