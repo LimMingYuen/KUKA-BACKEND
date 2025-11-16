@@ -187,7 +187,69 @@ public class WorkflowNodeCodeService : IWorkflowNodeCodeService
             externalWorkflowId, syncResult.NodeCodesInserted, syncResult.NodeCodesDeleted);
 
         // Step 2: Classify by zone using the freshly synced data
-        return await ClassifyWorkflowByZoneInternalAsync(externalWorkflowId, dbContext, cancellationToken);
+        var classification = await ClassifyWorkflowByZoneInternalAsync(externalWorkflowId, dbContext, cancellationToken);
+
+        if (classification == null)
+        {
+            _logger.LogWarning("Could not classify workflow {ExternalWorkflowId} to any zone", externalWorkflowId);
+            return null;
+        }
+
+        // Step 3: Get workflow details from WorkflowDiagram
+        var workflow = await dbContext.WorkflowDiagrams
+            .FirstOrDefaultAsync(w => w.ExternalWorkflowId == externalWorkflowId, cancellationToken);
+
+        if (workflow == null)
+        {
+            _logger.LogWarning("Workflow {ExternalWorkflowId} not found in WorkflowDiagrams table", externalWorkflowId);
+            return classification;
+        }
+
+        // Step 4: Save or update WorkflowZoneMapping
+        var existingMapping = await dbContext.WorkflowZoneMappings
+            .FirstOrDefaultAsync(m => m.ExternalWorkflowId == externalWorkflowId, cancellationToken);
+
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+
+        if (existingMapping != null)
+        {
+            // Update existing mapping
+            existingMapping.WorkflowCode = workflow.WorkflowCode;
+            existingMapping.WorkflowName = workflow.WorkflowName;
+            existingMapping.ZoneName = classification.ZoneName;
+            existingMapping.ZoneCode = classification.ZoneCode;
+            existingMapping.MapCode = classification.MapCode;
+            existingMapping.MatchedNodesCount = classification.MatchedNodesCount;
+            existingMapping.UpdatedUtc = now;
+
+            _logger.LogInformation("Updated zone mapping for workflow {ExternalWorkflowId} ({WorkflowCode}): {ZoneName} ({ZoneCode})",
+                externalWorkflowId, workflow.WorkflowCode, classification.ZoneName, classification.ZoneCode);
+        }
+        else
+        {
+            // Create new mapping
+            var newMapping = new WorkflowZoneMapping
+            {
+                ExternalWorkflowId = externalWorkflowId,
+                WorkflowCode = workflow.WorkflowCode,
+                WorkflowName = workflow.WorkflowName,
+                ZoneName = classification.ZoneName,
+                ZoneCode = classification.ZoneCode,
+                MapCode = classification.MapCode,
+                MatchedNodesCount = classification.MatchedNodesCount,
+                CreatedUtc = now,
+                UpdatedUtc = now
+            };
+
+            dbContext.WorkflowZoneMappings.Add(newMapping);
+
+            _logger.LogInformation("Created zone mapping for workflow {ExternalWorkflowId} ({WorkflowCode}): {ZoneName} ({ZoneCode})",
+                externalWorkflowId, workflow.WorkflowCode, classification.ZoneName, classification.ZoneCode);
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return classification;
     }
 
     private async Task<WorkflowZoneClassification?> ClassifyWorkflowByZoneInternalAsync(
@@ -431,6 +493,28 @@ public class WorkflowNodeCodeService : IWorkflowNodeCodeService
                 ErrorMessage = $"Unexpected error: {ex.Message}"
             };
         }
+    }
+
+    public async Task<IEnumerable<WorkflowZoneMapping>> GetAllWorkflowZoneMappingsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        using var scope = _serviceScopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        return await dbContext.WorkflowZoneMappings
+            .OrderBy(m => m.WorkflowCode)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<WorkflowZoneMapping?> GetWorkflowZoneMappingAsync(
+        int externalWorkflowId,
+        CancellationToken cancellationToken = default)
+    {
+        using var scope = _serviceScopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        return await dbContext.WorkflowZoneMappings
+            .FirstOrDefaultAsync(m => m.ExternalWorkflowId == externalWorkflowId, cancellationToken);
     }
 
     private class SyncInternalResult
