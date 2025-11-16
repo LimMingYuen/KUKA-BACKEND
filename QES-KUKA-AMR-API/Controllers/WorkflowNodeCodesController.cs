@@ -201,4 +201,70 @@ public class WorkflowNodeCodesController : ControllerBase
             });
         }
     }
+
+    /// <summary>
+    /// Gets all workflow zone mappings from the database.
+    /// Returns the stored classification results for all workflows.
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>List of all workflow zone mappings</returns>
+    [HttpGet("zone-mappings")]
+    public async Task<ActionResult<IEnumerable<Data.Entities.WorkflowZoneMapping>>> GetAllZoneMappingsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var mappings = await _workflowNodeCodeService.GetAllWorkflowZoneMappingsAsync(cancellationToken);
+            return Ok(mappings);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting all workflow zone mappings");
+            return StatusCode(StatusCodes.Status500InternalServerError, new
+            {
+                Error = "Failed to get workflow zone mappings",
+                Message = ex.Message
+            });
+        }
+    }
+
+    /// <summary>
+    /// Gets a specific workflow zone mapping by external workflow ID.
+    /// Returns the stored classification result for the workflow.
+    /// </summary>
+    /// <param name="externalWorkflowId">The external workflow ID</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>The workflow zone mapping, or 404 if not found</returns>
+    [HttpGet("{externalWorkflowId}/zone-mapping")]
+    public async Task<ActionResult<Data.Entities.WorkflowZoneMapping>> GetZoneMappingAsync(
+        int externalWorkflowId,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var mapping = await _workflowNodeCodeService.GetWorkflowZoneMappingAsync(
+                externalWorkflowId,
+                cancellationToken);
+
+            if (mapping == null)
+            {
+                return NotFound(new
+                {
+                    Error = $"No zone mapping found for workflow {externalWorkflowId}",
+                    Message = "The workflow has not been classified yet. Use sync-and-classify endpoint first."
+                });
+            }
+
+            return Ok(mapping);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting workflow zone mapping for {ExternalWorkflowId}", externalWorkflowId);
+            return StatusCode(StatusCodes.Status500InternalServerError, new
+            {
+                Error = $"Failed to get zone mapping for workflow {externalWorkflowId}",
+                Message = ex.Message
+            });
+        }
+    }
 }

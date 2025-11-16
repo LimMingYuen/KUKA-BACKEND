@@ -50,11 +50,30 @@ public interface IWorkflowNodeCodeService
     /// <summary>
     /// Syncs workflow node codes from external API and immediately classifies the workflow by zone.
     /// This is a convenience method that combines sync + classify in one call.
+    /// The classification result is saved to the WorkflowZoneMappings table.
     /// </summary>
     /// <param name="externalWorkflowId">The external workflow ID</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Zone classification result after sync, or null if sync failed or no zone match</returns>
     Task<WorkflowZoneClassification?> SyncAndClassifyWorkflowAsync(
+        int externalWorkflowId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Gets all workflow zone mappings from the database.
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>List of all workflow zone mappings</returns>
+    Task<IEnumerable<Data.Entities.WorkflowZoneMapping>> GetAllWorkflowZoneMappingsAsync(
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Gets a specific workflow zone mapping by external workflow ID.
+    /// </summary>
+    /// <param name="externalWorkflowId">The external workflow ID</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>The workflow zone mapping, or null if not found</returns>
+    Task<Data.Entities.WorkflowZoneMapping?> GetWorkflowZoneMappingAsync(
         int externalWorkflowId,
         CancellationToken cancellationToken = default);
 }

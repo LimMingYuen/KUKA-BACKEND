@@ -14,6 +14,8 @@ public class ApplicationDbContext : DbContext
 
     public DbSet<WorkflowNodeCode> WorkflowNodeCodes => Set<WorkflowNodeCode>();
 
+    public DbSet<WorkflowZoneMapping> WorkflowZoneMappings => Set<WorkflowZoneMapping>();
+
     public DbSet<MissionHistory> MissionHistories => Set<MissionHistory>();
 
 
@@ -63,6 +65,14 @@ public class ApplicationDbContext : DbContext
             entity.HasIndex(e => new { e.ExternalWorkflowId, e.NodeCode }).IsUnique();
             // Index for querying all node codes for a specific workflow
             entity.HasIndex(e => e.ExternalWorkflowId);
+        });
+
+        modelBuilder.Entity<WorkflowZoneMapping>(entity =>
+        {
+            // Each workflow can only be mapped to one zone
+            entity.HasIndex(e => e.ExternalWorkflowId).IsUnique();
+            // Index for querying by zone
+            entity.HasIndex(e => e.ZoneCode);
         });
 
         modelBuilder.Entity<MissionHistory>(entity =>
