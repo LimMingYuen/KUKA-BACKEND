@@ -90,10 +90,7 @@ public class RobotAssignmentService : IRobotAssignmentService
             }
         }
 
-        // Step 5: Apply battery threshold
-        var minBatteryThreshold = await GetMinimumBatteryThresholdAsync(cancellationToken);
-        robotScores = robotScores.Where(rs => rs.BatteryLevel >= minBatteryThreshold).ToList();
-
+        // Step 5: Check if any robots available after filtering
         if (!robotScores.Any())
         {
             _logger.LogInformation(
@@ -108,11 +105,10 @@ public class RobotAssignmentService : IRobotAssignmentService
 
         _logger.LogInformation(
             "Assigned robot {RobotId} to queue item {QueueItemId} " +
-            "(distance: {Distance:F2}, battery: {Battery}%, score: {Score:F2})",
+            "(distance: {Distance:F2}, score: {Score:F2})",
             bestRobot.RobotId,
             queueItem.Id,
             bestRobot.Distance,
-            bestRobot.BatteryLevel,
             bestRobot.Score
         );
 
@@ -147,8 +143,8 @@ public class RobotAssignmentService : IRobotAssignmentService
                 Math.Pow(robot.Y - targetY, 2)
             );
 
-            // Calculate composite score
-            var score = CalculateRobotScore(distance, robot.BatteryLevel, jobPriority);
+            // Calculate composite score (based on priority and distance only)
+            var score = CalculateRobotScore(distance, jobPriority);
 
             scores.Add(new RobotDistanceScore
             {
@@ -406,9 +402,9 @@ public class RobotAssignmentService : IRobotAssignmentService
                     Orientation = string.IsNullOrEmpty(r.RobotOrientation)
                         ? null
                         : double.Parse(r.RobotOrientation),
-                    BatteryLevel = r.BatteryLevel,
-                    Status = r.Status,
-                    OccupyStatus = r.OccupyStatus,
+                    BatteryLevel = r.BatteryLevel ?? 0,
+                    Status = r.Status ?? 0,
+                    OccupyStatus = r.OccupyStatus ?? 0,
                     CurrentMissionCode = r.MissionCode,
                     UpdatedUtc = _timeProvider.GetUtcNow().UtcDateTime,
                     Source = PositionSource.RealTime
@@ -468,9 +464,9 @@ public class RobotAssignmentService : IRobotAssignmentService
                 Orientation = string.IsNullOrEmpty(robotData.RobotOrientation)
                     ? null
                     : double.Parse(robotData.RobotOrientation),
-                BatteryLevel = robotData.BatteryLevel,
-                Status = robotData.Status,
-                OccupyStatus = robotData.OccupyStatus,
+                BatteryLevel = robotData.BatteryLevel ?? 0,
+                Status = robotData.Status ?? 0,
+                OccupyStatus = robotData.OccupyStatus ?? 0,
                 CurrentMissionCode = robotData.MissionCode,
                 UpdatedUtc = _timeProvider.GetUtcNow().UtcDateTime,
                 Source = PositionSource.RealTime
@@ -507,30 +503,15 @@ public class RobotAssignmentService : IRobotAssignmentService
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    private double CalculateRobotScore(double distance, int batteryLevel, int jobPriority)
+    private double CalculateRobotScore(double distance, int jobPriority)
     {
         const double PriorityWeight = 100.0;
         const double DistanceWeight = -1.0;
-        const double BatteryWeight = 0.5;
 
         var score =
             (jobPriority * PriorityWeight) +
-            (distance * DistanceWeight) +
-            (batteryLevel * BatteryWeight);
+            (distance * DistanceWeight);
 
         return score;
-    }
-
-    private async Task<int> GetMinimumBatteryThresholdAsync(CancellationToken cancellationToken)
-    {
-        var setting = await _dbContext.SystemSettings
-            .FirstOrDefaultAsync(s => s.Key == "MinimumRobotBatteryForAssignment", cancellationToken);
-
-        if (setting != null && int.TryParse(setting.Value, out var threshold))
-        {
-            return threshold;
-        }
-
-        return 20; // Default 20%
     }
 }
