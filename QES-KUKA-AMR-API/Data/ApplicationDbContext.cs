@@ -48,6 +48,13 @@ public class ApplicationDbContext : DbContext
 
     public DbSet<SystemSetting> SystemSettings => Set<SystemSetting>();
 
+    // Queue System Entities
+    public DbSet<MissionQueueItem> MissionQueueItems => Set<MissionQueueItem>();
+
+    public DbSet<RobotJobOpportunity> RobotJobOpportunities => Set<RobotJobOpportunity>();
+
+    public DbSet<MapCodeQueueConfiguration> MapCodeQueueConfigurations => Set<MapCodeQueueConfiguration>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -218,6 +225,47 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.Key).HasMaxLength(100).IsRequired();
             entity.Property(e => e.Value).HasMaxLength(255).IsRequired();
             entity.Property(e => e.LastUpdated).HasColumnType("datetime2");
+        });
+
+        // Queue System Entity Configurations
+        modelBuilder.Entity<MissionQueueItem>(entity =>
+        {
+            entity.ToTable("MissionQueueItems");
+            entity.HasIndex(e => e.QueueItemCode).IsUnique();
+            entity.HasIndex(e => e.MissionCode);
+            entity.HasIndex(e => new { e.PrimaryMapCode, e.Status, e.Priority });
+            entity.HasIndex(e => new { e.AssignedRobotId, e.Status });
+            entity.HasIndex(e => e.ParentQueueItemId);
+            entity.HasIndex(e => e.NextQueueItemId);
+            entity.Property(e => e.MissionStepsJson).HasColumnType("nvarchar(max)");
+            entity.Property(e => e.RobotModelsJson).HasColumnType("nvarchar(max)");
+            entity.Property(e => e.RobotIdsJson).HasColumnType("nvarchar(max)");
+            entity.Property(e => e.EnqueuedUtc).HasColumnType("datetime2");
+            entity.Property(e => e.StartedUtc).HasColumnType("datetime2");
+            entity.Property(e => e.CompletedUtc).HasColumnType("datetime2");
+            entity.Property(e => e.CancelledUtc).HasColumnType("datetime2");
+            entity.Property(e => e.RobotAssignedUtc).HasColumnType("datetime2");
+            entity.Property(e => e.LastRetryUtc).HasColumnType("datetime2");
+        });
+
+        modelBuilder.Entity<RobotJobOpportunity>(entity =>
+        {
+            entity.ToTable("RobotJobOpportunities");
+            entity.HasIndex(e => new { e.RobotId, e.CurrentMapCode });
+            entity.HasIndex(e => e.CurrentQueueItemId);
+            entity.HasIndex(e => e.SelectedOpportunisticJobId);
+            entity.Property(e => e.PositionUpdatedUtc).HasColumnType("datetime2");
+            entity.Property(e => e.MissionCompletedUtc).HasColumnType("datetime2");
+            entity.Property(e => e.EnteredMapCodeUtc).HasColumnType("datetime2");
+            entity.Property(e => e.OpportunityEvaluatedUtc).HasColumnType("datetime2");
+        });
+
+        modelBuilder.Entity<MapCodeQueueConfiguration>(entity =>
+        {
+            entity.ToTable("MapCodeQueueConfigurations");
+            entity.HasIndex(e => e.MapCode).IsUnique();
+            entity.Property(e => e.CreatedUtc).HasColumnType("datetime2");
+            entity.Property(e => e.UpdatedUtc).HasColumnType("datetime2");
         });
     }
 }
