@@ -412,7 +412,7 @@ public class QueueSchedulerHostedService : IHostedService, IDisposable
 
             var jobQueryRequest = new JobQueryRequest
             {
-                MissionCode = job.MissionCode,
+                JobCode = job.MissionCode,
                 Limit = 1
             };
 
@@ -452,7 +452,7 @@ public class QueueSchedulerHostedService : IHostedService, IDisposable
             var jobData = jobQueryResponse.Data.First();
 
             // Update job status based on AMR response
-            if (jobData.JobStatusCode == 100) // Completed (adjust code based on your AMR system)
+            if (jobData.Status == 100) // Completed (adjust code based on your AMR system)
             {
                 job.Status = MissionQueueStatus.Completed;
                 job.CompletedUtc = DateTime.UtcNow;
@@ -486,15 +486,15 @@ public class QueueSchedulerHostedService : IHostedService, IDisposable
                     }
                 }
             }
-            else if (jobData.JobStatusCode >= 200) // Failed/Cancelled (adjust based on your AMR system)
+            else if (jobData.Status >= 200) // Failed/Cancelled (adjust based on your AMR system)
             {
                 job.Status = MissionQueueStatus.Failed;
-                job.ErrorMessage = $"AMR job failed with status code {jobData.JobStatusCode}";
+                job.ErrorMessage = $"AMR job failed with status code {jobData.Status}";
 
                 _logger.LogWarning(
                     "Job {QueueItemCode} failed with AMR status code {StatusCode}",
                     job.QueueItemCode,
-                    jobData.JobStatusCode
+                    jobData.Status
                 );
             }
             else if (job.Status == MissionQueueStatus.SubmittedToAmr)
