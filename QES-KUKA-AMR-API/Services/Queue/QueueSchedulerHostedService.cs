@@ -277,14 +277,18 @@ public class QueueSchedulerHostedService : IHostedService, IDisposable
             List<string>? robotModels = null;
             List<string>? robotIds = null;
 
-            if (!string.IsNullOrEmpty(job.RobotModelsJson))
+            if (!string.IsNullOrEmpty(job.RobotModels))
             {
-                robotModels = JsonSerializer.Deserialize<List<string>>(job.RobotModelsJson);
+                robotModels = job.RobotModels.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                    .Select(m => m.Trim())
+                    .ToList();
             }
 
-            if (!string.IsNullOrEmpty(job.RobotIdsJson))
+            if (!string.IsNullOrEmpty(job.RobotIds))
             {
-                robotIds = JsonSerializer.Deserialize<List<string>>(job.RobotIdsJson);
+                robotIds = job.RobotIds.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                    .Select(id => id.Trim())
+                    .ToList();
             }
 
             // Build submission request

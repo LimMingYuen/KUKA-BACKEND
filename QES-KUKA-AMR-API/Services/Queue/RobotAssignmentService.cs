@@ -67,10 +67,12 @@ public class RobotAssignmentService : IRobotAssignmentService
         }
 
         // Step 3: Filter by robot model compatibility (if specified)
-        if (!string.IsNullOrEmpty(queueItem.RobotModelsJson))
+        if (!string.IsNullOrEmpty(queueItem.RobotModels))
         {
-            var allowedModels = JsonSerializer.Deserialize<List<string>>(queueItem.RobotModelsJson);
-            if (allowedModels != null && allowedModels.Any())
+            var allowedModels = queueItem.RobotModels.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .Select(m => m.Trim())
+                .ToList();
+            if (allowedModels.Any())
             {
                 robotScores = robotScores.Where(rs =>
                 {
@@ -81,10 +83,12 @@ public class RobotAssignmentService : IRobotAssignmentService
         }
 
         // Step 4: Filter by specific robot IDs (if specified)
-        if (!string.IsNullOrEmpty(queueItem.RobotIdsJson))
+        if (!string.IsNullOrEmpty(queueItem.RobotIds))
         {
-            var allowedRobotIds = JsonSerializer.Deserialize<List<string>>(queueItem.RobotIdsJson);
-            if (allowedRobotIds != null && allowedRobotIds.Any())
+            var allowedRobotIds = queueItem.RobotIds.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .Select(id => id.Trim())
+                .ToList();
+            if (allowedRobotIds.Any())
             {
                 robotScores = robotScores.Where(rs => allowedRobotIds.Contains(rs.RobotId)).ToList();
             }
