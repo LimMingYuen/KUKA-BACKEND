@@ -120,6 +120,162 @@ GET http://localhost:5109/api/workflow-node-codes/137
 
 ---
 
+### 4. Classify Workflow by Zone (NEW!)
+**Endpoint:** `GET /api/workflow-node-codes/{externalWorkflowId}/zone`
+
+**Purpose:** Determines which MapZone a workflow belongs to based on node code matching.
+
+**Algorithm:**
+1. Gets workflow node codes (in order from external API)
+2. Compares against all MapZone.Nodes
+3. Returns the **first zone** where **ALL zone nodes** exist in the workflow's node codes
+4. Stops at first match (prioritizes zones in database order)
+
+**Path Parameters:**
+- `externalWorkflowId`: The external workflow ID (integer)
+
+**Example Request:**
+```http
+GET http://localhost:5109/api/workflow-node-codes/137/zone
+```
+
+**Response (Match Found):**
+```json
+{
+  "zoneName": "Assembly Zone A",
+  "zoneCode": "ZONE_A",
+  "mapCode": "Factory_Floor_1",
+  "matchedNodesCount": 6,
+  "matchedNodes": [
+    "Sim1-1-1",
+    "Sim1-1-2",
+    "Sim1-1-3",
+    "Sim1-1-4",
+    "Sim1-1-5",
+    "Sim1-1-6"
+  ]
+}
+```
+
+**Response (No Match - 404):**
+```json
+{
+  "error": "No matching zone found for workflow 137",
+  "message": "The workflow's node codes do not match any zone's nodes"
+}
+```
+
+**When to Use:**
+- Automatically categorize workflows by zone
+- Display workflow zone on UI
+- Filter/sort workflows by zone
+- Validate workflow configuration
+
+**Example Frontend Usage:**
+```javascript
+async function getWorkflowZone(externalWorkflowId) {
+  try {
+    const response = await fetch(`/api/workflow-node-codes/${externalWorkflowId}/zone`);
+
+    if (response.status === 404) {
+      console.log('Workflow does not belong to any zone');
+      return null;
+    }
+
+    const zone = await response.json();
+    console.log(`Workflow belongs to: ${zone.zoneName} (${zone.zoneCode})`);
+    console.log(`Matched ${zone.matchedNodesCount} nodes`);
+    return zone;
+  } catch (error) {
+    console.error('Error classifying workflow:', error);
+  }
+}
+```
+
+---
+
+### 5. Sync and Classify Workflow (NEW! - Combined Operation)
+**Endpoint:** `POST /api/workflow-node-codes/{externalWorkflowId}/sync-and-classify`
+
+**Purpose:** Syncs node codes from the external API and immediately classifies the workflow by zone in a single operation. This ensures you always get classification based on fresh data without needing to make separate sync and classify calls.
+
+**Algorithm:**
+1. Syncs node codes from external AMR API (same as single workflow sync)
+2. Immediately classifies the workflow using the freshly synced data (same as zone classification)
+3. Returns zone classification result or 404 if sync failed or no zone matched
+
+**Path Parameters:**
+- `externalWorkflowId`: The external workflow ID (integer)
+
+**Example Request:**
+```http
+POST http://localhost:5109/api/workflow-node-codes/137/sync-and-classify
+```
+
+**Response (Success - Zone Found):**
+```json
+{
+  "zoneName": "Assembly Zone A",
+  "zoneCode": "ZONE_A",
+  "mapCode": "Factory_Floor_1",
+  "matchedNodesCount": 6,
+  "matchedNodes": [
+    "Sim1-1-1",
+    "Sim1-1-2",
+    "Sim1-1-3",
+    "Sim1-1-4",
+    "Sim1-1-5",
+    "Sim1-1-6"
+  ]
+}
+```
+
+**Response (Failure - Sync Failed or No Zone Match - 404):**
+```json
+{
+  "error": "Failed to sync and classify workflow 137",
+  "message": "Either the sync failed or the workflow's node codes do not match any zone's nodes"
+}
+```
+
+**When to Use:**
+- **Recommended:** Use this endpoint instead of separate sync + classify calls
+- When you need zone classification and want to ensure data is fresh from external API
+- In workflows where node codes may change frequently
+- For real-time zone assignment during mission creation
+
+**Benefits:**
+- Single API call instead of two
+- Guaranteed fresh data from external API
+- Atomicity: sync and classify happen in same database transaction
+- Reduces network overhead and latency
+
+**Example Frontend Usage:**
+```javascript
+async function syncAndGetWorkflowZone(externalWorkflowId) {
+  try {
+    const response = await fetch(
+      `/api/workflow-node-codes/${externalWorkflowId}/sync-and-classify`,
+      { method: 'POST' }
+    );
+
+    if (response.status === 404) {
+      console.log('Workflow could not be classified (sync failed or no zone match)');
+      return null;
+    }
+
+    const zone = await response.json();
+    console.log(`Workflow belongs to: ${zone.zoneName} (${zone.zoneCode})`);
+    console.log(`Synced and matched ${zone.matchedNodesCount} nodes`);
+    return zone;
+  } catch (error) {
+    console.error('Error syncing and classifying workflow:', error);
+  }
+}
+```
+
+---
+
 ## Typical Frontend Flow
 
 ### Initial App Load (One-Time Setup)

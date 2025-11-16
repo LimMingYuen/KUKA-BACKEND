@@ -34,6 +34,60 @@ public interface IWorkflowNodeCodeService
     Task<List<string>> GetWorkflowNodeCodesAsync(
         int externalWorkflowId,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Classifies a workflow into a zone based on node code matching.
+    /// Compares workflow node codes (in order) against MapZone.Nodes.
+    /// Returns the first zone where ALL zone nodes exist in the workflow's node codes.
+    /// </summary>
+    /// <param name="externalWorkflowId">The external workflow ID</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Zone classification result with zone name and code, or null if no match</returns>
+    Task<WorkflowZoneClassification?> ClassifyWorkflowByZoneAsync(
+        int externalWorkflowId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Syncs workflow node codes from external API and immediately classifies the workflow by zone.
+    /// This is a convenience method that combines sync + classify in one call.
+    /// </summary>
+    /// <param name="externalWorkflowId">The external workflow ID</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Zone classification result after sync, or null if sync failed or no zone match</returns>
+    Task<WorkflowZoneClassification?> SyncAndClassifyWorkflowAsync(
+        int externalWorkflowId,
+        CancellationToken cancellationToken = default);
+}
+
+/// <summary>
+/// Result of workflow zone classification
+/// </summary>
+public class WorkflowZoneClassification
+{
+    /// <summary>
+    /// The zone name where the workflow is classified
+    /// </summary>
+    public string ZoneName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The zone code
+    /// </summary>
+    public string ZoneCode { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The map code
+    /// </summary>
+    public string MapCode { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Number of zone nodes that matched
+    /// </summary>
+    public int MatchedNodesCount { get; set; }
+
+    /// <summary>
+    /// The zone nodes that were matched
+    /// </summary>
+    public List<string> MatchedNodes { get; set; } = new();
 }
 
 /// <summary>
