@@ -27,15 +27,79 @@ public class MissionQueueItem
     /// <summary>
     /// Request ID for tracking
     /// </summary>
-    [Required]
     [MaxLength(100)]
-    public string RequestId { get; set; } = string.Empty;
+    public string? RequestId { get; set; }
 
     /// <summary>
     /// Mission priority (1-10, higher = more urgent)
     /// </summary>
     [Required]
     public int Priority { get; set; } = 5;
+
+    /// <summary>
+    /// Mission type (e.g., "RACK_MOVE", "DELIVERY")
+    /// </summary>
+    [MaxLength(50)]
+    public string? MissionType { get; set; }
+
+    /// <summary>
+    /// Robot type (e.g., "LIFT", "LATENT")
+    /// </summary>
+    [MaxLength(50)]
+    public string? RobotType { get; set; }
+
+    /// <summary>
+    /// Template/workflow code for workflow-based missions
+    /// </summary>
+    [MaxLength(100)]
+    public string? TemplateCode { get; set; }
+
+    /// <summary>
+    /// Container model code
+    /// </summary>
+    [MaxLength(100)]
+    public string? ContainerModelCode { get; set; }
+
+    /// <summary>
+    /// Container code
+    /// </summary>
+    [MaxLength(100)]
+    public string? ContainerCode { get; set; }
+
+    /// <summary>
+    /// Idle node position
+    /// </summary>
+    [MaxLength(100)]
+    public string? IdleNode { get; set; }
+
+    /// <summary>
+    /// Organization ID
+    /// </summary>
+    [MaxLength(100)]
+    public string? OrgId { get; set; }
+
+    /// <summary>
+    /// View board type
+    /// </summary>
+    [MaxLength(100)]
+    public string? ViewBoardType { get; set; }
+
+    /// <summary>
+    /// Whether to lock robot after finish
+    /// </summary>
+    public bool LockRobotAfterFinish { get; set; }
+
+    /// <summary>
+    /// Robot ID to unlock
+    /// </summary>
+    [MaxLength(100)]
+    public string? UnlockRobotId { get; set; }
+
+    /// <summary>
+    /// Mission code that unlocks robot
+    /// </summary>
+    [MaxLength(100)]
+    public string? UnlockMissionCode { get; set; }
 
     /// <summary>
     /// Primary MapCode for this mission
@@ -78,14 +142,16 @@ public class MissionQueueItem
     public string MissionStepsJson { get; set; } = "[]";
 
     /// <summary>
-    /// JSON array of compatible robot model codes
+    /// Comma-separated list of compatible robot model codes
     /// </summary>
-    public string? RobotModelsJson { get; set; }
+    [MaxLength(500)]
+    public string? RobotModels { get; set; }
 
     /// <summary>
-    /// JSON array of specific robot IDs allowed for this mission
+    /// Comma-separated list of specific robot IDs allowed for this mission
     /// </summary>
-    public string? RobotIdsJson { get; set; }
+    [MaxLength(500)]
+    public string? RobotIds { get; set; }
 
     /// <summary>
     /// Current queue status
@@ -177,4 +243,14 @@ public class MissionQueueItem
     /// </summary>
     [MaxLength(100)]
     public string? CreatedBy { get; set; }
+
+    /// <summary>
+    /// When this queue item was created
+    /// </summary>
+    public DateTime CreatedUtc { get; set; }
+
+    /// <summary>
+    /// When this queue item was last updated
+    /// </summary>
+    public DateTime UpdatedUtc { get; set; }
 }

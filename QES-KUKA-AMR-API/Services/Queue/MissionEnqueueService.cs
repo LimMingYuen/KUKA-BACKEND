@@ -17,7 +17,7 @@ public interface IMissionEnqueueService
     /// </summary>
     Task<List<MissionQueueItem>> EnqueueMissionAsync(
         SubmitMissionRequest request,
-        string triggerSource = "DirectSubmission",
+        MissionTriggerSource triggerSource = MissionTriggerSource.Direct,
         CancellationToken cancellationToken = default);
 }
 
@@ -42,7 +42,7 @@ public class MissionEnqueueService : IMissionEnqueueService
 
     public async Task<List<MissionQueueItem>> EnqueueMissionAsync(
         SubmitMissionRequest request,
-        string triggerSource = "DirectSubmission",
+        MissionTriggerSource triggerSource = MissionTriggerSource.Direct,
         CancellationToken cancellationToken = default)
     {
         var now = _timeProvider.GetUtcNow().UtcDateTime;
@@ -86,7 +86,7 @@ public class MissionEnqueueService : IMissionEnqueueService
     /// </summary>
     private async Task<List<MissionQueueItem>> EnqueueCustomMissionAsync(
         SubmitMissionRequest request,
-        string triggerSource,
+        MissionTriggerSource triggerSource,
         DateTime now,
         CancellationToken cancellationToken)
     {
@@ -200,7 +200,7 @@ public class MissionEnqueueService : IMissionEnqueueService
     /// </summary>
     private async Task<List<MissionQueueItem>> EnqueueWorkflowMissionAsync(
         SubmitMissionRequest request,
-        string triggerSource,
+        MissionTriggerSource triggerSource,
         DateTime now,
         CancellationToken cancellationToken)
     {
