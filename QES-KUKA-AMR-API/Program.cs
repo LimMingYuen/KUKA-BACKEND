@@ -178,6 +178,8 @@ builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
 builder.Services.AddScoped<IMapCodeQueueManager, MapCodeQueueManager>();
 builder.Services.AddScoped<IRobotAssignmentService, RobotAssignmentService>();
 builder.Services.AddScoped<IJobOpportunityEvaluator, JobOpportunityEvaluator>();
+builder.Services.AddScoped<IWorkflowAnalysisService, WorkflowAnalysisService>();
+builder.Services.AddScoped<IMissionEnqueueService, MissionEnqueueService>();
 
 // Queue Scheduler Background Service
 builder.Services.AddHostedService<QueueSchedulerHostedService>();

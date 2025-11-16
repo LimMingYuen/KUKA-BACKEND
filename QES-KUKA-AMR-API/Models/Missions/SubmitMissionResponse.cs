@@ -15,4 +15,22 @@ public class SubmitMissionResponse
 
     [JsonPropertyName("success")]
     public bool Success { get; set; } = true;
+
+    [JsonPropertyName("requestId")]
+    public string? RequestId { get; set; }
+}
+
+public class SubmitMissionResponseData
+{
+    [JsonPropertyName("queueItemCodes")]
+    public List<string> QueueItemCodes { get; set; } = new();
+
+    [JsonPropertyName("queueItemCount")]
+    public int QueueItemCount { get; set; }
+
+    [JsonPropertyName("isMultiMap")]
+    public bool IsMultiMap { get; set; }
+
+    [JsonPropertyName("primaryMapCode")]
+    public string PrimaryMapCode { get; set; } = string.Empty;
 }

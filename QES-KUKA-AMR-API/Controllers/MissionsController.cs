@@ -13,6 +13,7 @@ using QES_KUKA_AMR_API.Models.Jobs;
 using QES_KUKA_AMR_API.Options;
 using QES_KUKA_AMR_API.Services;
 using QES_KUKA_AMR_API.Services.SavedCustomMissions;
+using QES_KUKA_AMR_API.Services.Queue;
 
 namespace QES_KUKA_AMR_API.Controllers;
 
@@ -24,17 +25,20 @@ public class MissionsController : ControllerBase
     private readonly ILogger<MissionsController> _logger;
     private readonly MissionServiceOptions _missionOptions;
     private readonly ISavedCustomMissionService _savedCustomMissionService;
+    private readonly IMissionEnqueueService _missionEnqueueService;
 
     public MissionsController(
         IHttpClientFactory httpClientFactory,
         ILogger<MissionsController> logger,
         IOptions<MissionServiceOptions> missionOptions,
-        ISavedCustomMissionService savedCustomMissionService)
+        ISavedCustomMissionService savedCustomMissionService,
+        IMissionEnqueueService missionEnqueueService)
     {
         _httpClientFactory = httpClientFactory;
         _logger = logger;
         _missionOptions = missionOptions.Value;
         _savedCustomMissionService = savedCustomMissionService;
+        _missionEnqueueService = missionEnqueueService;
     }
 
     [HttpPost("save-as-template")]
@@ -137,76 +141,72 @@ public class MissionsController : ControllerBase
         [FromBody] SubmitMissionRequest request,
         CancellationToken cancellationToken)
     {
-        _logger.LogInformation("=== MissionsController.SubmitMissionAsync DEBUG ===");
-        _logger.LogInformation("Received mission submission - MissionCode={MissionCode}, TemplateCode={TemplateCode}, Priority={Priority}, RequestId={RequestId}",
-            request.MissionCode, request.TemplateCode, request.Priority, request.RequestId);
-        _logger.LogInformation("=== END MissionsController.SubmitMissionAsync DEBUG ===");
-
-        if (string.IsNullOrWhiteSpace(_missionOptions.SubmitMissionUrl) ||
-            !Uri.TryCreate(_missionOptions.SubmitMissionUrl, UriKind.Absolute, out var requestUri))
-        {
-            _logger.LogError("Submit mission URL is not configured correctly.");
-            return StatusCode(StatusCodes.Status500InternalServerError, new SubmitMissionResponse
-            {
-                Code = "MISSION_SERVICE_CONFIGURATION_ERROR",
-                Message = "Submit mission URL is not configured.",
-                Success = false
-            });
-        }
-
-        var httpClient = _httpClientFactory.CreateClient();
-
-        var apiRequest = new HttpRequestMessage(
-            HttpMethod.Post,
-            requestUri)
-        {
-            Content = JsonContent.Create(request)
-        };
-
-        // Add custom headers required by real backend (no auth required)
-        apiRequest.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json")
-        {
-            CharSet = "UTF-8"
-        };
-        apiRequest.Headers.Add("language", "en");
-        apiRequest.Headers.Add("accept", "*/*");
-        apiRequest.Headers.Add("wizards", "FRONT_END");
+        _logger.LogInformation(
+            "Received mission submission - MissionCode={MissionCode}, TemplateCode={TemplateCode}, " +
+            "Priority={Priority}, HasMissionData={HasMissionData}",
+            request.MissionCode,
+            request.TemplateCode,
+            request.Priority,
+            request.MissionData?.Any() == true
+        );
 
         try
         {
-            using var response = await httpClient.SendAsync(apiRequest, cancellationToken);
+            // Enqueue mission through queue system
+            var queueItems = await _missionEnqueueService.EnqueueMissionAsync(
+                request,
+                triggerSource: "DirectSubmission",
+                cancellationToken
+            );
 
-            var serviceResponse =
-                await response.Content.ReadFromJsonAsync<SubmitMissionResponse>(cancellationToken: cancellationToken);
+            // Build response with queue item codes
+            var queueItemCodes = queueItems.Select(qi => qi.QueueItemCode).ToList();
+            var isMultiMap = queueItems.Count > 1;
 
-            if (serviceResponse is null)
+            _logger.LogInformation(
+                "Mission {MissionCode} enqueued successfully: {QueueItemCount} queue item(s), IsMultiMap={IsMultiMap}, Codes=[{Codes}]",
+                request.MissionCode,
+                queueItems.Count,
+                isMultiMap,
+                string.Join(", ", queueItemCodes)
+            );
+
+            // Return response in same format as AMR system for backward compatibility
+            return Ok(new SubmitMissionResponse
             {
-                _logger.LogError(
-                    "Mission service returned no content for submit mission. Status: {StatusCode}",
-                    response.StatusCode);
-
-                return StatusCode(StatusCodes.Status502BadGateway, new SubmitMissionResponse
+                Success = true,
+                Code = "QUEUED",
+                Message = isMultiMap
+                    ? $"Mission queued successfully with {queueItems.Count} segments"
+                    : "Mission queued successfully",
+                RequestId = request.RequestId,
+                Data = new SubmitMissionResponseData
                 {
-                    Code = "MISSION_SERVICE_EMPTY_RESPONSE",
-                    Message = "Failed to retrieve a response from the mission service.",
-                    Success = false
-                });
-            }
-
-            return StatusCode((int)response.StatusCode, serviceResponse);
+                    QueueItemCodes = queueItemCodes,
+                    QueueItemCount = queueItems.Count,
+                    IsMultiMap = isMultiMap,
+                    PrimaryMapCode = queueItems.First().PrimaryMapCode
+                }
+            });
         }
-        catch (HttpRequestException httpRequestException)
+        catch (InvalidOperationException ex)
         {
-            _logger.LogError(
-                httpRequestException,
-                "Error while calling mission submit endpoint at {BaseAddress}",
-                httpClient.BaseAddress);
-
-            return StatusCode(StatusCodes.Status502BadGateway, new SubmitMissionResponse
+            _logger.LogWarning(ex, "Invalid mission submission: {Message}", ex.Message);
+            return BadRequest(new SubmitMissionResponse
             {
-                Code = "MISSION_SERVICE_UNREACHABLE",
-                Message = "Unable to reach the mission submit endpoint.",
-                Success = false
+                Success = false,
+                Code = "INVALID_REQUEST",
+                Message = ex.Message
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error enqueueing mission {MissionCode}", request.MissionCode);
+            return StatusCode(StatusCodes.Status500InternalServerError, new SubmitMissionResponse
+            {
+                Success = false,
+                Code = "ENQUEUE_ERROR",
+                Message = "An error occurred while enqueueing the mission"
             });
         }
     }
