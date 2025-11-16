@@ -55,40 +55,40 @@ public class MissionsController : ControllerBase
 
         try
         {
-            var missionRequest = request.MissionRequest;
+            var template = request.MissionTemplate;
 
             // Serialize mission data to JSON
-            var missionStepsJson = missionRequest.MissionData != null
-                ? JsonSerializer.Serialize(missionRequest.MissionData)
+            var missionStepsJson = template.MissionData != null
+                ? JsonSerializer.Serialize(template.MissionData)
                 : "[]";
 
             // Convert robot models and IDs to comma-separated strings
-            var robotModels = missionRequest.RobotModels?.Any() == true
-                ? string.Join(",", missionRequest.RobotModels)
+            var robotModels = template.RobotModels?.Any() == true
+                ? string.Join(",", template.RobotModels)
                 : null;
 
-            var robotIds = missionRequest.RobotIds?.Any() == true
-                ? string.Join(",", missionRequest.RobotIds)
+            var robotIds = template.RobotIds?.Any() == true
+                ? string.Join(",", template.RobotIds)
                 : null;
 
             var savedMission = await _savedCustomMissionService.CreateAsync(new SavedCustomMission
             {
                 MissionName = request.MissionName,
                 Description = request.Description,
-                MissionType = missionRequest.MissionType,
-                RobotType = missionRequest.RobotType,
-                Priority = missionRequest.Priority,
+                MissionType = template.MissionType,
+                RobotType = template.RobotType,
+                Priority = template.Priority,
                 RobotModels = robotModels,
                 RobotIds = robotIds,
-                ContainerModelCode = missionRequest.ContainerModelCode,
-                ContainerCode = missionRequest.ContainerCode,
-                IdleNode = missionRequest.IdleNode,
-                OrgId = missionRequest.OrgId,
-                ViewBoardType = missionRequest.ViewBoardType,
-                TemplateCode = missionRequest.TemplateCode,
-                LockRobotAfterFinish = missionRequest.LockRobotAfterFinish,
-                UnlockRobotId = missionRequest.UnlockRobotId,
-                UnlockMissionCode = missionRequest.UnlockMissionCode,
+                ContainerModelCode = template.ContainerModelCode,
+                ContainerCode = template.ContainerCode,
+                IdleNode = template.IdleNode,
+                OrgId = template.OrgId,
+                ViewBoardType = template.ViewBoardType,
+                TemplateCode = template.TemplateCode,
+                LockRobotAfterFinish = template.LockRobotAfterFinish,
+                UnlockRobotId = template.UnlockRobotId,
+                UnlockMissionCode = template.UnlockMissionCode,
                 MissionStepsJson = missionStepsJson
             }, createdBy, cancellationToken);
 
