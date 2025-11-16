@@ -234,8 +234,8 @@ public class SavedCustomMissionService : ISavedCustomMissionService
             MissionCode = missionCode,
             MissionType = savedMission.MissionType,
             ViewBoardType = savedMission.ViewBoardType ?? string.Empty,
-            RobotModels = robotModels?.AsReadOnly() ?? Array.Empty<string>(),
-            RobotIds = robotIds?.AsReadOnly() ?? Array.Empty<string>(),
+            RobotModels = (IReadOnlyList<string>?)robotModels ?? Array.Empty<string>(),
+            RobotIds = (IReadOnlyList<string>?)robotIds ?? Array.Empty<string>(),
             RobotType = savedMission.RobotType,
             Priority = savedMission.Priority,
             ContainerModelCode = savedMission.ContainerModelCode ?? string.Empty,
@@ -245,7 +245,7 @@ public class SavedCustomMissionService : ISavedCustomMissionService
             UnlockRobotId = savedMission.UnlockRobotId ?? string.Empty,
             UnlockMissionCode = savedMission.UnlockMissionCode ?? string.Empty,
             IdleNode = savedMission.IdleNode ?? string.Empty,
-            MissionData = missionData?.AsReadOnly()
+            MissionData = missionData
         };
 
         // Submit to external AMR system
