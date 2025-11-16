@@ -55,7 +55,7 @@ public class MapCodeQueueManager : IMapCodeQueueManager
         if (!string.IsNullOrEmpty(preferredRobotId))
         {
             var preferredJob = await query
-                .Where(q => q.RobotIdsJson == null || q.RobotIdsJson.Contains(preferredRobotId))
+                .Where(q => q.RobotIds == null || q.RobotIds.Contains(preferredRobotId))
                 .FirstOrDefaultAsync(cancellationToken);
 
             if (preferredJob != null)
