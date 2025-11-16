@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir:*)",
+      "Bash(findstr:*)",
+      "Bash(ng add:*)",
+      "Bash(ng generate component:*)",
+      "Bash(npm install:*)",
+      "Bash(find:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm start)",
+      "Bash(npm start:*)",
+      "Bash(npx ng build:*)",
+      "Bash(timeout 30 ng serve:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
