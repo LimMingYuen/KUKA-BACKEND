@@ -21,6 +21,7 @@ using QES_KUKA_AMR_API.Services.SavedCustomMissions;
 using QES_KUKA_AMR_API.Services.ShelfDecisionRules;
 using QES_KUKA_AMR_API.Services.Users;
 using QES_KUKA_AMR_API.Services.WorkflowNodeCodes;
+using QES_KUKA_AMR_API.Services.MapImport;
 using log4net;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -147,6 +148,7 @@ builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IRoleService, RoleService>();
 builder.Services.AddScoped<IRobotAnalyticsService, RobotAnalyticsService>();
 builder.Services.AddScoped<IWorkflowNodeCodeService, WorkflowNodeCodeService>();
+builder.Services.AddScoped<IMapImportService, MapImportService>();
 
 // Authentication Services
 builder.Services.AddScoped<IAuthService, AuthService>();
