@@ -1,9 +1,11 @@
+using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using QES_KUKA_AMR_API.Data;
 using QES_KUKA_AMR_API.Data.Entities;
+using QES_KUKA_AMR_API.Models.Jobs;
 using QES_KUKA_AMR_API.Models.Missions;
 using QES_KUKA_AMR_API.Options;
 
@@ -297,7 +299,7 @@ public class QueueSchedulerHostedService : IHostedService, IDisposable
             };
 
             var requestJson = JsonSerializer.Serialize(submitRequest);
-            var content = new StringContent(requestJson, Encoding.UTF8, "application/json");
+            var content = new StringContent(requestJson, Encoding.UTF8, MediaTypeHeaderValue.Parse("application/json"));
 
             var httpRequest = new HttpRequestMessage(HttpMethod.Post, missionOptions.SubmitMissionUrl)
             {
@@ -415,7 +417,7 @@ public class QueueSchedulerHostedService : IHostedService, IDisposable
             };
 
             var requestJson = JsonSerializer.Serialize(jobQueryRequest);
-            var content = new StringContent(requestJson, Encoding.UTF8, "application/json");
+            var content = new StringContent(requestJson, Encoding.UTF8, MediaTypeHeaderValue.Parse("application/json"));
 
             var httpRequest = new HttpRequestMessage(HttpMethod.Post, missionOptions.JobQueryUrl)
             {
