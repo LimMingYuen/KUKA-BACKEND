@@ -61,7 +61,7 @@ public class QueueController : ControllerBase
         string mapCode,
         [FromQuery] string? status = null,
         [FromQuery] int limit = 100,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken = default)
     {
         var query = _dbContext.MissionQueueItems
             .Where(q => q.PrimaryMapCode == mapCode);
