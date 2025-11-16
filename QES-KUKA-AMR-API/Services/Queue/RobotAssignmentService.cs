@@ -396,14 +396,14 @@ public class RobotAssignmentService : IRobotAssignmentService
                 .Select(r => new RobotPosition
                 {
                     RobotId = r.RobotId,
-                    MapCode = r.MapCode,
+                    MapCode = r.MapCode ?? string.Empty,
                     X = double.Parse(r.X),
                     Y = double.Parse(r.Y),
                     Orientation = string.IsNullOrEmpty(r.RobotOrientation)
                         ? null
                         : double.Parse(r.RobotOrientation),
                     BatteryLevel = r.BatteryLevel ?? 0,
-                    Status = r.Status ?? 0,
+                    Status = r.Status,
                     OccupyStatus = r.OccupyStatus ?? 0,
                     CurrentMissionCode = r.MissionCode,
                     UpdatedUtc = _timeProvider.GetUtcNow().UtcDateTime,
@@ -458,14 +458,14 @@ public class RobotAssignmentService : IRobotAssignmentService
             return new RobotPosition
             {
                 RobotId = robotData.RobotId,
-                MapCode = robotData.MapCode,
+                MapCode = robotData.MapCode ?? string.Empty,
                 X = double.Parse(robotData.X),
                 Y = double.Parse(robotData.Y),
                 Orientation = string.IsNullOrEmpty(robotData.RobotOrientation)
                     ? null
                     : double.Parse(robotData.RobotOrientation),
                 BatteryLevel = robotData.BatteryLevel ?? 0,
-                Status = robotData.Status ?? 0,
+                Status = robotData.Status,
                 OccupyStatus = robotData.OccupyStatus ?? 0,
                 CurrentMissionCode = robotData.MissionCode,
                 UpdatedUtc = _timeProvider.GetUtcNow().UtcDateTime,
