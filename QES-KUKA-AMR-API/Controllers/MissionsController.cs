@@ -12,6 +12,7 @@ using QES_KUKA_AMR_API.Models.Missions;
 using QES_KUKA_AMR_API.Models.Jobs;
 using QES_KUKA_AMR_API.Options;
 using QES_KUKA_AMR_API.Services;
+using QES_KUKA_AMR_API.Services.SavedCustomMissions;
 
 namespace QES_KUKA_AMR_API.Controllers;
 
@@ -22,15 +23,113 @@ public class MissionsController : ControllerBase
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<MissionsController> _logger;
     private readonly MissionServiceOptions _missionOptions;
+    private readonly ISavedCustomMissionService _savedCustomMissionService;
 
     public MissionsController(
         IHttpClientFactory httpClientFactory,
         ILogger<MissionsController> logger,
-        IOptions<MissionServiceOptions> missionOptions)
+        IOptions<MissionServiceOptions> missionOptions,
+        ISavedCustomMissionService savedCustomMissionService)
     {
         _httpClientFactory = httpClientFactory;
         _logger = logger;
         _missionOptions = missionOptions.Value;
+        _savedCustomMissionService = savedCustomMissionService;
+    }
+
+    [HttpPost("save-as-template")]
+    public async Task<ActionResult<SaveMissionAsTemplateResponse>> SaveMissionAsTemplateAsync(
+        [FromBody] SaveMissionAsTemplateRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(ModelState);
+        }
+
+        // Get username from JWT token claims or default to System
+        var createdBy = User.Identity?.Name
+            ?? User.FindFirst("username")?.Value
+            ?? User.FindFirst("sub")?.Value
+            ?? "System";
+
+        try
+        {
+            var missionRequest = request.MissionRequest;
+
+            // Serialize mission data to JSON
+            var missionStepsJson = missionRequest.MissionData != null
+                ? JsonSerializer.Serialize(missionRequest.MissionData)
+                : "[]";
+
+            // Convert robot models and IDs to comma-separated strings
+            var robotModels = missionRequest.RobotModels?.Any() == true
+                ? string.Join(",", missionRequest.RobotModels)
+                : null;
+
+            var robotIds = missionRequest.RobotIds?.Any() == true
+                ? string.Join(",", missionRequest.RobotIds)
+                : null;
+
+            var savedMission = await _savedCustomMissionService.CreateAsync(new SavedCustomMission
+            {
+                MissionName = request.MissionName,
+                Description = request.Description,
+                MissionType = missionRequest.MissionType,
+                RobotType = missionRequest.RobotType,
+                Priority = missionRequest.Priority,
+                RobotModels = robotModels,
+                RobotIds = robotIds,
+                ContainerModelCode = missionRequest.ContainerModelCode,
+                ContainerCode = missionRequest.ContainerCode,
+                IdleNode = missionRequest.IdleNode,
+                OrgId = missionRequest.OrgId,
+                ViewBoardType = missionRequest.ViewBoardType,
+                TemplateCode = missionRequest.TemplateCode,
+                LockRobotAfterFinish = missionRequest.LockRobotAfterFinish,
+                UnlockRobotId = missionRequest.UnlockRobotId,
+                UnlockMissionCode = missionRequest.UnlockMissionCode,
+                MissionStepsJson = missionStepsJson
+            }, createdBy, cancellationToken);
+
+            _logger.LogInformation("Mission saved as template '{MissionName}' with ID {Id} by {CreatedBy}",
+                request.MissionName, savedMission.Id, createdBy);
+
+            return Ok(new SaveMissionAsTemplateResponse
+            {
+                Success = true,
+                Message = "Mission saved as template successfully",
+                SavedMissionId = savedMission.Id,
+                MissionName = savedMission.MissionName
+            });
+        }
+        catch (SavedCustomMissionConflictException ex)
+        {
+            _logger.LogWarning(ex, "Conflict while saving mission as template '{MissionName}'", request.MissionName);
+            return Conflict(new SaveMissionAsTemplateResponse
+            {
+                Success = false,
+                Message = ex.Message
+            });
+        }
+        catch (SavedCustomMissionValidationException ex)
+        {
+            _logger.LogWarning(ex, "Validation error while saving mission as template '{MissionName}'", request.MissionName);
+            return BadRequest(new SaveMissionAsTemplateResponse
+            {
+                Success = false,
+                Message = ex.Message
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error saving mission as template '{MissionName}'", request.MissionName);
+            return StatusCode(StatusCodes.Status500InternalServerError, new SaveMissionAsTemplateResponse
+            {
+                Success = false,
+                Message = "An error occurred while saving the mission as a template"
+            });
+        }
     }
 
     [HttpPost("submit")]
