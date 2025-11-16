@@ -155,7 +155,7 @@ public class MissionsController : ControllerBase
             // Enqueue mission through queue system
             var queueItems = await _missionEnqueueService.EnqueueMissionAsync(
                 request,
-                triggerSource: "DirectSubmission",
+                triggerSource: MissionTriggerSource.Direct,
                 cancellationToken
             );
 
