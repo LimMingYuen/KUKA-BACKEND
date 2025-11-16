@@ -137,6 +137,11 @@ builder.Services.Configure<MissionListServiceOptions>(
 
 builder.Services.Configure<AmrServiceOptions>(
     builder.Configuration.GetSection(AmrServiceOptions.SectionName));
+
+// Queue Scheduler Options
+builder.Services.Configure<QueueSchedulerOptions>(
+    builder.Configuration.GetSection(QueueSchedulerOptions.SectionName));
+
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<ILoginServiceClient, LoginServiceClient>();
 builder.Services.AddScoped<IMissionTypeService, MissionTypeService>();
@@ -173,6 +178,9 @@ builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
 builder.Services.AddScoped<IMapCodeQueueManager, MapCodeQueueManager>();
 builder.Services.AddScoped<IRobotAssignmentService, RobotAssignmentService>();
 builder.Services.AddScoped<IJobOpportunityEvaluator, JobOpportunityEvaluator>();
+
+// Queue Scheduler Background Service
+builder.Services.AddHostedService<QueueSchedulerHostedService>();
 
 // Log Cleanup Services
 builder.Services.Configure<LogCleanupOptions>(
