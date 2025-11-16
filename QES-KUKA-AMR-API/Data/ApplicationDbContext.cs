@@ -238,14 +238,14 @@ public class ApplicationDbContext : DbContext
             entity.HasIndex(e => e.ParentQueueItemId);
             entity.HasIndex(e => e.NextQueueItemId);
             entity.Property(e => e.MissionStepsJson).HasColumnType("nvarchar(max)");
-            entity.Property(e => e.RobotModelsJson).HasColumnType("nvarchar(max)");
-            entity.Property(e => e.RobotIdsJson).HasColumnType("nvarchar(max)");
             entity.Property(e => e.EnqueuedUtc).HasColumnType("datetime2");
             entity.Property(e => e.StartedUtc).HasColumnType("datetime2");
             entity.Property(e => e.CompletedUtc).HasColumnType("datetime2");
             entity.Property(e => e.CancelledUtc).HasColumnType("datetime2");
             entity.Property(e => e.RobotAssignedUtc).HasColumnType("datetime2");
             entity.Property(e => e.LastRetryUtc).HasColumnType("datetime2");
+            entity.Property(e => e.CreatedUtc).HasColumnType("datetime2");
+            entity.Property(e => e.UpdatedUtc).HasColumnType("datetime2");
         });
 
         modelBuilder.Entity<RobotJobOpportunity>(entity =>
