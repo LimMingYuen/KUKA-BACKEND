@@ -60,6 +60,15 @@ public interface IWorkflowNodeCodeService
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Syncs and classifies ALL workflows with external IDs in one operation.
+    /// Processes all workflows sequentially and saves results to WorkflowZoneMappings table.
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Summary of sync and classify results</returns>
+    Task<SyncAndClassifyAllResult> SyncAndClassifyAllWorkflowsAsync(
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Gets all workflow zone mappings from the database.
     /// </summary>
     /// <param name="cancellationToken">Cancellation token</param>
@@ -148,4 +157,62 @@ public class WorkflowNodeCodeSyncResult
     /// Error messages for failed workflows
     /// </summary>
     public Dictionary<int, string> Errors { get; set; } = new();
+}
+
+/// <summary>
+/// Result of sync and classify all workflows operation
+/// </summary>
+public class SyncAndClassifyAllResult
+{
+    /// <summary>
+    /// Total number of workflows processed
+    /// </summary>
+    public int TotalWorkflows { get; set; }
+
+    /// <summary>
+    /// Number of workflows successfully synced and classified
+    /// </summary>
+    public int SuccessCount { get; set; }
+
+    /// <summary>
+    /// Number of workflows that failed to sync or classify
+    /// </summary>
+    public int FailureCount { get; set; }
+
+    /// <summary>
+    /// Number of workflows that could not be classified (no matching zone)
+    /// </summary>
+    public int NoZoneMatchCount { get; set; }
+
+    /// <summary>
+    /// List of workflow IDs that failed
+    /// </summary>
+    public List<int> FailedWorkflowIds { get; set; } = new();
+
+    /// <summary>
+    /// List of workflow IDs that had no zone match
+    /// </summary>
+    public List<int> NoZoneMatchWorkflowIds { get; set; } = new();
+
+    /// <summary>
+    /// Error messages for failed workflows
+    /// </summary>
+    public Dictionary<int, string> Errors { get; set; } = new();
+
+    /// <summary>
+    /// Successfully classified mappings
+    /// </summary>
+    public List<WorkflowZoneMappingSummary> ClassifiedWorkflows { get; set; } = new();
+}
+
+/// <summary>
+/// Summary of a single workflow zone mapping
+/// </summary>
+public class WorkflowZoneMappingSummary
+{
+    public int ExternalWorkflowId { get; set; }
+    public string WorkflowCode { get; set; } = string.Empty;
+    public string WorkflowName { get; set; } = string.Empty;
+    public string ZoneName { get; set; } = string.Empty;
+    public string ZoneCode { get; set; } = string.Empty;
 }

@@ -160,6 +160,35 @@ public class WorkflowNodeCodesController : ControllerBase
     }
 
     /// <summary>
+    /// Syncs and classifies ALL workflows with external IDs in one operation.
+    /// This processes all workflows sequentially and saves results to the database.
+    /// No need to specify individual workflow IDs - just call this endpoint once.
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Summary of sync and classify results for all workflows</returns>
+    [HttpPost("sync-and-classify-all")]
+    public async Task<ActionResult<SyncAndClassifyAllResult>> SyncAndClassifyAllAsync(
+        CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Sync and classify all workflows request");
+
+        try
+        {
+            var result = await _workflowNodeCodeService.SyncAndClassifyAllWorkflowsAsync(cancellationToken);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error syncing and classifying all workflows");
+            return StatusCode(StatusCodes.Status500InternalServerError, new
+            {
+                Error = "Failed to sync and classify all workflows",
+                Message = ex.Message
+            });
+        }
+    }
+
+    /// <summary>
     /// Syncs node codes from external API and immediately classifies the workflow by zone.
     /// This combined operation ensures classification uses fresh data without requiring
     /// separate sync and classify API calls.

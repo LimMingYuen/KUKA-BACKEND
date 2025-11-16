@@ -252,6 +252,85 @@ public class WorkflowNodeCodeService : IWorkflowNodeCodeService
         return classification;
     }
 
+    public async Task<SyncAndClassifyAllResult> SyncAndClassifyAllWorkflowsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Starting sync and classify all workflows operation");
+
+        using var scope = _serviceScopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        // Get all distinct external workflow IDs from WorkflowDiagrams
+        var externalWorkflowIds = await dbContext.WorkflowDiagrams
+            .Where(w => w.ExternalWorkflowId.HasValue)
+            .Select(w => w.ExternalWorkflowId!.Value)
+            .Distinct()
+            .OrderBy(id => id)
+            .ToListAsync(cancellationToken);
+
+        var result = new SyncAndClassifyAllResult
+        {
+            TotalWorkflows = externalWorkflowIds.Count
+        };
+
+        _logger.LogInformation("Found {Count} workflows with external IDs to process", externalWorkflowIds.Count);
+
+        // Process each workflow sequentially
+        for (int i = 0; i < externalWorkflowIds.Count; i++)
+        {
+            var externalId = externalWorkflowIds[i];
+            _logger.LogInformation("Processing workflow {Current}/{Total}: External ID {ExternalId}",
+                i + 1, externalWorkflowIds.Count, externalId);
+
+            try
+            {
+                var classification = await SyncAndClassifyWorkflowAsync(externalId, cancellationToken);
+
+                if (classification != null)
+                {
+                    result.SuccessCount++;
+
+                    // Get workflow details for summary
+                    var workflow = await dbContext.WorkflowDiagrams
+                        .FirstOrDefaultAsync(w => w.ExternalWorkflowId == externalId, cancellationToken);
+
+                    if (workflow != null)
+                    {
+                        result.ClassifiedWorkflows.Add(new WorkflowZoneMappingSummary
+                        {
+                            ExternalWorkflowId = externalId,
+                            WorkflowCode = workflow.WorkflowCode,
+                            WorkflowName = workflow.WorkflowName,
+                            ZoneName = classification.ZoneName,
+                            ZoneCode = classification.ZoneCode
+                        });
+                    }
+
+                    _logger.LogInformation("Successfully classified workflow {ExternalId} to zone {ZoneName} ({ZoneCode})",
+                        externalId, classification.ZoneName, classification.ZoneCode);
+                }
+                else
+                {
+                    result.NoZoneMatchCount++;
+                    result.NoZoneMatchWorkflowIds.Add(externalId);
+                    _logger.LogWarning("Workflow {ExternalId} could not be classified to any zone", externalId);
+                }
+            }
+            catch (Exception ex)
+            {
+                result.FailureCount++;
+                result.FailedWorkflowIds.Add(externalId);
+                result.Errors[externalId] = ex.Message;
+                _logger.LogError(ex, "Failed to sync and classify workflow {ExternalId}", externalId);
+            }
+        }
+
+        _logger.LogInformation("Sync and classify all completed: {Success} succeeded, {NoMatch} no match, {Failed} failed out of {Total} total",
+            result.SuccessCount, result.NoZoneMatchCount, result.FailureCount, result.TotalWorkflows);
+
+        return result;
+    }
+
     private async Task<WorkflowZoneClassification?> ClassifyWorkflowByZoneInternalAsync(
         int externalWorkflowId,
         ApplicationDbContext dbContext,
@@ -270,8 +349,15 @@ public class WorkflowNodeCodeService : IWorkflowNodeCodeService
             return null;
         }
 
-        // Create a HashSet for efficient lookup
-        var workflowNodeSet = workflowNodeCodes.ToHashSet();
+        // Extract last numbers from workflow node codes for comparison
+        // E.g., "Sim1-1-12" -> "12"
+        var workflowNodeNumbers = workflowNodeCodes
+            .Select(ExtractLastNodeNumber)
+            .Where(n => !string.IsNullOrEmpty(n))
+            .ToHashSet();
+
+        _logger.LogInformation("Extracted {Count} node numbers from workflow {ExternalWorkflowId}: [{Numbers}]",
+            workflowNodeNumbers.Count, externalWorkflowId, string.Join(", ", workflowNodeNumbers.Take(10)));
 
         // Get all map zones (assuming active zones only)
         var mapZones = await dbContext.MapZones
@@ -279,8 +365,8 @@ public class WorkflowNodeCodeService : IWorkflowNodeCodeService
             .OrderBy(mz => mz.Id) // Process zones in order
             .ToListAsync(cancellationToken);
 
-        _logger.LogInformation("Classifying workflow {ExternalWorkflowId} with {NodeCount} node codes against {ZoneCount} zones",
-            externalWorkflowId, workflowNodeCodes.Count, mapZones.Count);
+        _logger.LogInformation("Classifying workflow {ExternalWorkflowId} with {NodeCount} node numbers against {ZoneCount} zones",
+            externalWorkflowId, workflowNodeNumbers.Count, mapZones.Count);
 
         // Find the first zone where ALL zone nodes exist in workflow node codes
         foreach (var zone in mapZones)
@@ -307,27 +393,60 @@ public class WorkflowNodeCodeService : IWorkflowNodeCodeService
                 continue;
             }
 
-            // Check if ALL zone nodes exist in workflow node codes
-            var allNodesMatch = zoneNodes.All(zoneNode => workflowNodeSet.Contains(zoneNode));
+            // Extract last numbers from zone nodes for comparison
+            // E.g., "Sim1-1-12" -> "12"
+            var zoneNodeNumbers = zoneNodes
+                .Select(ExtractLastNodeNumber)
+                .Where(n => !string.IsNullOrEmpty(n))
+                .ToList();
+
+            if (zoneNodeNumbers.Count == 0)
+            {
+                continue;
+            }
+
+            // Check if ALL zone node numbers exist in workflow node numbers
+            var allNodesMatch = zoneNodeNumbers.All(zoneNodeNum => workflowNodeNumbers.Contains(zoneNodeNum));
 
             if (allNodesMatch)
             {
-                _logger.LogInformation("Workflow {ExternalWorkflowId} classified to zone '{ZoneName}' ({ZoneCode}) with {MatchCount} matching nodes",
-                    externalWorkflowId, zone.ZoneName, zone.ZoneCode, zoneNodes.Count);
+                _logger.LogInformation("Workflow {ExternalWorkflowId} classified to zone '{ZoneName}' ({ZoneCode}) with {MatchCount} matching node numbers: [{Numbers}]",
+                    externalWorkflowId, zone.ZoneName, zone.ZoneCode, zoneNodeNumbers.Count, string.Join(", ", zoneNodeNumbers));
 
                 return new WorkflowZoneClassification
                 {
                     ZoneName = zone.ZoneName,
                     ZoneCode = zone.ZoneCode,
                     MapCode = zone.MapCode,
-                    MatchedNodesCount = zoneNodes.Count,
-                    MatchedNodes = zoneNodes
+                    MatchedNodesCount = zoneNodeNumbers.Count,
+                    MatchedNodes = zoneNodes // Return original zone nodes, not just numbers
                 };
             }
         }
 
         _logger.LogInformation("Workflow {ExternalWorkflowId} could not be classified to any zone", externalWorkflowId);
         return null;
+    }
+
+    /// <summary>
+    /// Extracts the last number after the final dash from a node code.
+    /// E.g., "Sim1-1-12" -> "12", "Node-5" -> "5"
+    /// </summary>
+    private static string ExtractLastNodeNumber(string nodeCode)
+    {
+        if (string.IsNullOrWhiteSpace(nodeCode))
+        {
+            return string.Empty;
+        }
+
+        var lastDashIndex = nodeCode.LastIndexOf('-');
+        if (lastDashIndex >= 0 && lastDashIndex < nodeCode.Length - 1)
+        {
+            return nodeCode.Substring(lastDashIndex + 1);
+        }
+
+        // If no dash found, return the entire string (might be just a number)
+        return nodeCode;
     }
 
     private async Task<SyncInternalResult> SyncWorkflowNodeCodesInternalAsync(
