@@ -82,7 +82,7 @@ public class RobotAnalyticsService : IRobotAnalyticsService
         };
 
         // MissionQueues entity removed - no active/recent missions to query
-        var emptyMissions = new { MissionCode = "", WorkflowName = "", SavedMissionId = (int?)null, TriggerSource = MissionTriggerSource.Manual, Start = (DateTime?)null, End = (DateTime?)null, Status = QueueStatus.Completed };
+        var emptyMissions = new { MissionCode = "", WorkflowName = "", SavedMissionId = (int?)null, TriggerSource = MissionTriggerSource.Manual, Start = (DateTime?)null, End = (DateTime?)null, Status = "Completed" };
         var queueMissions = new[] { emptyMissions }.Where(x => false).ToList(); // Empty list with correct anonymous type
 
         // CRITICAL FIX: Also query MissionHistories (archived completed missions)
@@ -100,7 +100,7 @@ public class RobotAnalyticsService : IRobotAnalyticsService
                 m.TriggerSource,
                 Start = (DateTime?)(m.ProcessedDate ?? m.SubmittedToAmrDate ?? m.CreatedDate),
                 End = m.CompletedDate,
-                Status = QueueStatus.Completed  // History missions are always completed
+                Status = "Completed"  // History missions are always completed
             })
             .Where(m => m.Start != null && m.End != null && m.Start < normalizedEnd && m.End > normalizedStart)
             .ToListAsync(cancellationToken);
