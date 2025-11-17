@@ -38,4 +38,9 @@ public interface IMapCodeQueueManager
     /// Get queue item by mission code
     /// </summary>
     Task<MissionQueueItem?> GetQueueItemByMissionCodeAsync(string missionCode, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Get count of robots currently executing jobs on a specific MapCode (for traffic control)
+    /// </summary>
+    Task<int> GetActiveRobotsCountOnMapAsync(string mapCode, CancellationToken cancellationToken = default);
 }

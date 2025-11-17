@@ -206,8 +206,37 @@ public class RobotAssignmentService : IRobotAssignmentService
         // Parse mission steps
         var steps = JsonSerializer.Deserialize<List<MissionDataItem>>(queueItem.MissionStepsJson);
         if (steps == null || steps.Count == 0)
-            return null;
+        {
+            // For workflow-based missions (templateCode), use pre-populated start coordinates
+            // These are populated by MissionEnqueueService from WorkflowNodeCodes + QrCodes
+            if (queueItem.StartXCoordinate.HasValue && queueItem.StartYCoordinate.HasValue)
+            {
+                _logger.LogInformation(
+                    "Queue item {QueueItemId} is workflow-based, using pre-populated start coordinates: {NodeLabel} ({X}, {Y})",
+                    queueItem.Id,
+                    queueItem.StartNodeLabel ?? "unknown",
+                    queueItem.StartXCoordinate.Value,
+                    queueItem.StartYCoordinate.Value
+                );
 
+                return new NodePosition
+                {
+                    NodeLabel = queueItem.StartNodeLabel ?? "unknown",
+                    MapCode = queueItem.PrimaryMapCode,
+                    X = queueItem.StartXCoordinate.Value,
+                    Y = queueItem.StartYCoordinate.Value
+                };
+            }
+
+            // Fallback: no coordinates available for workflow-based mission
+            _logger.LogWarning(
+                "Queue item {QueueItemId} is workflow-based but has no start coordinates (WorkflowNodeCodes or QrCodes may be missing)",
+                queueItem.Id
+            );
+            return null;
+        }
+
+        // For custom missions, look up first step position from mission data
         var firstStep = steps.OrderBy(s => s.Sequence).First();
 
         // Look up QR code position

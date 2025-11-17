@@ -164,4 +164,29 @@ public class MapCodeQueueManager : IMapCodeQueueManager
             .AsNoTracking()
             .FirstOrDefaultAsync(q => q.MissionCode == missionCode, cancellationToken);
     }
+
+    public async Task<int> GetActiveRobotsCountOnMapAsync(
+        string mapCode,
+        CancellationToken cancellationToken = default)
+    {
+        // Count unique robots that are currently executing jobs on this MapCode
+        // Include: Assigned, SubmittedToAmr, Executing statuses
+        var activeRobotCount = await _dbContext.MissionQueueItems
+            .Where(q => q.PrimaryMapCode == mapCode)
+            .Where(q => q.Status == MissionQueueStatus.Assigned ||
+                       q.Status == MissionQueueStatus.SubmittedToAmr ||
+                       q.Status == MissionQueueStatus.Executing)
+            .Where(q => !string.IsNullOrEmpty(q.AssignedRobotId))
+            .Select(q => q.AssignedRobotId)
+            .Distinct()
+            .CountAsync(cancellationToken);
+
+        _logger.LogDebug(
+            "{ActiveRobotCount} robots currently active on MapCode {MapCode}",
+            activeRobotCount,
+            mapCode
+        );
+
+        return activeRobotCount;
+    }
 }

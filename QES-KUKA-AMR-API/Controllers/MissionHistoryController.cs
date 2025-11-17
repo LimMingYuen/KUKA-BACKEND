@@ -71,14 +71,25 @@ public class MissionHistoryController : ControllerBase
                 RequestId = request.RequestId,
                 WorkflowName = request.WorkflowName,
                 Status = request.Status,
-                CreatedDate = DateTime.UtcNow
+                CreatedDate = DateTime.UtcNow,
+                // Optional fields for analytics
+                WorkflowId = request.WorkflowId,
+                SavedMissionId = request.SavedMissionId,
+                TriggerSource = request.TriggerSource ?? MissionTriggerSource.Manual,
+                MissionType = request.MissionType,
+                AssignedRobotId = request.AssignedRobotId,
+                ProcessedDate = request.ProcessedDate,
+                SubmittedToAmrDate = request.SubmittedToAmrDate ?? DateTime.UtcNow,
+                CompletedDate = request.CompletedDate,
+                ErrorMessage = request.ErrorMessage,
+                CreatedBy = request.CreatedBy
             };
 
             _context.MissionHistories.Add(missionHistory);
             await _context.SaveChangesAsync(cancellationToken);
 
-            _logger.LogInformation("✓ Mission history record added successfully: {MissionCode} - {Status} (ID={Id})",
-                missionHistory.MissionCode, missionHistory.Status, missionHistory.Id);
+            _logger.LogInformation("✓ Mission history record added successfully: {MissionCode} - {Status} (ID={Id}), Robot={RobotId}",
+                missionHistory.MissionCode, missionHistory.Status, missionHistory.Id, missionHistory.AssignedRobotId);
             _logger.LogInformation("=== END MissionHistoryController.AddHistoryAsync DEBUG ===");
 
             return StatusCode(201, missionHistory);
@@ -87,6 +98,62 @@ public class MissionHistoryController : ControllerBase
         {
             _logger.LogError(ex, "✗ Error adding mission history record");
             return StatusCode(500, new { message = "Error adding mission history record" });
+        }
+    }
+
+    [HttpPut("{missionCode}")]
+    public async Task<ActionResult<MissionHistory>> UpdateHistoryAsync(
+        string missionCode,
+        [FromBody] UpdateMissionHistoryRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            _logger.LogInformation("=== MissionHistoryController.UpdateHistoryAsync DEBUG ===");
+            _logger.LogInformation("Updating mission history for MissionCode={MissionCode}, Status={Status}, Robot={RobotId}",
+                missionCode, request.Status, request.AssignedRobotId);
+
+            // Find existing record by mission code
+            var missionHistory = await _context.MissionHistories
+                .FirstOrDefaultAsync(m => m.MissionCode == missionCode, cancellationToken);
+
+            if (missionHistory == null)
+            {
+                _logger.LogWarning("Mission history not found for MissionCode={MissionCode}", missionCode);
+                return NotFound(new { message = $"Mission history not found for mission code: {missionCode}" });
+            }
+
+            // Update fields if provided
+            if (request.Status != null)
+                missionHistory.Status = request.Status;
+
+            if (request.AssignedRobotId != null)
+                missionHistory.AssignedRobotId = request.AssignedRobotId;
+
+            if (request.ProcessedDate.HasValue)
+                missionHistory.ProcessedDate = request.ProcessedDate.Value;
+
+            if (request.SubmittedToAmrDate.HasValue)
+                missionHistory.SubmittedToAmrDate = request.SubmittedToAmrDate.Value;
+
+            if (request.CompletedDate.HasValue)
+                missionHistory.CompletedDate = request.CompletedDate.Value;
+
+            if (request.ErrorMessage != null)
+                missionHistory.ErrorMessage = request.ErrorMessage;
+
+            await _context.SaveChangesAsync(cancellationToken);
+
+            _logger.LogInformation("✓ Mission history updated successfully: {MissionCode} - {Status}, Robot={RobotId}, Completed={CompletedDate}",
+                missionHistory.MissionCode, missionHistory.Status, missionHistory.AssignedRobotId, missionHistory.CompletedDate);
+            _logger.LogInformation("=== END MissionHistoryController.UpdateHistoryAsync DEBUG ===");
+
+            return Ok(missionHistory);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "✗ Error updating mission history record");
+            return StatusCode(500, new { message = "Error updating mission history record" });
         }
     }
 
@@ -131,4 +198,26 @@ public class MissionHistoryRequest
     public string RequestId { get; set; } = string.Empty;
     public string WorkflowName { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
+
+    // Additional fields for analytics and duration tracking
+    public int? WorkflowId { get; set; }
+    public int? SavedMissionId { get; set; }
+    public MissionTriggerSource? TriggerSource { get; set; }
+    public string? MissionType { get; set; }
+    public string? AssignedRobotId { get; set; }
+    public DateTime? ProcessedDate { get; set; }
+    public DateTime? SubmittedToAmrDate { get; set; }
+    public DateTime? CompletedDate { get; set; }
+    public string? ErrorMessage { get; set; }
+    public string? CreatedBy { get; set; }
+}
+
+public class UpdateMissionHistoryRequest
+{
+    public string? Status { get; set; }
+    public string? AssignedRobotId { get; set; }
+    public DateTime? ProcessedDate { get; set; }
+    public DateTime? SubmittedToAmrDate { get; set; }
+    public DateTime? CompletedDate { get; set; }
+    public string? ErrorMessage { get; set; }
 }

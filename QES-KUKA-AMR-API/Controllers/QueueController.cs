@@ -42,12 +42,45 @@ public class QueueController : ControllerBase
             return NotFound(new { message = $"No queue items found for mission code: {missionCode}" });
         }
 
+        var overallStatus = DetermineOverallStatus(queueItems);
+        var warnings = new List<string>();
+
+        // Check if queue configurations exist for all MapCodes
+        var mapCodes = queueItems.Select(q => q.PrimaryMapCode).Distinct().ToList();
+        var configuredMapCodes = await _dbContext.MapCodeQueueConfigurations
+            .Where(c => mapCodes.Contains(c.MapCode) && c.EnableQueue)
+            .Select(c => c.MapCode)
+            .ToListAsync(cancellationToken);
+
+        var missingConfigs = mapCodes.Except(configuredMapCodes).ToList();
+        if (missingConfigs.Any())
+        {
+            warnings.Add($"Queue not configured for MapCode(s): {string.Join(", ", missingConfigs)}. Jobs will not be processed.");
+        }
+
+        // Determine if ready for job polling (job has been submitted to AMR)
+        var readyForJobPolling = queueItems.Any(q =>
+            q.Status == MissionQueueStatus.SubmittedToAmr ||
+            q.Status == MissionQueueStatus.Executing ||
+            q.Status == MissionQueueStatus.Completed);
+
+        // Estimate processing delay (queue scheduler runs every N seconds)
+        int? estimatedDelay = null;
+        if (queueItems.All(q => q.Status == MissionQueueStatus.Pending || q.Status == MissionQueueStatus.ReadyToAssign))
+        {
+            // Still in queue, not yet processed - estimate 5-10 seconds (one or two scheduler cycles)
+            estimatedDelay = 7; // Average of 5-10 seconds
+        }
+
         var response = new MissionQueueStatusResponse
         {
             MissionCode = missionCode,
             TotalSegments = queueItems.Count,
             QueueItems = queueItems.Select(MapToDto).ToList(),
-            OverallStatus = DetermineOverallStatus(queueItems)
+            OverallStatus = overallStatus,
+            Warnings = warnings,
+            ReadyForJobPolling = readyForJobPolling,
+            EstimatedProcessingDelaySeconds = estimatedDelay
         };
 
         return Ok(response);

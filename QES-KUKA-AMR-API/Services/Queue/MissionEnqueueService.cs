@@ -97,6 +97,26 @@ public class MissionEnqueueService : IMissionEnqueueService
             cancellationToken
         );
 
+        // Validate that queue is enabled for all MapCodes in this mission
+        var uniqueMapCodes = analysis.Segments.Select(s => s.MapCode).Distinct().ToList();
+        var queueConfigs = await _dbContext.MapCodeQueueConfigurations
+            .Where(c => uniqueMapCodes.Contains(c.MapCode) && c.EnableQueue)
+            .Select(c => c.MapCode)
+            .ToListAsync(cancellationToken);
+
+        var missingMapCodes = uniqueMapCodes.Except(queueConfigs).ToList();
+        if (missingMapCodes.Any())
+        {
+            throw new InvalidOperationException(
+                $"Queue not enabled for MapCode(s): {string.Join(", ", missingMapCodes)}. Please configure MapCodeQueueConfiguration for these MapCodes.");
+        }
+
+        _logger.LogDebug(
+            "Queue validation passed for {Count} MapCode(s): {MapCodes}",
+            uniqueMapCodes.Count,
+            string.Join(", ", uniqueMapCodes)
+        );
+
         var queueItems = new List<MissionQueueItem>();
         MissionQueueItem? previousItem = null;
 
@@ -215,6 +235,92 @@ public class MissionEnqueueService : IMissionEnqueueService
                 $"Workflow not found for TemplateCode: {request.TemplateCode}");
         }
 
+        // Validate that queue is enabled for this MapCode
+        var queueConfig = await _dbContext.MapCodeQueueConfigurations
+            .FirstOrDefaultAsync(c => c.MapCode == workflow.MapCode && c.EnableQueue, cancellationToken);
+
+        if (queueConfig == null)
+        {
+            throw new InvalidOperationException(
+                $"Queue not enabled for MapCode: {workflow.MapCode}. Please configure MapCodeQueueConfiguration for this MapCode.");
+        }
+
+        _logger.LogDebug(
+            "Queue validation passed for MapCode {MapCode}: MaxConcurrentRobots={MaxRobots}",
+            workflow.MapCode,
+            queueConfig.MaxConcurrentRobotsOnMap
+        );
+
+        // Fetch first node coordinates from WorkflowNodeCodes + QrCodes
+        string? startNodeLabel = null;
+        double? startX = null;
+        double? startY = null;
+
+        if (workflow.ExternalWorkflowId.HasValue)
+        {
+            var firstNode = await _dbContext.WorkflowNodeCodes
+                .Where(wnc => wnc.ExternalWorkflowId == workflow.ExternalWorkflowId.Value)
+                .OrderBy(wnc => wnc.Id)  // First inserted = first in sequence
+                .Select(wnc => new { wnc.NodeCode })
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (firstNode != null)
+            {
+                var qrCode = await _dbContext.QrCodes
+                    .Where(q => q.NodeUuid == firstNode.NodeCode)
+                    .FirstOrDefaultAsync(cancellationToken);
+
+                if (qrCode != null)
+                {
+                    startNodeLabel = qrCode.NodeLabel;
+                    startX = qrCode.XCoordinate;
+                    startY = qrCode.YCoordinate;
+
+                    if (startX.HasValue && startY.HasValue)
+                    {
+                        _logger.LogInformation(
+                            "Found first node NodeUuid={NodeUuid}, NodeLabel={NodeLabel} with coordinates ({X}, {Y}) for workflow {WorkflowCode}",
+                            firstNode.NodeCode,
+                            startNodeLabel,
+                            startX.Value,
+                            startY.Value,
+                            workflow.WorkflowCode
+                        );
+                    }
+                    else
+                    {
+                        _logger.LogWarning(
+                            "QrCode with NodeUuid={NodeUuid} found but missing coordinates",
+                            firstNode.NodeCode
+                        );
+                    }
+                }
+                else
+                {
+                    _logger.LogWarning(
+                        "QrCode with NodeUuid={NodeUuid} not found for workflow {WorkflowCode}",
+                        firstNode.NodeCode,
+                        workflow.WorkflowCode
+                    );
+                }
+            }
+            else
+            {
+                _logger.LogWarning(
+                    "No WorkflowNodeCodes found for workflow {WorkflowCode} (ExternalWorkflowId: {ExternalWorkflowId})",
+                    workflow.WorkflowCode,
+                    workflow.ExternalWorkflowId.Value
+                );
+            }
+        }
+        else
+        {
+            _logger.LogWarning(
+                "Workflow {WorkflowCode} has no ExternalWorkflowId, cannot fetch node coordinates",
+                workflow.WorkflowCode
+            );
+        }
+
         // For workflow-based missions, we don't have explicit mission data
         // The AMR system knows the steps based on templateCode
         // Create a single queue item using the workflow's MapCode
@@ -252,10 +358,10 @@ public class MissionEnqueueService : IMissionEnqueueService
             UnlockRobotId = request.UnlockRobotId,
             UnlockMissionCode = request.UnlockMissionCode,
 
-            // No coordinate data for workflow-based (would need to fetch from external API)
-            StartNodeLabel = null,
-            StartXCoordinate = null,
-            StartYCoordinate = null,
+            // First node coordinates from WorkflowNodeCodes + QrCodes lookup
+            StartNodeLabel = startNodeLabel,
+            StartXCoordinate = startX,
+            StartYCoordinate = startY,
 
             // Single queue item, no linking
             ParentQueueItemId = null,

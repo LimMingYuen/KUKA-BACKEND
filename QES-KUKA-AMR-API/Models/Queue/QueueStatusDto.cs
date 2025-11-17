@@ -70,6 +70,24 @@ public class MissionQueueStatusResponse
 
     [JsonPropertyName("overallStatus")]
     public string OverallStatus { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Warning messages (e.g., queue not configured for MapCode)
+    /// </summary>
+    [JsonPropertyName("warnings")]
+    public List<string> Warnings { get; set; } = new();
+
+    /// <summary>
+    /// Whether the job is ready for AMR job polling (SubmittedToAmr or Executing status)
+    /// </summary>
+    [JsonPropertyName("readyForJobPolling")]
+    public bool ReadyForJobPolling { get; set; }
+
+    /// <summary>
+    /// Estimated time until processing (in seconds) - null if already processing
+    /// </summary>
+    [JsonPropertyName("estimatedProcessingDelaySeconds")]
+    public int? EstimatedProcessingDelaySeconds { get; set; }
 }
 
 /// <summary>

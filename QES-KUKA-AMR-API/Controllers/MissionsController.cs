@@ -152,61 +152,81 @@ public class MissionsController : ControllerBase
 
         try
         {
-            // Enqueue mission through queue system
-            var queueItems = await _missionEnqueueService.EnqueueMissionAsync(
+            // DIRECT SUBMISSION TO AMR (BYPASSING QUEUE)
+            _logger.LogInformation("Submitting mission {MissionCode} directly to AMR system", request.MissionCode);
+
+            var httpClient = _httpClientFactory.CreateClient();
+            httpClient.DefaultRequestHeaders.Clear();
+            httpClient.DefaultRequestHeaders.Add("language", "en");
+            httpClient.DefaultRequestHeaders.Add("accept", "*/*");
+            httpClient.DefaultRequestHeaders.Add("wizards", "FRONT_END");
+
+            var amrResponse = await httpClient.PostAsJsonAsync(
+                _missionOptions.SubmitMissionUrl,
                 request,
-                triggerSource: MissionTriggerSource.Direct,
                 cancellationToken
             );
 
-            // Build response with queue item codes
-            var queueItemCodes = queueItems.Select(qi => qi.QueueItemCode).ToList();
-            var isMultiMap = queueItems.Count > 1;
+            var responseContent = await amrResponse.Content.ReadAsStringAsync(cancellationToken);
 
             _logger.LogInformation(
-                "Mission {MissionCode} enqueued successfully: {QueueItemCount} queue item(s), IsMultiMap={IsMultiMap}, Codes=[{Codes}]",
-                request.MissionCode,
-                queueItems.Count,
-                isMultiMap,
-                string.Join(", ", queueItemCodes)
+                "AMR submission response - Status: {StatusCode}, Body: {Response}",
+                amrResponse.StatusCode,
+                responseContent
             );
 
-            // Return response in same format as AMR system for backward compatibility
-            return Ok(new SubmitMissionResponse
+            if (amrResponse.IsSuccessStatusCode)
             {
-                Success = true,
-                Code = "QUEUED",
-                Message = isMultiMap
-                    ? $"Mission queued successfully with {queueItems.Count} segments"
-                    : "Mission queued successfully",
-                RequestId = request.RequestId,
-                Data = new SubmitMissionResponseData
+                var amrResult = JsonSerializer.Deserialize<SubmitMissionResponse>(responseContent);
+
+                _logger.LogInformation(
+                    "Mission {MissionCode} submitted successfully to AMR",
+                    request.MissionCode
+                );
+
+                return Ok(new SubmitMissionResponse
                 {
-                    QueueItemCodes = queueItemCodes,
-                    QueueItemCount = queueItems.Count,
-                    IsMultiMap = isMultiMap,
-                    PrimaryMapCode = queueItems.First().PrimaryMapCode
-                }
-            });
+                    Success = true,
+                    Code = "SUBMITTED",
+                    Message = "Mission submitted successfully to AMR",
+                    RequestId = request.RequestId,
+                    Data = amrResult?.Data
+                });
+            }
+            else
+            {
+                _logger.LogWarning(
+                    "AMR submission failed - Status: {StatusCode}, Response: {Response}",
+                    amrResponse.StatusCode,
+                    responseContent
+                );
+
+                return StatusCode((int)amrResponse.StatusCode, new SubmitMissionResponse
+                {
+                    Success = false,
+                    Code = "AMR_ERROR",
+                    Message = $"AMR system returned error: {amrResponse.StatusCode}"
+                });
+            }
         }
-        catch (InvalidOperationException ex)
+        catch (HttpRequestException ex)
         {
-            _logger.LogWarning(ex, "Invalid mission submission: {Message}", ex.Message);
-            return BadRequest(new SubmitMissionResponse
+            _logger.LogError(ex, "HTTP error submitting mission {MissionCode} to AMR", request.MissionCode);
+            return StatusCode(StatusCodes.Status502BadGateway, new SubmitMissionResponse
             {
                 Success = false,
-                Code = "INVALID_REQUEST",
-                Message = ex.Message
+                Code = "AMR_CONNECTION_ERROR",
+                Message = "Failed to connect to AMR system"
             });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error enqueueing mission {MissionCode}", request.MissionCode);
+            _logger.LogError(ex, "Error submitting mission {MissionCode}", request.MissionCode);
             return StatusCode(StatusCodes.Status500InternalServerError, new SubmitMissionResponse
             {
                 Success = false,
-                Code = "ENQUEUE_ERROR",
-                Message = "An error occurred while enqueueing the mission"
+                Code = "SUBMISSION_ERROR",
+                Message = "An error occurred while submitting the mission"
             });
         }
     }

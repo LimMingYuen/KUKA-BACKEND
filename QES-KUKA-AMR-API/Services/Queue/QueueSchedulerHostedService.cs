@@ -99,9 +99,18 @@ public class QueueSchedulerHostedService : IHostedService, IDisposable
 
             if (!activeMapCodes.Any())
             {
-                _logger.LogDebug("No active MapCode queues configured");
+                _logger.LogWarning(
+                    "No active MapCode queue configurations found. Queue processing skipped. " +
+                    "Please ensure MapCodeQueueConfigurations table has entries with EnableQueue=true."
+                );
                 return;
             }
+
+            _logger.LogDebug(
+                "Processing queues for {Count} active MapCode(s): {MapCodes}",
+                activeMapCodes.Count,
+                string.Join(", ", activeMapCodes)
+            );
 
             foreach (var mapCode in activeMapCodes)
             {
@@ -126,9 +135,40 @@ public class QueueSchedulerHostedService : IHostedService, IDisposable
     {
         try
         {
+            // Get MapCode configuration for traffic control
+            var mapConfig = await dbContext.MapCodeQueueConfigurations
+                .FirstOrDefaultAsync(c => c.MapCode == mapCode);
+
+            if (mapConfig == null)
+            {
+                _logger.LogWarning(
+                    "No queue configuration found for MapCode {MapCode}, skipping processing",
+                    mapCode
+                );
+                return;
+            }
+
+            // Check current traffic on this MapCode (semaphore control)
+            var activeRobotsCount = await queueManager.GetActiveRobotsCountOnMapAsync(mapCode);
+
+            if (activeRobotsCount >= mapConfig.MaxConcurrentRobotsOnMap)
+            {
+                _logger.LogDebug(
+                    "MapCode {MapCode} at capacity: {ActiveRobots}/{MaxRobots} robots active, skipping new job assignments",
+                    mapCode,
+                    activeRobotsCount,
+                    mapConfig.MaxConcurrentRobotsOnMap
+                );
+                return;
+            }
+
+            // Calculate how many new jobs we can assign based on traffic limit
+            var availableSlots = mapConfig.MaxConcurrentRobotsOnMap - activeRobotsCount;
+            var maxJobsToProcess = Math.Min(availableSlots, _options.MaxJobsPerMapCodePerCycle);
+
             var pendingJobs = await queueManager.GetPendingJobsAsync(
                 mapCode,
-                _options.MaxJobsPerMapCodePerCycle
+                maxJobsToProcess
             );
 
             if (!pendingJobs.Any())
@@ -138,9 +178,12 @@ public class QueueSchedulerHostedService : IHostedService, IDisposable
             }
 
             _logger.LogInformation(
-                "Processing {Count} pending jobs for MapCode {MapCode}",
+                "Processing {Count} pending jobs for MapCode {MapCode} (Active: {ActiveRobots}/{MaxRobots}, Available slots: {AvailableSlots})",
                 pendingJobs.Count,
-                mapCode
+                mapCode,
+                activeRobotsCount,
+                mapConfig.MaxConcurrentRobotsOnMap,
+                availableSlots
             );
 
             foreach (var job in pendingJobs)
