@@ -13,7 +13,6 @@ using QES_KUKA_AMR_API.Models.Jobs;
 using QES_KUKA_AMR_API.Options;
 using QES_KUKA_AMR_API.Services;
 using QES_KUKA_AMR_API.Services.SavedCustomMissions;
-using QES_KUKA_AMR_API.Services.Queue;
 
 namespace QES_KUKA_AMR_API.Controllers;
 
@@ -25,20 +24,17 @@ public class MissionsController : ControllerBase
     private readonly ILogger<MissionsController> _logger;
     private readonly MissionServiceOptions _missionOptions;
     private readonly ISavedCustomMissionService _savedCustomMissionService;
-    private readonly IMissionEnqueueService _missionEnqueueService;
 
     public MissionsController(
         IHttpClientFactory httpClientFactory,
         ILogger<MissionsController> logger,
         IOptions<MissionServiceOptions> missionOptions,
-        ISavedCustomMissionService savedCustomMissionService,
-        IMissionEnqueueService missionEnqueueService)
+        ISavedCustomMissionService savedCustomMissionService)
     {
         _httpClientFactory = httpClientFactory;
         _logger = logger;
         _missionOptions = missionOptions.Value;
         _savedCustomMissionService = savedCustomMissionService;
-        _missionEnqueueService = missionEnqueueService;
     }
 
     [HttpPost("save-as-template")]
