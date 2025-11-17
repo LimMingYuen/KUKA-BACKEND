@@ -22,7 +22,6 @@ using QES_KUKA_AMR_API.Services.ShelfDecisionRules;
 using QES_KUKA_AMR_API.Services.Users;
 using QES_KUKA_AMR_API.Services.WorkflowNodeCodes;
 using QES_KUKA_AMR_API.Services.MapImport;
-using QES_KUKA_AMR_API.Services.Queue;
 using log4net;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -138,10 +137,6 @@ builder.Services.Configure<MissionListServiceOptions>(
 builder.Services.Configure<AmrServiceOptions>(
     builder.Configuration.GetSection(AmrServiceOptions.SectionName));
 
-// Queue Scheduler Options
-builder.Services.Configure<QueueSchedulerOptions>(
-    builder.Configuration.GetSection(QueueSchedulerOptions.SectionName));
-
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<ILoginServiceClient, LoginServiceClient>();
 builder.Services.AddScoped<IMissionTypeService, MissionTypeService>();
@@ -173,16 +168,6 @@ builder.Services.AddScoped<IJobStatusClient, JobStatusClient>();
 
 builder.Services.AddScoped<IMissionListClient, MissionListClient>();
 builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
-
-// Mission Queue Services
-builder.Services.AddScoped<IMapCodeQueueManager, MapCodeQueueManager>();
-builder.Services.AddScoped<IRobotAssignmentService, RobotAssignmentService>();
-builder.Services.AddScoped<IJobOpportunityEvaluator, JobOpportunityEvaluator>();
-builder.Services.AddScoped<IWorkflowAnalysisService, WorkflowAnalysisService>();
-builder.Services.AddScoped<IMissionEnqueueService, MissionEnqueueService>();
-
-// Queue Scheduler Background Service
-builder.Services.AddHostedService<QueueSchedulerHostedService>();
 
 // Log Cleanup Services
 builder.Services.Configure<LogCleanupOptions>(

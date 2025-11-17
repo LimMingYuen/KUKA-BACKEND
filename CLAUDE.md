@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 QES KUKA AMR (Autonomous Mobile Robot) Management System - A .NET 8.0 solution for managing KUKA AMR fleet operations for Renesas at the Penang facility. The system consists of two main applications:
 
-- **QES-KUKA-AMR-API**: Main backend API managing mission queues, robot operations, analytics, workflow orchestration, and mobile robot management
+- **QES-KUKA-AMR-API**: Main backend API managing robot operations, analytics, workflow orchestration, and mobile robot management
 - **QES-KUKA-AMR-API-Simulator**: Test simulator mimicking the external AMR control system API for development and testing
 
 ## Build and Run Commands
@@ -56,9 +56,9 @@ Database: SQL Server with connection string in `appsettings.json` pointing to `Q
 
 ## Architecture Overview
 
-### Mission Queue System (Core Feature)
+### Mission Management
 
-The system manages AMR mission execution through a workflow-based queue system:
+The system manages AMR mission execution:
 - Missions are created from workflow templates (`WorkflowDiagram`) or custom mission definitions (`SavedCustomMission`)
 - Mission history is tracked in `MissionHistory` with detailed status progression
 - Mobile robots (`MobileRobot` entity) are managed with configuration and firmware versioning
@@ -147,7 +147,7 @@ Swagger/OpenAPI enabled for both main API and simulator:
 ## Code Organization
 
 ### Controllers
-Each controller handles a specific domain (19 controllers total):
+Each controller handles a specific domain:
 - Mission operations: `MissionsController`, `MissionHistoryController`, `MissionDataController`
 - Configuration: `ConfigController`, `MissionTypesController`, `RobotTypesController`, `ShelfDecisionRulesController`, `ResumeStrategiesController`, `AreasController`
 - Analytics: `RobotAnalyticsController`
@@ -158,7 +158,7 @@ Each controller handles a specific domain (19 controllers total):
 
 ### Models
 Organized by domain with DTOs for request/response:
-- `Models/Missions/`: Mission-related DTOs (SubmitMissionRequest, EnqueueRequest, etc.)
+- `Models/Missions/`: Mission-related DTOs (SubmitMissionRequest, etc.)
 - `Models/Jobs/`: Job status models
 - `Models/Analytics/`: Analytics DTOs
 - `Models/MobileRobot/`: Mobile robot configuration and management
