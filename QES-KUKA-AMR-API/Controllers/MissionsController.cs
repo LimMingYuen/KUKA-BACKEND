@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using QES_KUKA_AMR_API.Data;
 using QES_KUKA_AMR_API.Data.Entities;
+using QES_KUKA_AMR_API.Models;
 using QES_KUKA_AMR_API.Models.Missions;
 using QES_KUKA_AMR_API.Models.Jobs;
 using QES_KUKA_AMR_API.Options;
@@ -197,6 +198,36 @@ public class MissionsController : ControllerBase
                     responseContent
                 );
 
+                // Try to deserialize error response to extract actual error message
+                try
+                {
+                    var errorResponse = JsonSerializer.Deserialize<ExternalApiErrorResponse>(responseContent);
+
+                    if (errorResponse != null)
+                    {
+                        var errorCode = errorResponse.Code ?? "AMR_ERROR";
+                        var errorMessage = errorResponse.Message ?? $"AMR system returned error: {amrResponse.StatusCode}";
+
+                        _logger.LogWarning(
+                            "AMR error details - Code: {Code}, Message: {Message}",
+                            errorCode,
+                            errorMessage
+                        );
+
+                        return StatusCode((int)amrResponse.StatusCode, new SubmitMissionResponse
+                        {
+                            Success = false,
+                            Code = errorCode,
+                            Message = errorMessage
+                        });
+                    }
+                }
+                catch (JsonException ex)
+                {
+                    _logger.LogWarning(ex, "Failed to deserialize AMR error response");
+                }
+
+                // Fallback if deserialization fails
                 return StatusCode((int)amrResponse.StatusCode, new SubmitMissionResponse
                 {
                     Success = false,

@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
+using QES_KUKA_AMR_API.Models;
 using QES_KUKA_AMR_API.Models.Missions;
 using QES_KUKA_AMR_API.Options;
 
@@ -67,36 +68,108 @@ public class RobotQueryController : ControllerBase
         {
             using var response = await httpClient.SendAsync(apiRequest, cancellationToken);
 
-            var serviceResponse =
-                await response.Content.ReadFromJsonAsync<RobotQueryResponse>(cancellationToken: cancellationToken);
+            var responseContent = await response.Content.ReadAsStringAsync(cancellationToken);
 
-            if (serviceResponse is null)
+            _logger.LogInformation(
+                "AMR robot query response - Status: {StatusCode}, Body: {Response}",
+                response.StatusCode,
+                responseContent
+            );
+
+            // Handle success responses
+            if (response.IsSuccessStatusCode)
             {
-                _logger.LogError(
-                    "AMR service returned no content for robot query. Status: {StatusCode}",
-                    response.StatusCode);
+                var serviceResponse = System.Text.Json.JsonSerializer.Deserialize<RobotQueryResponse>(
+                    responseContent,
+                    new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }
+                );
 
-                return StatusCode(StatusCodes.Status502BadGateway, new RobotQueryResponse
+                if (serviceResponse is null)
                 {
-                    Code = "AMR_SERVICE_EMPTY_RESPONSE",
-                    Message = "Failed to retrieve a response from the AMR service.",
-                    Success = false
-                });
-            }
+                    _logger.LogError(
+                        "AMR service returned no content for robot query. Status: {StatusCode}",
+                        response.StatusCode);
 
-            if (serviceResponse.Data != null && serviceResponse.Data.Count > 0)
-            {
-                var robot = serviceResponse.Data[0];
-                _logger.LogInformation("✓ Robot {RobotId} found at node {NodeCode}", robot.RobotId, robot.NodeCode);
+                    return StatusCode(StatusCodes.Status502BadGateway, new RobotQueryResponse
+                    {
+                        Code = "AMR_SERVICE_EMPTY_RESPONSE",
+                        Message = "Failed to retrieve a response from the AMR service.",
+                        Success = false
+                    });
+                }
+
+                if (serviceResponse.Data != null && serviceResponse.Data.Count > 0)
+                {
+                    var robot = serviceResponse.Data[0];
+                    _logger.LogInformation("✓ Robot {RobotId} found at node {NodeCode}", robot.RobotId, robot.NodeCode);
+                }
+                else
+                {
+                    _logger.LogWarning("✗ Robot {RobotId} not found or no data returned", request.RobotId);
+                }
+
+                _logger.LogInformation("=== END RobotQueryController.QueryRobotPositionAsync DEBUG ===");
+
+                return Ok(serviceResponse);
             }
             else
             {
-                _logger.LogWarning("✗ Robot {RobotId} not found or no data returned", request.RobotId);
+                // Handle error responses (e.g., 500 errors from external API)
+                _logger.LogWarning(
+                    "AMR robot query failed - Status: {StatusCode}, Response: {Response}",
+                    response.StatusCode,
+                    responseContent
+                );
+
+                // Try to deserialize error response to extract actual error message
+                try
+                {
+                    // Try external API error format first (for 500 errors)
+                    var errorResponse = System.Text.Json.JsonSerializer.Deserialize<ExternalApiErrorResponse>(
+                        responseContent,
+                        new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }
+                    );
+
+                    if (errorResponse?.Message != null)
+                    {
+                        _logger.LogWarning(
+                            "AMR robot query error details - Message: {Message}, Exception: {Exception}",
+                            errorResponse.Message,
+                            errorResponse.Exception
+                        );
+
+                        return StatusCode((int)response.StatusCode, new RobotQueryResponse
+                        {
+                            Code = errorResponse.Code ?? "AMR_ROBOT_QUERY_ERROR",
+                            Message = errorResponse.Message,
+                            Success = false
+                        });
+                    }
+
+                    // Try RobotQueryResponse format (in case error is in standard format)
+                    var standardErrorResponse = System.Text.Json.JsonSerializer.Deserialize<RobotQueryResponse>(
+                        responseContent,
+                        new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }
+                    );
+
+                    if (standardErrorResponse != null)
+                    {
+                        return StatusCode((int)response.StatusCode, standardErrorResponse);
+                    }
+                }
+                catch (System.Text.Json.JsonException ex)
+                {
+                    _logger.LogWarning(ex, "Failed to deserialize AMR robot query error response");
+                }
+
+                // Fallback if deserialization fails
+                return StatusCode((int)response.StatusCode, new RobotQueryResponse
+                {
+                    Code = "AMR_ROBOT_QUERY_ERROR",
+                    Message = $"Robot query failed with status {response.StatusCode}",
+                    Success = false
+                });
             }
-
-            _logger.LogInformation("=== END RobotQueryController.QueryRobotPositionAsync DEBUG ===");
-
-            return StatusCode((int)response.StatusCode, serviceResponse);
         }
         catch (HttpRequestException httpRequestException)
         {

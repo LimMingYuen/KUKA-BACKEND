@@ -5,6 +5,7 @@ using QES_KUKA_AMR_API.Data;
 using QES_KUKA_AMR_API.Data.Entities;
 using QES_KUKA_AMR_API.Models.Analytics;
 using QES_KUKA_AMR_API.Models.Missions;
+using QES_KUKA_AMR_API.Services.Auth;
 using QES_KUKA_AMR_API.Services.Missions;
 
 namespace QES_KUKA_AMR_API.Services.Analytics;
@@ -31,17 +32,20 @@ public class RobotAnalyticsService : IRobotAnalyticsService
     private readonly ApplicationDbContext _dbContext;
     private readonly IWorkflowAnalyticsService _workflowAnalyticsService;
     private readonly IMissionListClient _missionListClient;
+    private readonly IExternalApiTokenService _externalApiTokenService;
     private readonly ILogger<RobotAnalyticsService> _logger;
 
     public RobotAnalyticsService(
         ApplicationDbContext dbContext,
         IWorkflowAnalyticsService workflowAnalyticsService,
         IMissionListClient missionListClient,
+        IExternalApiTokenService externalApiTokenService,
         ILogger<RobotAnalyticsService> logger)
     {
         _dbContext = dbContext;
         _workflowAnalyticsService = workflowAnalyticsService;
         _missionListClient = missionListClient;
+        _externalApiTokenService = externalApiTokenService;
         _logger = logger;
     }
 
@@ -300,11 +304,25 @@ public class RobotAnalyticsService : IRobotAnalyticsService
         metrics.WorkflowExecutions = workflowExecutions;
 
         // Fetch and process charging sessions
+        // Obtain external API token for authenticating with AMR system
+        string externalToken;
+        try
+        {
+            externalToken = await _externalApiTokenService.GetTokenAsync(cancellationToken);
+            _logger.LogInformation("Successfully obtained external API token for charging sessions query");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to obtain external API token for charging sessions");
+            // Continue with empty charging sessions rather than failing the entire analytics request
+            externalToken = string.Empty;
+        }
+
         var chargingSessions = await GetChargingSessionsAsync(
             robotId,
             normalizedStart,
             normalizedEnd,
-            jwtToken,
+            externalToken,
             cancellationToken);
 
         metrics.ChargingSessions = chargingSessions;

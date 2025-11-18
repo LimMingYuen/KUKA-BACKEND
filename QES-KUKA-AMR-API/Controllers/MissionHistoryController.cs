@@ -22,7 +22,7 @@ public class MissionHistoryController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<MissionHistory>>> GetAllHistoryAsync(CancellationToken cancellationToken)
+    public async Task<ActionResult<IEnumerable<MissionHistoryResponseDto>>> GetAllHistoryAsync(CancellationToken cancellationToken)
     {
         try
         {
@@ -30,7 +30,57 @@ public class MissionHistoryController : ControllerBase
                 .OrderByDescending(m => m.CreatedDate)
                 .ToListAsync(cancellationToken);
 
-            return Ok(history);
+            // Transform to response DTOs with calculated duration
+            var response = history.Select(record =>
+            {
+                // Ensure all DateTime values are treated as UTC
+                var createdDate = record.CreatedDate.Kind == DateTimeKind.Unspecified
+                    ? DateTime.SpecifyKind(record.CreatedDate, DateTimeKind.Utc)
+                    : record.CreatedDate;
+
+                var processedDate = record.ProcessedDate.HasValue && record.ProcessedDate.Value.Kind == DateTimeKind.Unspecified
+                    ? DateTime.SpecifyKind(record.ProcessedDate.Value, DateTimeKind.Utc)
+                    : record.ProcessedDate;
+
+                var submittedDate = record.SubmittedToAmrDate.HasValue && record.SubmittedToAmrDate.Value.Kind == DateTimeKind.Unspecified
+                    ? DateTime.SpecifyKind(record.SubmittedToAmrDate.Value, DateTimeKind.Utc)
+                    : record.SubmittedToAmrDate;
+
+                var completedDate = record.CompletedDate.HasValue && record.CompletedDate.Value.Kind == DateTimeKind.Unspecified
+                    ? DateTime.SpecifyKind(record.CompletedDate.Value, DateTimeKind.Utc)
+                    : record.CompletedDate;
+
+                // Calculate duration (working time)
+                double? durationMinutes = null;
+                if (completedDate.HasValue)
+                {
+                    var startDate = processedDate ?? submittedDate ?? createdDate;
+                    durationMinutes = (completedDate.Value - startDate).TotalMinutes;
+                }
+
+                return new MissionHistoryResponseDto
+                {
+                    Id = record.Id,
+                    MissionCode = record.MissionCode,
+                    RequestId = record.RequestId,
+                    WorkflowId = record.WorkflowId,
+                    WorkflowName = record.WorkflowName,
+                    SavedMissionId = record.SavedMissionId,
+                    TriggerSource = record.TriggerSource,
+                    Status = record.Status,
+                    MissionType = record.MissionType,
+                    CreatedDate = createdDate,
+                    ProcessedDate = processedDate,
+                    SubmittedToAmrDate = submittedDate,
+                    CompletedDate = completedDate,
+                    AssignedRobotId = record.AssignedRobotId,
+                    ErrorMessage = record.ErrorMessage,
+                    CreatedBy = record.CreatedBy,
+                    DurationMinutes = durationMinutes
+                };
+            }).ToList();
+
+            return Ok(response);
         }
         catch (Exception ex)
         {
@@ -78,9 +128,10 @@ public class MissionHistoryController : ControllerBase
                 TriggerSource = request.TriggerSource ?? MissionTriggerSource.Manual,
                 MissionType = request.MissionType,
                 AssignedRobotId = request.AssignedRobotId,
-                ProcessedDate = request.ProcessedDate,
-                SubmittedToAmrDate = request.SubmittedToAmrDate ?? DateTime.UtcNow,
-                CompletedDate = request.CompletedDate,
+                // Parse ISO date strings to DateTime
+                ProcessedDate = TryParseDateTime(request.ProcessedDate),
+                SubmittedToAmrDate = TryParseDateTime(request.SubmittedToAmrDate) ?? DateTime.UtcNow,
+                CompletedDate = TryParseDateTime(request.CompletedDate),
                 ErrorMessage = request.ErrorMessage,
                 CreatedBy = request.CreatedBy
             };
@@ -91,6 +142,17 @@ public class MissionHistoryController : ControllerBase
             _logger.LogInformation("✓ Mission history record added successfully: {MissionCode} - {Status} (ID={Id}), Robot={RobotId}",
                 missionHistory.MissionCode, missionHistory.Status, missionHistory.Id, missionHistory.AssignedRobotId);
             _logger.LogInformation("=== END MissionHistoryController.AddHistoryAsync DEBUG ===");
+
+            // Ensure DateTime values are treated as UTC when serialized
+            // This adds the 'Z' suffix so JavaScript correctly interprets them as UTC
+            if (missionHistory.CreatedDate.Kind == DateTimeKind.Unspecified)
+                missionHistory.CreatedDate = DateTime.SpecifyKind(missionHistory.CreatedDate, DateTimeKind.Utc);
+            if (missionHistory.ProcessedDate.HasValue && missionHistory.ProcessedDate.Value.Kind == DateTimeKind.Unspecified)
+                missionHistory.ProcessedDate = DateTime.SpecifyKind(missionHistory.ProcessedDate.Value, DateTimeKind.Utc);
+            if (missionHistory.SubmittedToAmrDate.HasValue && missionHistory.SubmittedToAmrDate.Value.Kind == DateTimeKind.Unspecified)
+                missionHistory.SubmittedToAmrDate = DateTime.SpecifyKind(missionHistory.SubmittedToAmrDate.Value, DateTimeKind.Utc);
+            if (missionHistory.CompletedDate.HasValue && missionHistory.CompletedDate.Value.Kind == DateTimeKind.Unspecified)
+                missionHistory.CompletedDate = DateTime.SpecifyKind(missionHistory.CompletedDate.Value, DateTimeKind.Utc);
 
             return StatusCode(201, missionHistory);
         }
@@ -148,6 +210,16 @@ public class MissionHistoryController : ControllerBase
                 missionHistory.MissionCode, missionHistory.Status, missionHistory.AssignedRobotId, missionHistory.CompletedDate);
             _logger.LogInformation("=== END MissionHistoryController.UpdateHistoryAsync DEBUG ===");
 
+            // Ensure DateTime values are treated as UTC when serialized
+            if (missionHistory.CreatedDate.Kind == DateTimeKind.Unspecified)
+                missionHistory.CreatedDate = DateTime.SpecifyKind(missionHistory.CreatedDate, DateTimeKind.Utc);
+            if (missionHistory.ProcessedDate.HasValue && missionHistory.ProcessedDate.Value.Kind == DateTimeKind.Unspecified)
+                missionHistory.ProcessedDate = DateTime.SpecifyKind(missionHistory.ProcessedDate.Value, DateTimeKind.Utc);
+            if (missionHistory.SubmittedToAmrDate.HasValue && missionHistory.SubmittedToAmrDate.Value.Kind == DateTimeKind.Unspecified)
+                missionHistory.SubmittedToAmrDate = DateTime.SpecifyKind(missionHistory.SubmittedToAmrDate.Value, DateTimeKind.Utc);
+            if (missionHistory.CompletedDate.HasValue && missionHistory.CompletedDate.Value.Kind == DateTimeKind.Unspecified)
+                missionHistory.CompletedDate = DateTime.SpecifyKind(missionHistory.CompletedDate.Value, DateTimeKind.Utc);
+
             return Ok(missionHistory);
         }
         catch (Exception ex)
@@ -190,6 +262,21 @@ public class MissionHistoryController : ControllerBase
             return StatusCode(500, new { message = "Error getting count" });
         }
     }
+
+    /// <summary>
+    /// Helper method to safely parse ISO date strings to DateTime
+    /// </summary>
+    private DateTime? TryParseDateTime(string? dateString)
+    {
+        if (string.IsNullOrWhiteSpace(dateString))
+            return null;
+
+        if (DateTime.TryParse(dateString, out var result))
+            return result;
+
+        _logger.LogWarning("Failed to parse date string: {DateString}", dateString);
+        return null;
+    }
 }
 
 public class MissionHistoryRequest
@@ -205,9 +292,10 @@ public class MissionHistoryRequest
     public MissionTriggerSource? TriggerSource { get; set; }
     public string? MissionType { get; set; }
     public string? AssignedRobotId { get; set; }
-    public DateTime? ProcessedDate { get; set; }
-    public DateTime? SubmittedToAmrDate { get; set; }
-    public DateTime? CompletedDate { get; set; }
+    // Date fields accept ISO string format from frontend (e.g., "2025-11-17T18:04:14.285Z")
+    public string? ProcessedDate { get; set; }
+    public string? SubmittedToAmrDate { get; set; }
+    public string? CompletedDate { get; set; }
     public string? ErrorMessage { get; set; }
     public string? CreatedBy { get; set; }
 }
@@ -220,4 +308,29 @@ public class UpdateMissionHistoryRequest
     public DateTime? SubmittedToAmrDate { get; set; }
     public DateTime? CompletedDate { get; set; }
     public string? ErrorMessage { get; set; }
+}
+
+public class MissionHistoryResponseDto
+{
+    public int Id { get; set; }
+    public string MissionCode { get; set; } = string.Empty;
+    public string RequestId { get; set; } = string.Empty;
+    public int? WorkflowId { get; set; }
+    public string? WorkflowName { get; set; }
+    public int? SavedMissionId { get; set; }
+    public MissionTriggerSource TriggerSource { get; set; }
+    public string Status { get; set; } = string.Empty;
+    public string? MissionType { get; set; }
+    public DateTime CreatedDate { get; set; }
+    public DateTime? ProcessedDate { get; set; }
+    public DateTime? SubmittedToAmrDate { get; set; }
+    public DateTime? CompletedDate { get; set; }
+    public string? AssignedRobotId { get; set; }
+    public string? ErrorMessage { get; set; }
+    public string? CreatedBy { get; set; }
+
+    /// <summary>
+    /// Mission duration in minutes (working time from start to completion)
+    /// </summary>
+    public double? DurationMinutes { get; set; }
 }
