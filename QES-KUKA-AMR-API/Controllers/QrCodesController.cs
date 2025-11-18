@@ -311,6 +311,28 @@ public class QrCodesController : ControllerBase
         return Ok(qrCodes);
     }
 
+    [HttpGet("with-uuid")]
+    public async Task<ActionResult<IEnumerable<QrCodeWithUuidDto>>> GetWithUuidAsync(CancellationToken cancellationToken)
+    {
+        var qrCodes = await _dbContext.QrCodes
+            .AsNoTracking()
+            .Where(q => q.NodeUuid != null)
+            .OrderBy(q => q.NodeLabel)
+            .Select(q => new QrCodeWithUuidDto
+            {
+                Id = q.Id,
+                NodeUuid = q.NodeUuid!,
+                MapCode = q.MapCode,
+                FloorNumber = q.FloorNumber,
+                NodeNumber = q.NodeNumber
+            })
+            .ToListAsync(cancellationToken);
+
+        _logger.LogInformation("Retrieved {Count} QR codes with UUID", qrCodes.Count);
+
+        return Ok(qrCodes);
+    }
+
     private static DateTime? ParseDateTime(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))

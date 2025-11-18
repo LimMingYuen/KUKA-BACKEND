@@ -265,6 +265,29 @@ public class MapZonesController : ControllerBase
         return Ok(result);
     }
 
+    [HttpGet("with-nodes")]
+    public async Task<ActionResult<IEnumerable<MapZoneWithNodesDto>>> GetWithNodesAsync(CancellationToken cancellationToken)
+    {
+        var mapZones = await _dbContext.MapZones
+            .AsNoTracking()
+            .Where(m => m.Status == 1) // Only active zones
+            .OrderBy(m => m.ZoneName)
+            .ToListAsync(cancellationToken);
+
+        var result = mapZones.Select(m => new MapZoneWithNodesDto
+        {
+            Id = m.Id,
+            ZoneName = m.ZoneName,
+            ZoneCode = m.ZoneCode,
+            Nodes = m.Nodes,
+            MapCode = m.MapCode
+        }).ToList();
+
+        _logger.LogInformation("Retrieved {Count} map zones with nodes", result.Count);
+
+        return Ok(result);
+    }
+
     private static string GetAreaPurpose(string zoneType)
     {
         return zoneType switch
