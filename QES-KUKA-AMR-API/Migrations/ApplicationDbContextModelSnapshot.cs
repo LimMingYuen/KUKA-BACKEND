@@ -61,7 +61,7 @@ namespace QES_KUKA_AMR_API.Migrations
                     b.ToTable("Areas");
                 });
 
-            modelBuilder.Entity("QES_KUKA_AMR_API.Data.Entities.MapCodeQueueConfiguration", b =>
+            modelBuilder.Entity("QES_KUKA_AMR_API.Data.Entities.FloorMap", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -69,53 +69,133 @@ namespace QES_KUKA_AMR_API.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<double>("AverageJobWaitTimeSeconds")
-                        .HasColumnType("float");
-
-                    b.Property<double>("AverageOpportunisticJobDistanceMeters")
-                        .HasColumnType("float");
-
-                    b.Property<DateTime>("CreatedUtc")
+                    b.Property<DateTime>("CreateTime")
                         .HasColumnType("datetime2");
 
-                    b.Property<int>("DefaultPriority")
+                    b.Property<int>("EdgeCount")
                         .HasColumnType("int");
 
-                    b.Property<bool>("EnableCrossMapOptimization")
-                        .HasColumnType("bit");
+                    b.Property<double>("FloorLength")
+                        .HasColumnType("float");
 
-                    b.Property<bool>("EnableQueue")
-                        .HasColumnType("bit");
+                    b.Property<int>("FloorLevel")
+                        .HasColumnType("int");
+
+                    b.Property<string>("FloorMapVersion")
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("FloorName")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("FloorNumber")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
+                    b.Property<double>("FloorWidth")
+                        .HasColumnType("float");
+
+                    b.Property<int?>("LaserMapId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("LastUpdateTime")
+                        .HasColumnType("datetime2");
 
                     b.Property<string>("MapCode")
                         .IsRequired()
                         .HasMaxLength(128)
                         .HasColumnType("nvarchar(128)");
 
-                    b.Property<int>("MaxConcurrentRobotsOnMap")
+                    b.Property<int>("NodeCount")
                         .HasColumnType("int");
-
-                    b.Property<int>("MaxConsecutiveOpportunisticJobs")
-                        .HasColumnType("int");
-
-                    b.Property<int>("OpportunisticJobsChained")
-                        .HasColumnType("int");
-
-                    b.Property<int>("QueueProcessingIntervalSeconds")
-                        .HasColumnType("int");
-
-                    b.Property<int>("TotalJobsProcessed")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime>("UpdatedUtc")
-                        .HasColumnType("datetime2");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("MapCode")
+                    b.HasIndex("MapCode", "FloorNumber")
                         .IsUnique();
 
-                    b.ToTable("MapCodeQueueConfigurations", (string)null);
+                    b.ToTable("FloorMaps", (string)null);
+                });
+
+            modelBuilder.Entity("QES_KUKA_AMR_API.Data.Entities.MapEdge", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("BeginNodeLabel")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<DateTime>("CreateTime")
+                        .HasColumnType("datetime2");
+
+                    b.Property<double>("EdgeLength")
+                        .HasColumnType("float");
+
+                    b.Property<int>("EdgeType")
+                        .HasColumnType("int");
+
+                    b.Property<double>("EdgeWeight")
+                        .HasColumnType("float");
+
+                    b.Property<double>("EdgeWidth")
+                        .HasColumnType("float");
+
+                    b.Property<string>("EndNodeLabel")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("FloorNumber")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
+                    b.Property<DateTime>("LastUpdateTime")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("MapCode")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<double>("MaxAccelerationVelocity")
+                        .HasColumnType("float");
+
+                    b.Property<double>("MaxDecelerationVelocity")
+                        .HasColumnType("float");
+
+                    b.Property<double>("MaxVelocity")
+                        .HasColumnType("float");
+
+                    b.Property<int>("Orientation")
+                        .HasColumnType("int");
+
+                    b.Property<double>("Radius")
+                        .HasColumnType("float");
+
+                    b.Property<string>("RoadType")
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MapCode", "FloorNumber");
+
+                    b.HasIndex("BeginNodeLabel", "EndNodeLabel", "MapCode")
+                        .IsUnique();
+
+                    b.ToTable("MapEdges", (string)null);
                 });
 
             modelBuilder.Entity("QES_KUKA_AMR_API.Data.Entities.MapZone", b =>
@@ -305,7 +385,7 @@ namespace QES_KUKA_AMR_API.Migrations
                     b.ToTable("MissionHistories");
                 });
 
-            modelBuilder.Entity("QES_KUKA_AMR_API.Data.Entities.MissionQueueItem", b =>
+            modelBuilder.Entity("QES_KUKA_AMR_API.Data.Entities.MissionQueue", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -314,22 +394,14 @@ namespace QES_KUKA_AMR_API.Migrations
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
                     b.Property<string>("AssignedRobotId")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
 
-                    b.Property<DateTime?>("CancelledUtc")
+                    b.Property<DateTime?>("AssignedUtc")
                         .HasColumnType("datetime2");
 
                     b.Property<DateTime?>("CompletedUtc")
                         .HasColumnType("datetime2");
-
-                    b.Property<string>("ContainerCode")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<string>("ContainerModelCode")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
 
                     b.Property<string>("CreatedBy")
                         .HasMaxLength(100)
@@ -338,151 +410,81 @@ namespace QES_KUKA_AMR_API.Migrations
                     b.Property<DateTime>("CreatedUtc")
                         .HasColumnType("datetime2");
 
-                    b.Property<DateTime>("EnqueuedUtc")
-                        .HasColumnType("datetime2");
-
                     b.Property<string>("ErrorMessage")
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
-                    b.Property<string>("IdleNode")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<bool>("IsCrossMapMission")
-                        .HasColumnType("bit");
-
-                    b.Property<bool>("IsOpportunisticJob")
-                        .HasColumnType("bit");
-
-                    b.Property<DateTime?>("LastRetryUtc")
-                        .HasColumnType("datetime2");
-
-                    b.Property<bool>("LockRobotAfterFinish")
-                        .HasColumnType("bit");
+                    b.Property<int>("MaxRetries")
+                        .HasColumnType("int");
 
                     b.Property<string>("MissionCode")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
-                    b.Property<string>("MissionStepsJson")
+                    b.Property<string>("MissionName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("MissionRequestJson")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<string>("MissionType")
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
-
-                    b.Property<int?>("NextQueueItemId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("OrgId")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<int?>("ParentQueueItemId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("PrimaryMapCode")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)");
+                    b.Property<string>("PreferredRobotIds")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
 
                     b.Property<int>("Priority")
                         .HasColumnType("int");
 
-                    b.Property<string>("QueueItemCode")
+                    b.Property<DateTime?>("ProcessingStartedUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("QueuePosition")
+                        .HasColumnType("int");
+
+                    b.Property<string>("RequestId")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
-                    b.Property<string>("RequestId")
+                    b.Property<string>("ReservedByMissionCode")
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("ReservedForRobotId")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<DateTime?>("ReservedUtc")
+                        .HasColumnType("datetime2");
 
                     b.Property<int>("RetryCount")
                         .HasColumnType("int");
 
-                    b.Property<DateTime?>("RobotAssignedUtc")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("RobotIds")
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
-
-                    b.Property<string>("RobotModels")
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
-
-                    b.Property<string>("RobotType")
+                    b.Property<string>("RobotTypeFilter")
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
                     b.Property<int?>("SavedMissionId")
                         .HasColumnType("int");
 
-                    b.Property<string>("SecondaryMapCode")
-                        .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)");
-
-                    b.Property<string>("StartNodeLabel")
-                        .HasMaxLength(64)
-                        .HasColumnType("nvarchar(64)");
-
-                    b.Property<double?>("StartXCoordinate")
-                        .HasColumnType("float");
-
-                    b.Property<double?>("StartYCoordinate")
-                        .HasColumnType("float");
-
-                    b.Property<DateTime?>("StartedUtc")
-                        .HasColumnType("datetime2");
-
                     b.Property<int>("Status")
-                        .HasColumnType("int");
-
-                    b.Property<string>("TemplateCode")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<int>("TriggerSource")
-                        .HasColumnType("int");
-
-                    b.Property<string>("UnlockMissionCode")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<string>("UnlockRobotId")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<DateTime>("UpdatedUtc")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("ViewBoardType")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<int?>("WorkflowId")
                         .HasColumnType("int");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("MissionCode");
+                    b.HasIndex("AssignedRobotId");
 
-                    b.HasIndex("NextQueueItemId");
-
-                    b.HasIndex("ParentQueueItemId");
-
-                    b.HasIndex("QueueItemCode")
+                    b.HasIndex("MissionCode")
                         .IsUnique();
 
-                    b.HasIndex("AssignedRobotId", "Status");
+                    b.HasIndex("SavedMissionId");
 
-                    b.HasIndex("PrimaryMapCode", "Status", "Priority");
+                    b.HasIndex("Status", "Priority", "CreatedUtc");
 
-                    b.ToTable("MissionQueueItems", (string)null);
+                    b.ToTable("MissionQueues", (string)null);
                 });
 
             modelBuilder.Entity("QES_KUKA_AMR_API.Data.Entities.MissionType", b =>
@@ -695,6 +697,39 @@ namespace QES_KUKA_AMR_API.Migrations
                     b.ToTable("MobileRobots");
                 });
 
+            modelBuilder.Entity("QES_KUKA_AMR_API.Data.Entities.Page", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("PageIcon")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("PageName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("PagePath")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PagePath")
+                        .IsUnique();
+
+                    b.ToTable("Pages", (string)null);
+                });
+
             modelBuilder.Entity("QES_KUKA_AMR_API.Data.Entities.QrCode", b =>
                 {
                     b.Property<int>("Id")
@@ -840,77 +875,6 @@ namespace QES_KUKA_AMR_API.Migrations
                     b.ToTable("ResumeStrategies");
                 });
 
-            modelBuilder.Entity("QES_KUKA_AMR_API.Data.Entities.RobotJobOpportunity", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("ConsecutiveJobsInMapCode")
-                        .HasColumnType("int");
-
-                    b.Property<string>("CurrentMapCode")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)");
-
-                    b.Property<int>("CurrentQueueItemId")
-                        .HasColumnType("int");
-
-                    b.Property<double>("CurrentXCoordinate")
-                        .HasColumnType("float");
-
-                    b.Property<double>("CurrentYCoordinate")
-                        .HasColumnType("float");
-
-                    b.Property<int>("Decision")
-                        .HasColumnType("int");
-
-                    b.Property<string>("DecisionReason")
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
-
-                    b.Property<DateTime>("EnteredMapCodeUtc")
-                        .HasColumnType("datetime2");
-
-                    b.Property<DateTime>("MissionCompletedUtc")
-                        .HasColumnType("datetime2");
-
-                    b.Property<bool>("OpportunityCheckPending")
-                        .HasColumnType("bit");
-
-                    b.Property<DateTime?>("OpportunityEvaluatedUtc")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("OriginalMapCode")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)");
-
-                    b.Property<DateTime>("PositionUpdatedUtc")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("RobotId")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<int?>("SelectedOpportunisticJobId")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CurrentQueueItemId");
-
-                    b.HasIndex("SelectedOpportunisticJobId");
-
-                    b.HasIndex("RobotId", "CurrentMapCode");
-
-                    b.ToTable("RobotJobOpportunities", (string)null);
-                });
-
             modelBuilder.Entity("QES_KUKA_AMR_API.Data.Entities.RobotManualPause", b =>
                 {
                     b.Property<int>("Id")
@@ -1030,6 +994,70 @@ namespace QES_KUKA_AMR_API.Migrations
                         .IsUnique();
 
                     b.ToTable("Roles", (string)null);
+                });
+
+            modelBuilder.Entity("QES_KUKA_AMR_API.Data.Entities.RolePermission", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("CanAccess")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime>("CreatedUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("PageId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("RoleId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PageId");
+
+                    b.HasIndex("RoleId");
+
+                    b.HasIndex("RoleId", "PageId")
+                        .IsUnique();
+
+                    b.ToTable("RolePermissions", (string)null);
+                });
+
+            modelBuilder.Entity("QES_KUKA_AMR_API.Data.Entities.RoleTemplatePermission", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("CanAccess")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime>("CreatedUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("RoleId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("SavedCustomMissionId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RoleId");
+
+                    b.HasIndex("SavedCustomMissionId");
+
+                    b.HasIndex("RoleId", "SavedCustomMissionId")
+                        .IsUnique();
+
+                    b.ToTable("RoleTemplatePermissions", (string)null);
                 });
 
             modelBuilder.Entity("QES_KUKA_AMR_API.Data.Entities.SavedCustomMission", b =>
@@ -1261,6 +1289,70 @@ namespace QES_KUKA_AMR_API.Migrations
                     b.ToTable("Users", (string)null);
                 });
 
+            modelBuilder.Entity("QES_KUKA_AMR_API.Data.Entities.UserPermission", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("CanAccess")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime>("CreatedUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("PageId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PageId");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("UserId", "PageId")
+                        .IsUnique();
+
+                    b.ToTable("UserPermissions", (string)null);
+                });
+
+            modelBuilder.Entity("QES_KUKA_AMR_API.Data.Entities.UserTemplatePermission", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("CanAccess")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime>("CreatedUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("SavedCustomMissionId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SavedCustomMissionId");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("UserId", "SavedCustomMissionId")
+                        .IsUnique();
+
+                    b.ToTable("UserTemplatePermissions", (string)null);
+                });
+
             modelBuilder.Entity("QES_KUKA_AMR_API.Data.Entities.WorkflowDiagram", b =>
                 {
                     b.Property<int>("Id")
@@ -1381,6 +1473,84 @@ namespace QES_KUKA_AMR_API.Migrations
                     b.ToTable("WorkflowNodeCodes");
                 });
 
+            modelBuilder.Entity("QES_KUKA_AMR_API.Data.Entities.WorkflowSchedule", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime>("CreatedUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CronExpression")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int>("ExecutionCount")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("IntervalMinutes")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsEnabled")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("LastErrorMessage")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("LastRunStatus")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<DateTime?>("LastRunUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("MaxExecutions")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("NextRunUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("OneTimeUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("SavedMissionId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ScheduleName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("ScheduleType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<DateTime?>("UpdatedUtc")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SavedMissionId");
+
+                    b.HasIndex("IsEnabled", "NextRunUtc");
+
+                    b.ToTable("WorkflowSchedules", (string)null);
+                });
+
             modelBuilder.Entity("QES_KUKA_AMR_API.Data.Entities.WorkflowZoneMapping", b =>
                 {
                     b.Property<int>("Id")
@@ -1434,6 +1604,93 @@ namespace QES_KUKA_AMR_API.Migrations
                     b.HasIndex("ZoneCode");
 
                     b.ToTable("WorkflowZoneMappings");
+                });
+
+            modelBuilder.Entity("QES_KUKA_AMR_API.Data.Entities.RolePermission", b =>
+                {
+                    b.HasOne("QES_KUKA_AMR_API.Data.Entities.Page", "Page")
+                        .WithMany()
+                        .HasForeignKey("PageId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("QES_KUKA_AMR_API.Data.Entities.Role", "Role")
+                        .WithMany()
+                        .HasForeignKey("RoleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Page");
+
+                    b.Navigation("Role");
+                });
+
+            modelBuilder.Entity("QES_KUKA_AMR_API.Data.Entities.RoleTemplatePermission", b =>
+                {
+                    b.HasOne("QES_KUKA_AMR_API.Data.Entities.Role", "Role")
+                        .WithMany()
+                        .HasForeignKey("RoleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("QES_KUKA_AMR_API.Data.Entities.SavedCustomMission", "SavedCustomMission")
+                        .WithMany()
+                        .HasForeignKey("SavedCustomMissionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Role");
+
+                    b.Navigation("SavedCustomMission");
+                });
+
+            modelBuilder.Entity("QES_KUKA_AMR_API.Data.Entities.UserPermission", b =>
+                {
+                    b.HasOne("QES_KUKA_AMR_API.Data.Entities.Page", "Page")
+                        .WithMany()
+                        .HasForeignKey("PageId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("QES_KUKA_AMR_API.Data.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Page");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("QES_KUKA_AMR_API.Data.Entities.UserTemplatePermission", b =>
+                {
+                    b.HasOne("QES_KUKA_AMR_API.Data.Entities.SavedCustomMission", "SavedCustomMission")
+                        .WithMany()
+                        .HasForeignKey("SavedCustomMissionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("QES_KUKA_AMR_API.Data.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("SavedCustomMission");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("QES_KUKA_AMR_API.Data.Entities.WorkflowSchedule", b =>
+                {
+                    b.HasOne("QES_KUKA_AMR_API.Data.Entities.SavedCustomMission", "SavedMission")
+                        .WithMany()
+                        .HasForeignKey("SavedMissionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("SavedMission");
                 });
 #pragma warning restore 612, 618
         }

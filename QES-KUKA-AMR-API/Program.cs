@@ -22,6 +22,18 @@ using QES_KUKA_AMR_API.Services.ShelfDecisionRules;
 using QES_KUKA_AMR_API.Services.Users;
 using QES_KUKA_AMR_API.Services.WorkflowNodeCodes;
 using QES_KUKA_AMR_API.Services.MapImport;
+using QES_KUKA_AMR_API.Services.Pages;
+using QES_KUKA_AMR_API.Services.RolePermissions;
+using QES_KUKA_AMR_API.Services.UserPermissions;
+using QES_KUKA_AMR_API.Services.Permissions;
+using QES_KUKA_AMR_API.Services.RoleTemplatePermissions;
+using QES_KUKA_AMR_API.Services.UserTemplatePermissions;
+using QES_KUKA_AMR_API.Services.Queue;
+using QES_KUKA_AMR_API.Services.Sync;
+using QES_KUKA_AMR_API.Services.Schedule;
+using QES_KUKA_AMR_API.Services.RobotRealtime;
+using QES_KUKA_AMR_API.Services.MapData;
+using QES_KUKA_AMR_API.Hubs;
 using log4net;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -34,14 +46,15 @@ builder.Logging.AddLog4Net("log4net.config");
 
 // Add services to the container.
 
-// Add CORS support for web frontend
+// Add CORS support for web frontend (including SignalR)
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        policy.AllowAnyOrigin()
+        policy.WithOrigins("http://localhost:4200", "http://localhost:5109")
               .AllowAnyMethod()
-              .AllowAnyHeader();
+              .AllowAnyHeader()
+              .AllowCredentials(); // Required for SignalR
     });
 });
 
@@ -153,6 +166,13 @@ builder.Services.AddScoped<IAreaService, AreaService>();
 builder.Services.AddScoped<ISavedCustomMissionService, SavedCustomMissionService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IRoleService, RoleService>();
+builder.Services.AddScoped<IPageService, PageService>();
+builder.Services.AddScoped<IRolePermissionService, RolePermissionService>();
+builder.Services.AddScoped<IUserPermissionService, UserPermissionService>();
+builder.Services.AddScoped<IPermissionCheckService, PermissionCheckService>();
+builder.Services.AddScoped<ITemplatePermissionCheckService, TemplatePermissionCheckService>();
+builder.Services.AddScoped<IRoleTemplatePermissionService, RoleTemplatePermissionService>();
+builder.Services.AddScoped<IUserTemplatePermissionService, UserTemplatePermissionService>();
 builder.Services.AddScoped<IRobotAnalyticsService, RobotAnalyticsService>();
 builder.Services.AddScoped<IWorkflowNodeCodeService, WorkflowNodeCodeService>();
 builder.Services.AddScoped<IMapImportService, MapImportService>();
@@ -169,8 +189,7 @@ builder.Services.AddHttpClient<IWorkflowAnalyticsService, WorkflowAnalyticsServi
 });
 
 builder.Services.AddScoped<IJobStatusClient, JobStatusClient>();
-
-
+builder.Services.AddScoped<IRobotRealtimeClient, RobotRealtimeClient>();
 
 builder.Services.AddScoped<IMissionListClient, MissionListClient>();
 builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
@@ -179,6 +198,29 @@ builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
 builder.Services.Configure<LogCleanupOptions>(
     builder.Configuration.GetSection(LogCleanupOptions.SectionName));
 builder.Services.AddScoped<LogCleanupService>();
+
+// Auto-Sync Services
+builder.Services.AddScoped<ISyncService, SyncService>();
+builder.Services.AddHostedService<AutoSyncHostedService>();
+
+// Workflow Scheduling Services
+builder.Services.AddScoped<IWorkflowScheduleService, WorkflowScheduleService>();
+builder.Services.AddHostedService<WorkflowSchedulerHostedService>();
+
+// Mission Queue Services
+builder.Services.AddScoped<IMissionQueueService, MissionQueueService>();
+builder.Services.AddScoped<IRobotSelectionService, RobotSelectionService>();
+builder.Services.AddScoped<IJobOptimizationService, JobOptimizationService>();
+builder.Services.AddHostedService<QueueProcessorService>();
+
+// SignalR for real-time updates
+builder.Services.AddSignalR();
+builder.Services.AddSingleton<IQueueNotificationService, QueueNotificationService>();
+
+// Map Data Services for warehouse live map
+builder.Services.AddSingleton<IMapDataCacheService, MapDataCacheService>();
+builder.Services.AddSingleton<IMapNotificationService, MapNotificationService>();
+builder.Services.AddHostedService<MapRealtimePollingService>();
 
 var app = builder.Build();
 
@@ -196,6 +238,10 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+
+// Map SignalR hubs for real-time updates
+app.MapHub<QueueHub>("/hubs/queue");
+app.MapHub<MapHub>("/hubs/map");
 
 // Seed database with default admin user
 using (var scope = app.Services.CreateScope())

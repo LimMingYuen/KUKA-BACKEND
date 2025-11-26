@@ -360,7 +360,7 @@ public class AmrController : ControllerBase
             RobotId = request.RobotId,
             NodeCode = activeJob != null ? GetSimulatedNodeCode(activeJob) : "Sim1-1-2", // Idle position
             MissionCode = activeJob?.Request.MissionCode,
-            Status = activeJob != null ? 20 : 0, // 20 = Executing, 0 = Idle
+            Status = activeJob != null ? 20 : 3, // 20 = Executing, 3 = Idle
             BatteryLevel = 85,
             RobotType = request.RobotType ?? "LIFT",
             MapCode = request.MapCode ?? "M001",

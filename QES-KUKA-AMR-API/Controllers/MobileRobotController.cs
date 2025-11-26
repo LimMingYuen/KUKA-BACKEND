@@ -8,6 +8,7 @@ using QES_KUKA_AMR_API.Models.MapZone;
 using QES_KUKA_AMR_API.Models.MobileRobot;
 using QES_KUKA_AMR_API.Options;
 using QES_KUKA_AMR_API.Services.Auth;
+using QES_KUKA_AMR_API.Services.RobotRealtime;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
@@ -25,19 +26,22 @@ public class MobileRobotController : ControllerBase
     private readonly ILogger<MobileRobotController> _logger;
     private readonly MobileRobotServiceOptions _mobileRobotOptions;
     private readonly IExternalApiTokenService _externalApiTokenService;
+    private readonly IRobotRealtimeClient _robotRealtimeClient;
 
     public MobileRobotController(
         ApplicationDbContext dbContext,
         IHttpClientFactory httpClientFactory,
         ILogger<MobileRobotController> logger,
         IOptions<MobileRobotServiceOptions> mobileRobotOptions,
-        IExternalApiTokenService externalApiTokenService)
+        IExternalApiTokenService externalApiTokenService,
+        IRobotRealtimeClient robotRealtimeClient)
     {
         _dbContext = dbContext;
         _httpClientFactory = httpClientFactory;
         _logger = logger;
         _mobileRobotOptions = mobileRobotOptions.Value;
         _externalApiTokenService = externalApiTokenService;
+        _robotRealtimeClient = robotRealtimeClient;
     }
 
     [HttpPost("sync")]
@@ -337,6 +341,46 @@ public class MobileRobotController : ControllerBase
 
         _logger.LogInformation("Retrieved {Count} robots with type {TypeCode}", robots.Count, typeCode);
         return Ok(robots);
+    }
+
+    /// <summary>
+    /// Get realtime information for robots and containers from external AMR system.
+    /// </summary>
+    /// <param name="floorNumber">Floor number to filter by</param>
+    /// <param name="mapCode">Map code to filter by</param>
+    /// <param name="isFirst">Whether this is the first request</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Realtime info data including robots, containers, and error robots</returns>
+    [HttpGet("realtime")]
+    public async Task<ActionResult<RealtimeInfoData>> GetRealtimeInfoAsync(
+        [FromQuery] string? floorNumber,
+        [FromQuery] string? mapCode,
+        [FromQuery] bool isFirst = false,
+        CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation(
+            "Fetching realtime info - FloorNumber: {FloorNumber}, MapCode: {MapCode}, IsFirst: {IsFirst}",
+            floorNumber, mapCode, isFirst);
+
+        var result = await _robotRealtimeClient.GetRealtimeInfoAsync(
+            floorNumber, mapCode, isFirst, cancellationToken);
+
+        if (result == null)
+        {
+            return StatusCode(StatusCodes.Status502BadGateway, new
+            {
+                Code = StatusCodes.Status502BadGateway,
+                Message = "Failed to fetch realtime info from external AMR system."
+            });
+        }
+
+        _logger.LogInformation(
+            "Retrieved realtime info - Robots: {RobotCount}, Containers: {ContainerCount}, Errors: {ErrorCount}",
+            result.RobotRealtimeList.Count,
+            result.ContainerRealtimeList.Count,
+            result.ErrorRobotList.Count);
+
+        return Ok(result);
     }
 
     private static DateTime? ParseDateTime(string? value)

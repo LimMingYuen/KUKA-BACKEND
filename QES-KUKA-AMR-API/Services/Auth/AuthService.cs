@@ -8,23 +8,30 @@ using QES_KUKA_AMR_API.Data.Entities;
 using QES_KUKA_AMR_API.Models.Auth;
 using QES_KUKA_AMR_API.Options;
 using QES_KUKA_AMR_API.Services.Users;
+using QES_KUKA_AMR_API.Services.Permissions;
 
 namespace QES_KUKA_AMR_API.Services.Auth;
 
 public class AuthService : IAuthService
 {
     private readonly IUserService _userService;
+    private readonly IPermissionCheckService _permissionCheckService;
+    private readonly ITemplatePermissionCheckService _templatePermissionCheckService;
     private readonly JwtOptions _jwtOptions;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<AuthService> _logger;
 
     public AuthService(
         IUserService userService,
+        IPermissionCheckService permissionCheckService,
+        ITemplatePermissionCheckService templatePermissionCheckService,
         IOptions<JwtOptions> jwtOptions,
         TimeProvider timeProvider,
         ILogger<AuthService> logger)
     {
         _userService = userService;
+        _permissionCheckService = permissionCheckService;
+        _templatePermissionCheckService = templatePermissionCheckService;
         _jwtOptions = jwtOptions.Value;
         _timeProvider = timeProvider;
         _logger = logger;
@@ -52,6 +59,12 @@ public class AuthService : IAuthService
         var token = GenerateJwtToken(user);
         var expiresAt = _timeProvider.GetUtcNow().AddHours(_jwtOptions.ExpirationHours);
 
+        // Get allowed pages for the user
+        var allowedPages = await _permissionCheckService.GetUserAllowedPagePathsAsync(user.Id, cancellationToken);
+
+        // Get allowed templates for the user
+        var allowedTemplates = await _templatePermissionCheckService.GetUserAllowedTemplateIdsAsync(user.Id, cancellationToken);
+
         _logger.LogInformation("User '{Username}' logged in successfully", user.Username);
 
         return new InternalLoginResponse
@@ -64,7 +77,9 @@ public class AuthService : IAuthService
                 Username = user.Username,
                 Nickname = user.Nickname,
                 IsSuperAdmin = user.IsSuperAdmin,
-                Roles = user.Roles
+                Roles = user.Roles,
+                AllowedPages = allowedPages,
+                AllowedTemplates = allowedTemplates
             }
         };
     }
@@ -93,6 +108,12 @@ public class AuthService : IAuthService
             var token = GenerateJwtToken(createdUser);
             var expiresAt = _timeProvider.GetUtcNow().AddHours(_jwtOptions.ExpirationHours);
 
+            // Get allowed pages for the user
+            var allowedPages = await _permissionCheckService.GetUserAllowedPagePathsAsync(createdUser.Id, cancellationToken);
+
+            // Get allowed templates for the user
+            var allowedTemplates = await _templatePermissionCheckService.GetUserAllowedTemplateIdsAsync(createdUser.Id, cancellationToken);
+
             _logger.LogInformation("User '{Username}' registered successfully", createdUser.Username);
 
             return new InternalLoginResponse
@@ -105,7 +126,9 @@ public class AuthService : IAuthService
                     Username = createdUser.Username,
                     Nickname = createdUser.Nickname,
                     IsSuperAdmin = createdUser.IsSuperAdmin,
-                    Roles = createdUser.Roles
+                    Roles = createdUser.Roles,
+                    AllowedPages = allowedPages,
+                    AllowedTemplates = allowedTemplates
                 }
             };
         }

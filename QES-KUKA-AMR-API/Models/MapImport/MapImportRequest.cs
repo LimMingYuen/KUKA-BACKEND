@@ -40,5 +40,8 @@ public class MapImportStats
     public int NodesUpdated { get; set; }
     public int NodesSkipped { get; set; }
     public int NodesFailed { get; set; }
+    public int TotalEdgesInFile { get; set; }
+    public int EdgesImported { get; set; }
+    public int FloorsImported { get; set; }
     public DateTime ImportedAt { get; set; }
 }

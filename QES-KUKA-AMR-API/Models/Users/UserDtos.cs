@@ -24,7 +24,6 @@ public class UserCreateRequest
     public string Username { get; set; } = string.Empty;
 
     [Required]
-    [MinLength(6)]
     public string Password { get; set; } = string.Empty;
 
     [MaxLength(100)]
@@ -50,7 +49,6 @@ public class UserUpdateRequest
     /// <summary>
     /// Optional password - only set this if you want to change the user's password
     /// </summary>
-    [MinLength(6)]
     public string? Password { get; set; }
 
     [MaxLength(100)]

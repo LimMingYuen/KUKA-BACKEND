@@ -14,4 +14,6 @@ public class UserInfo
     public string? Nickname { get; set; }
     public bool IsSuperAdmin { get; set; }
     public List<string> Roles { get; set; } = new();
+    public List<string> AllowedPages { get; set; } = new();
+    public List<int> AllowedTemplates { get; set; } = new();
 }

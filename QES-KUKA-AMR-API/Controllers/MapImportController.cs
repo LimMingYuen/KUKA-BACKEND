@@ -68,6 +68,55 @@ public class MapImportController : ControllerBase
     }
 
     /// <summary>
+    /// Upload and import map JSON file (with automatic overwrite of existing data)
+    /// </summary>
+    /// <param name="file">The map JSON file to upload</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Import result with statistics</returns>
+    [HttpPost("upload")]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(50 * 1024 * 1024)] // 50MB max
+    public async Task<ActionResult<MapImportResponse>> UploadMapFile(
+        IFormFile file,
+        CancellationToken cancellationToken)
+    {
+        if (file == null || file.Length == 0)
+        {
+            return BadRequest(new MapImportResponse
+            {
+                Success = false,
+                Message = "No file uploaded",
+                Errors = new List<string> { "Please select a JSON file to upload" }
+            });
+        }
+
+        if (!file.FileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+        {
+            return BadRequest(new MapImportResponse
+            {
+                Success = false,
+                Message = "Invalid file type",
+                Errors = new List<string> { "Only JSON files are accepted" }
+            });
+        }
+
+        _logger.LogInformation("Starting map upload import: {FileName}, Size={Size} bytes",
+            file.FileName, file.Length);
+
+        using var stream = file.OpenReadStream();
+        var result = await _mapImportService.ImportFromUploadAsync(stream, file.FileName, cancellationToken);
+
+        if (result.Success)
+        {
+            return Ok(result);
+        }
+        else
+        {
+            return BadRequest(result);
+        }
+    }
+
+    /// <summary>
     /// Parse and preview map JSON file without importing to database
     /// </summary>
     /// <param name="filePath">Full path to the map JSON file</param>

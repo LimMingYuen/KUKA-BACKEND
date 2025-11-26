@@ -109,7 +109,7 @@ app.Use(async (context, next) =>
     Console.WriteLine($"[{DateTime.UtcNow:HH:mm:ss}] Response Status: {context.Response.StatusCode}");
     if (context.Response.StatusCode == 401)
     {
-        Console.WriteLine($"[{DateTime.UtcNow:HH:mm:ss}] ⚠️ 401 UNAUTHORIZED - User.Identity.IsAuthenticated: {context.User?.Identity?.IsAuthenticated}");
+        Console.WriteLine($"[{DateTime.UtcNow:HH:mm:ss}] 401 UNAUTHORIZED - User.Identity.IsAuthenticated: {context.User?.Identity?.IsAuthenticated}");
     }
 });
 
