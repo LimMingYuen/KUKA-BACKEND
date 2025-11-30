@@ -8,4 +8,6 @@ public class MapZoneSummaryDto
     public string Layout { get; set; } = string.Empty;
     public string AreaPurpose { get; set; } = string.Empty;
     public string StatusText { get; set; } = string.Empty;
+    public DateTime CreateTime { get; set; }
+    public DateTime LastUpdateTime { get; set; }
 }

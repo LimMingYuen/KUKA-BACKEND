@@ -257,7 +257,9 @@ public class MapZonesController : ControllerBase
             ZoneCode = m.ZoneCode,
             Layout = $"{m.MapCode}/{m.FloorNumber}",
             AreaPurpose = GetAreaPurpose(m.ZoneType),
-            StatusText = m.Status == 1 ? "Enabled" : "Disabled"
+            StatusText = m.Status == 1 ? "Enabled" : "Disabled",
+            CreateTime = m.CreateTime,
+            LastUpdateTime = m.LastUpdateTime
         }).ToList();
 
         _logger.LogInformation("Retrieved {Count} map zones", result.Count);

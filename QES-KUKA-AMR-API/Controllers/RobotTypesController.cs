@@ -147,6 +147,20 @@ public class RobotTypesController : ControllerBase
         });
     }
 
+    [HttpPatch("{id:int}/toggle-status")]
+    [ProducesResponseType(typeof(ApiResponse<RobotTypeDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ApiResponse<RobotTypeDto>>> ToggleRobotTypeStatusAsync(int id, CancellationToken cancellationToken)
+    {
+        var toggled = await _robotTypeService.ToggleStatusAsync(id, cancellationToken);
+        if (toggled is null)
+        {
+            return NotFound(NotFoundProblem(id));
+        }
+
+        return Ok(Success(MapToDto(toggled)));
+    }
+
     private static RobotTypeDto MapToDto(RobotType robotType) => new()
     {
         Id = robotType.Id,

@@ -11,6 +11,7 @@ public interface IRobotTypeService
     Task<RobotType> CreateAsync(RobotType robotType, CancellationToken cancellationToken = default);
     Task<RobotType?> UpdateAsync(int id, RobotType robotType, CancellationToken cancellationToken = default);
     Task<bool> DeleteAsync(int id, CancellationToken cancellationToken = default);
+    Task<RobotType?> ToggleStatusAsync(int id, CancellationToken cancellationToken = default);
 }
 
 public class RobotTypeService : IRobotTypeService
@@ -106,6 +107,23 @@ public class RobotTypeService : IRobotTypeService
         _dbContext.RobotTypes.Remove(entity);
         await _dbContext.SaveChangesAsync(cancellationToken);
         return true;
+    }
+
+    public async Task<RobotType?> ToggleStatusAsync(int id, CancellationToken cancellationToken = default)
+    {
+        var entity = await _dbContext.RobotTypes
+            .FirstOrDefaultAsync(rt => rt.Id == id, cancellationToken);
+
+        if (entity is null)
+        {
+            return null;
+        }
+
+        entity.IsActive = !entity.IsActive;
+        entity.UpdatedUtc = DateTime.UtcNow;
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return entity;
     }
 
     private static RobotType NormalizeRobotType(RobotType source)
