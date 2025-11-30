@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Mvc;
 using QES_KUKA_AMR_API_Simulator.Models;
 using QES_KUKA_AMR_API_Simulator.Models.MobileRobot;
+using QES_KUKA_AMR_API_Simulator.Services;
 
 namespace QES_KUKA_AMR_API_Simulator.Controllers.Data;
 
@@ -10,6 +11,13 @@ namespace QES_KUKA_AMR_API_Simulator.Controllers.Data;
 [Route("api/v1/data/mobile-robot")]
 public class MobileRobotController : ControllerBase
 {
+    private readonly RobotSimulationService _simulationService;
+
+    public MobileRobotController(RobotSimulationService simulationService)
+    {
+        _simulationService = simulationService;
+    }
+
     private static readonly IReadOnlyList<RobotRealtimeDto> RobotRealtimeList = new[]
     {
         new RobotRealtimeDto
@@ -355,22 +363,20 @@ public class MobileRobotController : ControllerBase
         [FromQuery] bool isFirst = false,
         [FromQuery] string? mapCode = null)
     {
-        // Filter robots by mapCode and floorNumber if provided
-        var filteredRobots = RobotRealtimeList.AsEnumerable();
+        // Get dynamic robot positions from simulation service
+        var dynamicRobots = _simulationService.GetRobotRealtimeList(mapCode, floorNumber);
+
+        // Filter containers by mapCode and floorNumber if provided
         var filteredContainers = ContainerRealtimeList.AsEnumerable();
 
         if (!string.IsNullOrEmpty(mapCode))
         {
-            filteredRobots = filteredRobots.Where(r =>
-                string.Equals(r.MapCode, mapCode, StringComparison.OrdinalIgnoreCase));
             filteredContainers = filteredContainers.Where(c =>
                 string.Equals(c.MapCode, mapCode, StringComparison.OrdinalIgnoreCase));
         }
 
         if (!string.IsNullOrEmpty(floorNumber))
         {
-            filteredRobots = filteredRobots.Where(r =>
-                string.Equals(r.FloorNumber, floorNumber, StringComparison.OrdinalIgnoreCase));
             filteredContainers = filteredContainers.Where(c =>
                 string.Equals(c.FloorNumber, floorNumber, StringComparison.OrdinalIgnoreCase));
         }
@@ -382,7 +388,7 @@ public class MobileRobotController : ControllerBase
             Message = null,
             Data = new RealtimeInfoData
             {
-                RobotRealtimeList = filteredRobots.ToList(),
+                RobotRealtimeList = dynamicRobots,
                 ContainerRealtimeList = filteredContainers.ToList(),
                 ErrorRobotList = new List<RobotRealtimeDto>()
             }

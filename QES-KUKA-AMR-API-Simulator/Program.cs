@@ -4,6 +4,7 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using QES_KUKA_AMR_API_Simulator.Auth;
 using QES_KUKA_AMR_API_Simulator.Repositories;
+using QES_KUKA_AMR_API_Simulator.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -47,6 +48,9 @@ builder.Services.AddSingleton<SimulatorJwtOptions>();
 
 // Register RefreshToken repository as singleton (in-memory storage)
 builder.Services.AddSingleton<IRefreshTokenRepository, RefreshTokenRepository>();
+
+// Register RobotSimulationService as singleton (tracks robot positions)
+builder.Services.AddSingleton<RobotSimulationService>();
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>

@@ -21,7 +21,6 @@ using QES_KUKA_AMR_API.Services.SavedCustomMissions;
 using QES_KUKA_AMR_API.Services.ShelfDecisionRules;
 using QES_KUKA_AMR_API.Services.Users;
 using QES_KUKA_AMR_API.Services.WorkflowNodeCodes;
-using QES_KUKA_AMR_API.Services.MapImport;
 using QES_KUKA_AMR_API.Services.Pages;
 using QES_KUKA_AMR_API.Services.RolePermissions;
 using QES_KUKA_AMR_API.Services.UserPermissions;
@@ -32,7 +31,6 @@ using QES_KUKA_AMR_API.Services.Queue;
 using QES_KUKA_AMR_API.Services.Sync;
 using QES_KUKA_AMR_API.Services.Schedule;
 using QES_KUKA_AMR_API.Services.RobotRealtime;
-using QES_KUKA_AMR_API.Services.MapData;
 using QES_KUKA_AMR_API.Hubs;
 using log4net;
 
@@ -175,7 +173,6 @@ builder.Services.AddScoped<IRoleTemplatePermissionService, RoleTemplatePermissio
 builder.Services.AddScoped<IUserTemplatePermissionService, UserTemplatePermissionService>();
 builder.Services.AddScoped<IRobotAnalyticsService, RobotAnalyticsService>();
 builder.Services.AddScoped<IWorkflowNodeCodeService, WorkflowNodeCodeService>();
-builder.Services.AddScoped<IMapImportService, MapImportService>();
 
 // Authentication Services
 builder.Services.AddScoped<IAuthService, AuthService>();
@@ -217,11 +214,6 @@ builder.Services.AddHostedService<QueueProcessorService>();
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<IQueueNotificationService, QueueNotificationService>();
 
-// Map Data Services for warehouse live map
-builder.Services.AddSingleton<IMapDataCacheService, MapDataCacheService>();
-builder.Services.AddSingleton<IMapNotificationService, MapNotificationService>();
-builder.Services.AddHostedService<MapRealtimePollingService>();
-
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -241,7 +233,6 @@ app.MapControllers();
 
 // Map SignalR hubs for real-time updates
 app.MapHub<QueueHub>("/hubs/queue");
-app.MapHub<MapHub>("/hubs/map");
 
 // Seed database with default admin user
 using (var scope = app.Services.CreateScope())

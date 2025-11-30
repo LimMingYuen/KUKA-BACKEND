@@ -60,10 +60,6 @@ public class ApplicationDbContext : DbContext
 
     public DbSet<WorkflowSchedule> WorkflowSchedules => Set<WorkflowSchedule>();
 
-    public DbSet<MapEdge> MapEdges => Set<MapEdge>();
-
-    public DbSet<FloorMap> FloorMaps => Set<FloorMap>();
-
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -334,24 +330,5 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.UpdatedUtc).HasColumnType("datetime2");
         });
 
-        modelBuilder.Entity<MapEdge>(entity =>
-        {
-            entity.ToTable("MapEdges");
-            entity.Property(e => e.CreateTime).HasColumnType("datetime2");
-            entity.Property(e => e.LastUpdateTime).HasColumnType("datetime2");
-            // Index for floor queries
-            entity.HasIndex(e => new { e.MapCode, e.FloorNumber });
-            // Unique edge: begin + end + mapCode
-            entity.HasIndex(e => new { e.BeginNodeLabel, e.EndNodeLabel, e.MapCode }).IsUnique();
-        });
-
-        modelBuilder.Entity<FloorMap>(entity =>
-        {
-            entity.ToTable("FloorMaps");
-            entity.Property(e => e.CreateTime).HasColumnType("datetime2");
-            entity.Property(e => e.LastUpdateTime).HasColumnType("datetime2");
-            // Unique floor per map
-            entity.HasIndex(e => new { e.MapCode, e.FloorNumber }).IsUnique();
-        });
     }
 }

@@ -6,6 +6,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using QES_KUKA_AMR_API_Simulator.Models.Missions;
 using QES_KUKA_AMR_API_Simulator.Models.Jobs;
+using QES_KUKA_AMR_API_Simulator.Services;
 
 namespace QES_KUKA_AMR_API_Simulator.Controllers.Interfaces;
 
@@ -20,11 +21,13 @@ public class AmrController : ControllerBase
 
     private readonly ILogger<AmrController> _logger;
     private readonly IConfiguration _configuration;
+    private readonly RobotSimulationService _simulationService;
 
-    public AmrController(ILogger<AmrController> logger, IConfiguration configuration)
+    public AmrController(ILogger<AmrController> logger, IConfiguration configuration, RobotSimulationService simulationService)
     {
         _logger = logger;
         _configuration = configuration;
+        _simulationService = simulationService;
     }
 
     [HttpPost("submitMission")]
@@ -137,6 +140,9 @@ public class AmrController : ControllerBase
                 IsWaitingForManualResume = false
             };
             ActiveJobs[request.MissionCode] = simulatedJob;
+
+            // Start robot simulation for live position tracking
+            _simulationService.StartJob(simulatedJob.RobotId, request.MissionCode, missionSteps);
         }
 
         _logger.LogInformation("Mission submitted successfully: {MissionCode} (RequestId: {RequestId})", request.MissionCode, request.RequestId);
@@ -198,6 +204,9 @@ public class AmrController : ControllerBase
                 job.IsCancelled = true;
                 job.CancelledAt ??= DateTime.UtcNow;
                 _logger.LogInformation("Job marked as cancelled: {MissionCode}", request.MissionCode);
+
+                // End robot simulation (cancelled)
+                _simulationService.EndJob(job.RobotId, cancelled: true);
             }
         }
 
@@ -703,6 +712,9 @@ public class AmrController : ControllerBase
         {
             job.IsCompleted = true;
             job.CompletedAt = now;
+
+            // End robot simulation (completed)
+            _simulationService.EndJob(job.RobotId, cancelled: false);
         }
 
         return 30; // Complete
