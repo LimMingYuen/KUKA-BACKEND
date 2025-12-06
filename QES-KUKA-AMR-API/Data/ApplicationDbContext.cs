@@ -60,6 +60,10 @@ public class ApplicationDbContext : DbContext
 
     public DbSet<WorkflowSchedule> WorkflowSchedules => Set<WorkflowSchedule>();
 
+    public DbSet<RobotMonitoringMap> RobotMonitoringMaps => Set<RobotMonitoringMap>();
+
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -108,6 +112,8 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.SendConfigTime).HasColumnType("datetime2");
             entity.Property(e => e.SendFirmwareTime).HasColumnType("datetime2");
             entity.Property(e => e.RobotId).HasMaxLength(100);
+            // Unique index on RobotId to prevent duplicate robots
+            entity.HasIndex(e => e.RobotId).IsUnique();
         });
 
         modelBuilder.Entity<QrCode>(entity =>
@@ -328,6 +334,45 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.LastRunUtc).HasColumnType("datetime2");
             entity.Property(e => e.CreatedUtc).HasColumnType("datetime2");
             entity.Property(e => e.UpdatedUtc).HasColumnType("datetime2");
+        });
+
+        modelBuilder.Entity<RobotMonitoringMap>(entity =>
+        {
+            entity.ToTable("RobotMonitoringMaps");
+            // Index on Name for querying
+            entity.HasIndex(e => e.Name);
+            // Index on MapCode for filtering
+            entity.HasIndex(e => e.MapCode);
+            // Index on CreatedBy for user-specific queries
+            entity.HasIndex(e => e.CreatedBy);
+            // Index on IsDefault for finding default map
+            entity.HasIndex(e => e.IsDefault);
+            // DateTime columns
+            entity.Property(e => e.CreatedUtc).HasColumnType("datetime2");
+            entity.Property(e => e.LastUpdatedUtc).HasColumnType("datetime2");
+            // JSON columns
+            entity.Property(e => e.CoordinateSettingsJson).HasColumnType("nvarchar(max)");
+            entity.Property(e => e.DisplaySettingsJson).HasColumnType("nvarchar(max)");
+        });
+
+        modelBuilder.Entity<RefreshToken>(entity =>
+        {
+            entity.ToTable("RefreshTokens");
+            // Index on Token for fast lookup during refresh
+            entity.HasIndex(e => e.Token);
+            // Index on UserId for querying user's tokens
+            entity.HasIndex(e => e.UserId);
+            // Composite index for cleanup queries (find expired/revoked tokens)
+            entity.HasIndex(e => new { e.UserId, e.ExpiresUtc });
+            // DateTime columns
+            entity.Property(e => e.CreatedUtc).HasColumnType("datetime2");
+            entity.Property(e => e.ExpiresUtc).HasColumnType("datetime2");
+            entity.Property(e => e.RevokedUtc).HasColumnType("datetime2");
+            // Foreign key relationship
+            entity.HasOne(e => e.User)
+                .WithMany()
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
     }

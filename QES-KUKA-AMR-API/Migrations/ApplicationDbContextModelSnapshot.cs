@@ -454,6 +454,9 @@ namespace QES_KUKA_AMR_API.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
+                    b.Property<bool>("IsLicensed")
+                        .HasColumnType("bit");
+
                     b.Property<bool>("LastNodeDeleteFlag")
                         .HasColumnType("bit");
 
@@ -472,6 +475,10 @@ namespace QES_KUKA_AMR_API.Migrations
 
                     b.Property<DateTime>("LastUpdateTime")
                         .HasColumnType("datetime2");
+
+                    b.Property<string>("LicenseError")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
 
                     b.Property<string>("MapCode")
                         .IsRequired()
@@ -556,6 +563,9 @@ namespace QES_KUKA_AMR_API.Migrations
                         .HasColumnType("float");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("RobotId")
+                        .IsUnique();
 
                     b.ToTable("MobileRobots");
                 });
@@ -699,6 +709,50 @@ namespace QES_KUKA_AMR_API.Migrations
                     b.ToTable("QrCodes");
                 });
 
+            modelBuilder.Entity("QES_KUKA_AMR_API.Data.Entities.RefreshToken", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("ExpiresUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ReplacedByToken")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<string>("RevokedReason")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime?>("RevokedUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Token")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Token");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("UserId", "ExpiresUtc");
+
+                    b.ToTable("RefreshTokens", (string)null);
+                });
+
             modelBuilder.Entity("QES_KUKA_AMR_API.Data.Entities.ResumeStrategy", b =>
                 {
                     b.Property<int>("Id")
@@ -783,6 +837,94 @@ namespace QES_KUKA_AMR_API.Migrations
                     b.HasIndex("RobotId", "PauseStartUtc");
 
                     b.ToTable("RobotManualPauses");
+                });
+
+            modelBuilder.Entity("QES_KUKA_AMR_API.Data.Entities.RobotMonitoringMap", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("BackgroundImageOriginalName")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<string>("BackgroundImagePath")
+                        .HasMaxLength(512)
+                        .HasColumnType("nvarchar(512)");
+
+                    b.Property<string>("CoordinateSettingsJson")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime>("CreatedUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CustomLinesJson")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("CustomNodesJson")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("CustomZonesJson")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("DisplaySettingsJson")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("FloorNumber")
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
+                    b.Property<int?>("ImageHeight")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("ImageWidth")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsDefault")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("LastUpdatedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime?>("LastUpdatedUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("MapCode")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<int>("RefreshIntervalMs")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedBy");
+
+                    b.HasIndex("IsDefault");
+
+                    b.HasIndex("MapCode");
+
+                    b.HasIndex("Name");
+
+                    b.ToTable("RobotMonitoringMaps", (string)null);
                 });
 
             modelBuilder.Entity("QES_KUKA_AMR_API.Data.Entities.RobotType", b =>
@@ -954,6 +1096,9 @@ namespace QES_KUKA_AMR_API.Migrations
                     b.Property<string>("IdleNode")
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
@@ -1467,6 +1612,17 @@ namespace QES_KUKA_AMR_API.Migrations
                     b.HasIndex("ZoneCode");
 
                     b.ToTable("WorkflowZoneMappings");
+                });
+
+            modelBuilder.Entity("QES_KUKA_AMR_API.Data.Entities.RefreshToken", b =>
+                {
+                    b.HasOne("QES_KUKA_AMR_API.Data.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("QES_KUKA_AMR_API.Data.Entities.RolePermission", b =>

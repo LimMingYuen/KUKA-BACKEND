@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using QES_KUKA_AMR_API.Data;
@@ -6,6 +7,7 @@ using QES_KUKA_AMR_API.Data.Entities;
 namespace QES_KUKA_AMR_API.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/mission-history")]
 public class MissionHistoryController : ControllerBase
 {

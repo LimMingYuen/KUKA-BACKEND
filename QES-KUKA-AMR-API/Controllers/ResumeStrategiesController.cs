@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using QES_KUKA_AMR_API.Data.Entities;
 using QES_KUKA_AMR_API.Models;
@@ -7,6 +8,7 @@ using QES_KUKA_AMR_API.Services.ResumeStrategies;
 namespace QES_KUKA_AMR_API.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/v1/resume-strategies")]
 public class ResumeStrategiesController : ControllerBase
 {

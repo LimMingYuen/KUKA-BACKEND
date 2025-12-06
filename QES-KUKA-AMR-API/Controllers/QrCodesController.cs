@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -8,12 +9,14 @@ using QES_KUKA_AMR_API.Data;
 using QES_KUKA_AMR_API.Data.Entities;
 using QES_KUKA_AMR_API.Models.Config;
 using QES_KUKA_AMR_API.Models.QrCode;
+using QES_KUKA_AMR_API.Models.RobotMonitoring;
 using QES_KUKA_AMR_API.Options;
 using QES_KUKA_AMR_API.Services.Auth;
 
 namespace QES_KUKA_AMR_API.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/[controller]")]
 public class QrCodesController : ControllerBase
 {
@@ -331,6 +334,51 @@ public class QrCodesController : ControllerBase
         _logger.LogInformation("Retrieved {Count} QR codes with UUID", qrCodes.Count);
 
         return Ok(qrCodes);
+    }
+
+    /// <summary>
+    /// Get map nodes (QR codes with NodeUuid) filtered by mapCode and floorNumber
+    /// </summary>
+    [HttpGet("map-nodes")]
+    public async Task<ActionResult<IEnumerable<MapNodeDto>>> GetMapNodesAsync(
+        [FromQuery] string? mapCode,
+        [FromQuery] string? floorNumber,
+        CancellationToken cancellationToken)
+    {
+        var query = _dbContext.QrCodes
+            .AsNoTracking()
+            .Where(q => q.NodeUuid != null && q.NodeUuid != "");
+
+        if (!string.IsNullOrEmpty(mapCode))
+        {
+            query = query.Where(q => q.MapCode == mapCode);
+        }
+
+        if (!string.IsNullOrEmpty(floorNumber))
+        {
+            query = query.Where(q => q.FloorNumber == floorNumber);
+        }
+
+        var nodes = await query
+            .OrderBy(q => q.NodeNumber)
+            .Select(q => new MapNodeDto
+            {
+                Id = q.Id,
+                NodeLabel = q.NodeLabel,
+                NodeUuid = q.NodeUuid!,
+                NodeNumber = q.NodeNumber,
+                X = q.XCoordinate ?? 0,
+                Y = q.YCoordinate ?? 0,
+                NodeType = q.NodeType,
+                MapCode = q.MapCode,
+                FloorNumber = q.FloorNumber
+            })
+            .ToListAsync(cancellationToken);
+
+        _logger.LogInformation("Retrieved {Count} map nodes for mapCode={MapCode}, floorNumber={FloorNumber}",
+            nodes.Count, mapCode ?? "all", floorNumber ?? "all");
+
+        return Ok(nodes);
     }
 
     /// <summary>

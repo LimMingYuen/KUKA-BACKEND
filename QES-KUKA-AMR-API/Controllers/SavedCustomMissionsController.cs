@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using QES_KUKA_AMR_API.Data.Entities;
 using QES_KUKA_AMR_API.Models;
@@ -7,6 +8,7 @@ using QES_KUKA_AMR_API.Services.SavedCustomMissions;
 namespace QES_KUKA_AMR_API.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/saved-custom-missions")]
 public class SavedCustomMissionsController : ControllerBase
 {
@@ -24,9 +26,17 @@ public class SavedCustomMissionsController : ControllerBase
     [HttpGet]
     [ProducesResponseType(typeof(ApiResponse<List<SavedCustomMissionDto>>), StatusCodes.Status200OK)]
     public async Task<ActionResult<ApiResponse<List<SavedCustomMissionDto>>>> GetAllAsync(
-        CancellationToken cancellationToken)
+        [FromQuery] bool includeInactive = false,
+        CancellationToken cancellationToken = default)
     {
-        var missions = await _savedCustomMissionService.GetAllAsync(cancellationToken);
+        // Check if user is SuperAdmin from JWT claims
+        var isSuperAdminClaim = User.FindFirst("isSuperAdmin")?.Value;
+        var isSuperAdmin = bool.TryParse(isSuperAdminClaim, out var result) && result;
+
+        // Only SuperAdmin can see inactive templates
+        var shouldIncludeInactive = includeInactive && isSuperAdmin;
+
+        var missions = await _savedCustomMissionService.GetAllAsync(shouldIncludeInactive, cancellationToken);
         var dtos = missions.Select(MapToDto).ToList();
 
         return Ok(Success(dtos));
@@ -153,7 +163,8 @@ public class SavedCustomMissionsController : ControllerBase
                 LockRobotAfterFinish = request.LockRobotAfterFinish,
                 UnlockRobotId = request.UnlockRobotId,
                 UnlockMissionCode = request.UnlockMissionCode,
-                MissionStepsJson = request.MissionStepsJson
+                MissionStepsJson = request.MissionStepsJson,
+                IsActive = request.IsActive
             }, cancellationToken);
 
             if (updated is null)
@@ -206,6 +217,38 @@ public class SavedCustomMissionsController : ControllerBase
             Msg = "Saved custom mission deleted.",
             Data = null
         });
+    }
+
+    [HttpPatch("{id:int}/toggle-status")]
+    [ProducesResponseType(typeof(ApiResponse<SavedCustomMissionDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<ApiResponse<SavedCustomMissionDto>>> ToggleStatusAsync(
+        int id,
+        CancellationToken cancellationToken)
+    {
+        // Check if user is SuperAdmin
+        var isSuperAdminClaim = User.FindFirst("isSuperAdmin")?.Value;
+        var isSuperAdmin = bool.TryParse(isSuperAdminClaim, out var result) && result;
+
+        if (!isSuperAdmin)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
+            {
+                Title = "Forbidden",
+                Detail = "Only SuperAdmin users can toggle workflow template status.",
+                Status = StatusCodes.Status403Forbidden,
+                Type = "https://httpstatuses.com/403"
+            });
+        }
+
+        var toggled = await _savedCustomMissionService.ToggleStatusAsync(id, cancellationToken);
+        if (toggled is null)
+        {
+            return NotFound(NotFoundProblem(id));
+        }
+
+        return Ok(Success(MapToDto(toggled)));
     }
 
     [HttpPost("{id:int}/trigger")]
@@ -309,6 +352,7 @@ public class SavedCustomMissionsController : ControllerBase
             CreatedBy = mission.CreatedBy,
             CreatedUtc = mission.CreatedUtc,
             UpdatedUtc = mission.UpdatedUtc,
+            IsActive = mission.IsActive,
             ScheduleSummary = new SavedMissionScheduleSummaryDto
             {
                 TotalSchedules = 0,

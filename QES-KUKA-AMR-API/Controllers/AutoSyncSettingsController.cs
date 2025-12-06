@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using QES_KUKA_AMR_API.Data;
@@ -11,6 +12,7 @@ namespace QES_KUKA_AMR_API.Controllers;
 /// Controller for managing auto-sync settings
 /// </summary>
 [ApiController]
+[Authorize]
 [Route("api/v1/auto-sync-settings")]
 public class AutoSyncSettingsController : ControllerBase
 {

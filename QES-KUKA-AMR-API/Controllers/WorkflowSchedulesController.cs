@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using QES_KUKA_AMR_API.Models.Schedule;
 using QES_KUKA_AMR_API.Services.Schedule;
@@ -8,6 +9,7 @@ namespace QES_KUKA_AMR_API.Controllers;
 /// Controller for managing workflow schedules
 /// </summary>
 [ApiController]
+[Authorize]
 [Route("api/v1/workflow-schedules")]
 public class WorkflowSchedulesController : ControllerBase
 {

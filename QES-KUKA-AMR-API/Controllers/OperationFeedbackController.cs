@@ -1,5 +1,6 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
@@ -9,6 +10,7 @@ using QES_KUKA_AMR_API.Options;
 namespace QES_KUKA_AMR_API.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/operation-feedback")]
 public class OperationFeedbackController : ControllerBase
 {

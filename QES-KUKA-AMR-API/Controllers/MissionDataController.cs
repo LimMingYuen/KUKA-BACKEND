@@ -1,5 +1,6 @@
 using System.Net.Http.Headers;
 using System.Text.Json;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using QES_KUKA_AMR_API.Models.Missions;
@@ -9,6 +10,7 @@ using QES_KUKA_AMR_API.Services.Auth;
 namespace QES_KUKA_AMR_API.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/[controller]")]
 public class MissionDataController : ControllerBase
 {

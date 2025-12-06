@@ -12,12 +12,13 @@ namespace QES_KUKA_AMR_API.Services.SavedCustomMissions;
 
 public interface ISavedCustomMissionService
 {
-    Task<List<SavedCustomMission>> GetAllAsync(CancellationToken cancellationToken = default);
+    Task<List<SavedCustomMission>> GetAllAsync(bool includeInactive = false, CancellationToken cancellationToken = default);
     Task<SavedCustomMission?> GetByIdAsync(int id, CancellationToken cancellationToken = default);
     Task<SavedCustomMission> CreateAsync(SavedCustomMission mission, string createdBy, CancellationToken cancellationToken = default);
     Task<SavedCustomMission?> UpdateAsync(int id, SavedCustomMission mission, CancellationToken cancellationToken = default);
     Task<bool> DeleteAsync(int id, CancellationToken cancellationToken = default);
     Task<TriggerResult> TriggerAsync(int id, string triggeredBy, CancellationToken cancellationToken = default);
+    Task<SavedCustomMission?> ToggleStatusAsync(int id, CancellationToken cancellationToken = default);
 }
 
 public class SavedCustomMissionService : ISavedCustomMissionService
@@ -39,10 +40,16 @@ public class SavedCustomMissionService : ISavedCustomMissionService
         _logger = logger;
     }
 
-    public async Task<List<SavedCustomMission>> GetAllAsync(CancellationToken cancellationToken = default)
+    public async Task<List<SavedCustomMission>> GetAllAsync(bool includeInactive = false, CancellationToken cancellationToken = default)
     {
-        return await _dbContext.SavedCustomMissions
-            .AsNoTracking()
+        var query = _dbContext.SavedCustomMissions.AsNoTracking();
+
+        if (!includeInactive)
+        {
+            query = query.Where(m => m.IsActive);
+        }
+
+        return await query
             .OrderByDescending(m => m.CreatedUtc)
             .ToListAsync(cancellationToken);
     }
@@ -81,6 +88,7 @@ public class SavedCustomMissionService : ISavedCustomMissionService
         mission.CreatedBy = createdBy;
         mission.CreatedUtc = DateTime.UtcNow;
         mission.UpdatedUtc = mission.CreatedUtc;
+        mission.IsActive = true;  // Always create as active
         mission.IsDeleted = false;
 
         _dbContext.SavedCustomMissions.Add(mission);
@@ -138,6 +146,7 @@ public class SavedCustomMissionService : ISavedCustomMissionService
         existing.UnlockRobotId = mission.UnlockRobotId;
         existing.UnlockMissionCode = mission.UnlockMissionCode;
         existing.MissionStepsJson = mission.MissionStepsJson;
+        existing.IsActive = mission.IsActive;
         existing.UpdatedUtc = DateTime.UtcNow;
 
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -165,6 +174,27 @@ public class SavedCustomMissionService : ISavedCustomMissionService
         _logger.LogInformation("Saved custom mission {Id} ('{MissionName}') soft deleted", id, entity.MissionName);
 
         return true;
+    }
+
+    public async Task<SavedCustomMission?> ToggleStatusAsync(int id, CancellationToken cancellationToken = default)
+    {
+        var entity = await _dbContext.SavedCustomMissions
+            .FirstOrDefaultAsync(m => m.Id == id, cancellationToken);
+
+        if (entity is null)
+        {
+            return null;
+        }
+
+        entity.IsActive = !entity.IsActive;
+        entity.UpdatedUtc = DateTime.UtcNow;
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation("Saved custom mission {Id} ('{MissionName}') status toggled to {IsActive}",
+            id, entity.MissionName, entity.IsActive);
+
+        return entity;
     }
 
     /// <summary>

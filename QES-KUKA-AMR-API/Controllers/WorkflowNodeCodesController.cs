@@ -1,9 +1,11 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using QES_KUKA_AMR_API.Services.WorkflowNodeCodes;
 
 namespace QES_KUKA_AMR_API.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/workflow-node-codes")]
 public class WorkflowNodeCodesController : ControllerBase
 {

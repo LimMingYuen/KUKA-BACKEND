@@ -91,6 +91,128 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
+    /// Verify admin credentials for privileged operations.
+    /// Validates that the provided credentials belong to a SuperAdmin user.
+    /// Does not issue a token - only verifies credentials.
+    /// </summary>
+    [HttpPost("verify-admin")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<VerifyAdminResponse>>> VerifyAdminAsync(
+        [FromBody] VerifyAdminRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var response = await _authService.VerifyAdminAsync(request, cancellationToken);
+
+            if (!response.IsValid)
+            {
+                return Ok(new ApiResponse<VerifyAdminResponse>
+                {
+                    Success = false,
+                    Code = "ADMIN_VERIFY_FAILED",
+                    Msg = response.Message ?? "Admin verification failed",
+                    Data = response
+                });
+            }
+
+            return Ok(new ApiResponse<VerifyAdminResponse>
+            {
+                Success = true,
+                Code = "ADMIN_VERIFY_SUCCESS",
+                Msg = "Admin verification successful",
+                Data = response
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during admin verification for user {Username}", request.Username);
+            return StatusCode(StatusCodes.Status500InternalServerError, new ApiResponse<VerifyAdminResponse>
+            {
+                Success = false,
+                Code = "ADMIN_VERIFY_ERROR",
+                Msg = "An error occurred during admin verification"
+            });
+        }
+    }
+
+    /// <summary>
+    /// Refresh the access token using a valid refresh token.
+    /// Implements token rotation - old refresh token is revoked and new one is issued.
+    /// </summary>
+    [HttpPost("refresh")]
+    [AllowAnonymous]
+    public async Task<ActionResult<ApiResponse<InternalLoginResponse>>> RefreshTokenAsync(
+        [FromBody] RefreshTokenRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var response = await _authService.RefreshTokenAsync(request.RefreshToken, cancellationToken);
+
+            return Ok(new ApiResponse<InternalLoginResponse>
+            {
+                Success = true,
+                Code = "REFRESH_SUCCESS",
+                Msg = "Token refreshed successfully",
+                Data = response
+            });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new ApiResponse<InternalLoginResponse>
+            {
+                Success = false,
+                Code = "REFRESH_FAILED",
+                Msg = ex.Message
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during token refresh");
+            return StatusCode(StatusCodes.Status500InternalServerError, new ApiResponse<InternalLoginResponse>
+            {
+                Success = false,
+                Code = "REFRESH_ERROR",
+                Msg = "An error occurred during token refresh"
+            });
+        }
+    }
+
+    /// <summary>
+    /// Logout the current user by revoking their refresh token.
+    /// </summary>
+    [HttpPost("logout")]
+    [AllowAnonymous]
+    public async Task<ActionResult<ApiResponse<object>>> LogoutAsync(
+        [FromBody] RefreshTokenRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _authService.RevokeTokenAsync(request.RefreshToken, "Logout", cancellationToken);
+
+            return Ok(new ApiResponse<object>
+            {
+                Success = true,
+                Code = "LOGOUT_SUCCESS",
+                Msg = "Logged out successfully"
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during logout");
+            // Still return success - user experience should not be affected
+            return Ok(new ApiResponse<object>
+            {
+                Success = true,
+                Code = "LOGOUT_SUCCESS",
+                Msg = "Logged out successfully"
+            });
+        }
+    }
+
+    /// <summary>
     /// Register a new user with internal credentials.
     /// </summary>
     [HttpPost("register")]

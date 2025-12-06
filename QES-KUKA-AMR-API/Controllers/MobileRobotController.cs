@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using QES_KUKA_AMR_API.Data;
@@ -8,6 +9,7 @@ using QES_KUKA_AMR_API.Models.MapZone;
 using QES_KUKA_AMR_API.Models.MobileRobot;
 using QES_KUKA_AMR_API.Options;
 using QES_KUKA_AMR_API.Services.Auth;
+using QES_KUKA_AMR_API.Services.Licensing;
 using QES_KUKA_AMR_API.Services.RobotRealtime;
 using System.Net;
 using System.Net.Http.Headers;
@@ -15,6 +17,7 @@ using System.Text.Json;
 
 namespace QES_KUKA_AMR_API.Controllers;
 [ApiController]
+[Authorize]
 [Route("api/[controller]")]
 public class MobileRobotController : ControllerBase
 {
@@ -27,6 +30,7 @@ public class MobileRobotController : ControllerBase
     private readonly MobileRobotServiceOptions _mobileRobotOptions;
     private readonly IExternalApiTokenService _externalApiTokenService;
     private readonly IRobotRealtimeClient _robotRealtimeClient;
+    private readonly IRobotLicenseService _robotLicenseService;
 
     public MobileRobotController(
         ApplicationDbContext dbContext,
@@ -34,7 +38,8 @@ public class MobileRobotController : ControllerBase
         ILogger<MobileRobotController> logger,
         IOptions<MobileRobotServiceOptions> mobileRobotOptions,
         IExternalApiTokenService externalApiTokenService,
-        IRobotRealtimeClient robotRealtimeClient)
+        IRobotRealtimeClient robotRealtimeClient,
+        IRobotLicenseService robotLicenseService)
     {
         _dbContext = dbContext;
         _httpClientFactory = httpClientFactory;
@@ -42,6 +47,7 @@ public class MobileRobotController : ControllerBase
         _mobileRobotOptions = mobileRobotOptions.Value;
         _externalApiTokenService = externalApiTokenService;
         _robotRealtimeClient = robotRealtimeClient;
+        _robotLicenseService = robotLicenseService;
     }
 
     [HttpPost("sync")]
@@ -192,18 +198,44 @@ public class MobileRobotController : ControllerBase
     {
         var mobileRobotList = mobileRobots.ToList();
 
+        // Detect duplicate RobotIds from external API
+        var duplicateRobotIds = mobileRobotList
+            .Where(r => !string.IsNullOrWhiteSpace(r.RobotId))
+            .GroupBy(r => r.RobotId)
+            .Where(g => g.Count() > 1)
+            .Select(g => g.Key!)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        if (duplicateRobotIds.Count > 0)
+        {
+            _logger.LogWarning("Detected {Count} duplicate RobotIds from external API: {RobotIds}",
+                duplicateRobotIds.Count, string.Join(", ", duplicateRobotIds));
+        }
+
         //load all existing mobile robot from db
         var allExistingMobileRobots = await _dbContext.MobileRobots.ToListAsync(cancellationToken);
         var existingMobileRobots = allExistingMobileRobots.ToDictionary(m => m.RobotId);
 
         var inserted = 0;
         var updated = 0;
+        var skippedDuplicates = new List<string>();
+        var processedRobotIds = new List<string>();
 
         foreach (var robot in mobileRobotList)
         {
             if (string.IsNullOrWhiteSpace(robot.RobotId))
             {
                 _logger.LogWarning("Skipped mobile robot with missing robot Id.");
+                continue;
+            }
+
+            // Skip duplicate RobotIds
+            if (duplicateRobotIds.Contains(robot.RobotId))
+            {
+                if (!skippedDuplicates.Contains(robot.RobotId))
+                {
+                    skippedDuplicates.Add(robot.RobotId);
+                }
                 continue;
             }
 
@@ -218,6 +250,8 @@ public class MobileRobotController : ControllerBase
             {
                 updated++;
             }
+
+            processedRobotIds.Add(robot.RobotId);
 
             entity.ExternalMobileRobotId = robot.Id;
             entity.CreateTime = ParseDateTime(robot.CreateTime) ?? (entity.CreateTime == default ? DateTime.UtcNow : entity.CreateTime);
@@ -262,11 +296,33 @@ public class MobileRobotController : ControllerBase
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
+        // Validate robot licenses for all synced robots
+        if (processedRobotIds.Count > 0)
+        {
+            var licenseResults = await _robotLicenseService.ValidateAllRobotLicensesAsync(processedRobotIds);
+
+            foreach (var kvp in licenseResults)
+            {
+                if (existingMobileRobots.TryGetValue(kvp.Key, out var robotEntity))
+                {
+                    robotEntity.IsLicensed = kvp.Value.IsValid;
+                    robotEntity.LicenseError = kvp.Value.IsValid ? null : kvp.Value.ErrorMessage;
+                }
+            }
+
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            _logger.LogInformation("Validated licenses for {Count} robots. Licensed: {Licensed}, Unlicensed: {Unlicensed}",
+                licenseResults.Count,
+                licenseResults.Count(r => r.Value.IsValid),
+                licenseResults.Count(r => !r.Value.IsValid));
+        }
+
         return Ok(new MobileRobotSyncResultDto
         {
             Total = mobileRobotList.Count,
             Inserted = inserted,
-            Updated = updated
+            Updated = updated,
+            SkippedDuplicates = skippedDuplicates
         });
     }
 
@@ -287,7 +343,9 @@ public class MobileRobotController : ControllerBase
             BatteryLevel = m.BatteryLevel,
             XCoordinate = m.XCoordinate,
             YCoordinate = m.YCoordinate,
-            RobotOrientation = m.RobotOrientation
+            RobotOrientation = m.RobotOrientation,
+            IsLicensed = m.IsLicensed,
+            LicenseError = m.LicenseError
         })
             .ToListAsync(cancellationToken);
 

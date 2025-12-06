@@ -111,5 +111,16 @@ namespace QES_KUKA_AMR_API.Data.Entities
         public double? XCoordinate { get; set; }
 
         public double? YCoordinate { get; set; }
+
+        /// <summary>
+        /// Whether this robot has a valid license
+        /// </summary>
+        public bool IsLicensed { get; set; } = false;
+
+        /// <summary>
+        /// License error message if unlicensed
+        /// </summary>
+        [MaxLength(500)]
+        public string? LicenseError { get; set; }
     }
 }

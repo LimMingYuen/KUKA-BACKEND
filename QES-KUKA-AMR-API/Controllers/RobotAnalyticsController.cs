@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using QES_KUKA_AMR_API.Models.Analytics;
@@ -7,6 +8,7 @@ using QES_KUKA_AMR_API.Services.Missions;
 namespace QES_KUKA_AMR_API.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/v1/robots")]
 public class RobotAnalyticsController : ControllerBase
 {

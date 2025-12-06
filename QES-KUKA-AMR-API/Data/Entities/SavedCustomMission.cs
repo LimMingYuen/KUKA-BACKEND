@@ -138,6 +138,13 @@ public class SavedCustomMission
     public DateTime UpdatedUtc { get; set; } = DateTime.UtcNow;
 
     /// <summary>
+    /// Whether this workflow template is active and available for use.
+    /// Inactive templates are only visible to SuperAdmin users.
+    /// </summary>
+    [Required]
+    public bool IsActive { get; set; } = true;
+
+    /// <summary>
     /// Soft delete flag
     /// </summary>
     [Required]

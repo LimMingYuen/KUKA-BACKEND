@@ -14,4 +14,14 @@ public class MobileRobotSummaryDto
     public double? XCoordinate { get; set; }
     public double? YCoordinate { get; set; }
     public double? RobotOrientation { get; set; }
+
+    /// <summary>
+    /// Whether this robot has a valid license
+    /// </summary>
+    public bool IsLicensed { get; set; }
+
+    /// <summary>
+    /// License error message if unlicensed
+    /// </summary>
+    public string? LicenseError { get; set; }
 }

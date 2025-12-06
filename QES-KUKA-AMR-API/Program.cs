@@ -28,10 +28,13 @@ using QES_KUKA_AMR_API.Services.Permissions;
 using QES_KUKA_AMR_API.Services.RoleTemplatePermissions;
 using QES_KUKA_AMR_API.Services.UserTemplatePermissions;
 using QES_KUKA_AMR_API.Services.Queue;
+using QES_KUKA_AMR_API.Services.RobotMonitoring;
 using QES_KUKA_AMR_API.Services.Sync;
 using QES_KUKA_AMR_API.Services.Schedule;
 using QES_KUKA_AMR_API.Services.RobotRealtime;
 using QES_KUKA_AMR_API.Hubs;
+using QES_KUKA_AMR_API.Services.Licensing;
+using QES_KUKA_AMR_API.Middleware;
 using log4net;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -154,6 +157,16 @@ builder.Services.Configure<MissionListServiceOptions>(
 builder.Services.Configure<AmrServiceOptions>(
     builder.Configuration.GetSection(AmrServiceOptions.SectionName));
 
+// License Configuration
+builder.Services.Configure<LicenseOptions>(
+    builder.Configuration.GetSection("License"));
+
+// License Services (LicenseStateService must be singleton to track state across requests)
+builder.Services.AddSingleton<ILicenseStateService, LicenseStateService>();
+builder.Services.AddScoped<IMachineFingerprintService, MachineFingerprintService>();
+builder.Services.AddScoped<ILicenseValidationService, LicenseValidationService>();
+builder.Services.AddScoped<IRobotLicenseService, RobotLicenseService>();
+
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<ILoginServiceClient, LoginServiceClient>();
 builder.Services.AddScoped<IMissionTypeService, MissionTypeService>();
@@ -173,6 +186,7 @@ builder.Services.AddScoped<IRoleTemplatePermissionService, RoleTemplatePermissio
 builder.Services.AddScoped<IUserTemplatePermissionService, UserTemplatePermissionService>();
 builder.Services.AddScoped<IRobotAnalyticsService, RobotAnalyticsService>();
 builder.Services.AddScoped<IWorkflowNodeCodeService, WorkflowNodeCodeService>();
+builder.Services.AddScoped<IRobotMonitoringService, RobotMonitoringService>();
 
 // Authentication Services
 builder.Services.AddScoped<IAuthService, AuthService>();
@@ -195,6 +209,10 @@ builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
 builder.Services.Configure<LogCleanupOptions>(
     builder.Configuration.GetSection(LogCleanupOptions.SectionName));
 builder.Services.AddScoped<LogCleanupService>();
+
+// File Storage Configuration
+builder.Services.Configure<FileStorageOptions>(
+    builder.Configuration.GetSection(FileStorageOptions.SectionName));
 
 // Auto-Sync Services
 builder.Services.AddScoped<ISyncService, SyncService>();
@@ -225,6 +243,60 @@ app.UseSwaggerUI();
 // app.UseHttpsRedirection();
 
 app.UseCors();
+
+// License validation at startup
+using (var scope = app.Services.CreateScope())
+{
+    var licenseValidationService = scope.ServiceProvider.GetRequiredService<ILicenseValidationService>();
+    var licenseStateService = app.Services.GetRequiredService<ILicenseStateService>();
+    var fingerprintService = scope.ServiceProvider.GetRequiredService<IMachineFingerprintService>();
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+
+    var licenseResult = await licenseValidationService.ValidateLicenseAsync();
+
+    if (!licenseResult.IsValid)
+    {
+        licenseStateService.SetLimitedMode(true);
+        logger.LogWarning("=====================================");
+        logger.LogWarning("LICENSE VALIDATION FAILED");
+        logger.LogWarning("Error Code: {Code}", licenseResult.ErrorCode);
+        logger.LogWarning("Error Message: {Message}", licenseResult.ErrorMessage);
+        logger.LogWarning("=====================================");
+        logger.LogWarning("Machine ID: {MachineId}", fingerprintService.GetDisplayFingerprint());
+        logger.LogWarning("=====================================");
+        logger.LogWarning("Application running in LIMITED MODE");
+        logger.LogWarning("Only license management endpoints are available.");
+        logger.LogWarning("=====================================");
+        Console.WriteLine();
+        Console.WriteLine("=====================================");
+        Console.WriteLine("LICENSE REQUIRED");
+        Console.WriteLine($"Machine ID: {fingerprintService.GetDisplayFingerprint()}");
+        Console.WriteLine("=====================================");
+    }
+    else
+    {
+        logger.LogInformation("License validated successfully for: {Customer}",
+            licenseResult.LicenseInfo?.CustomerName);
+    }
+}
+
+// License enforcement middleware - blocks requests when unlicensed
+app.UseLicenseEnforcement();
+
+// Serve uploaded files from external folder (for map images, etc.)
+var fileStorageOptions = builder.Configuration.GetSection(FileStorageOptions.SectionName).Get<FileStorageOptions>();
+if (fileStorageOptions != null && !string.IsNullOrEmpty(fileStorageOptions.UploadsPath))
+{
+    // Ensure the uploads directory exists
+    var uploadsPath = fileStorageOptions.UploadsPath;
+    Directory.CreateDirectory(uploadsPath);
+
+    app.UseStaticFiles(new StaticFileOptions
+    {
+        FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(uploadsPath),
+        RequestPath = "/uploads"
+    });
+}
 
 app.UseAuthentication();
 app.UseAuthorization();

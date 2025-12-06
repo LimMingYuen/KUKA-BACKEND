@@ -28,6 +28,7 @@ public class SavedCustomMissionDto
     public string CreatedBy { get; set; } = string.Empty;
     public DateTime CreatedUtc { get; set; }
     public DateTime UpdatedUtc { get; set; }
+    public bool IsActive { get; set; }
     public SavedMissionScheduleSummaryDto ScheduleSummary { get; set; } = new();
 }
 
@@ -88,6 +89,11 @@ public class SavedCustomMissionCreateRequest
 
     [Required(ErrorMessage = "At least one mission step is required")]
     public string MissionStepsJson { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Whether this template is active. Defaults to true.
+    /// </summary>
+    public bool IsActive { get; set; } = true;
 }
 
 /// <summary>
@@ -147,6 +153,11 @@ public class SavedCustomMissionUpdateRequest
 
     [Required(ErrorMessage = "At least one mission step is required")]
     public string MissionStepsJson { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Whether this template is active.
+    /// </summary>
+    public bool IsActive { get; set; }
 }
 
 /// <summary>
