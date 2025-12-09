@@ -98,6 +98,15 @@ public class ShelfDecisionRuleService : IShelfDecisionRuleService
             return false;
         }
 
+        // Prevent deletion of active shelf decision rules
+        if (entity.IsActive)
+        {
+            _logger.LogWarning("Cannot delete active shelf decision rule {Id} ('{DisplayName}'). Set to inactive first.",
+                id, entity.DisplayName);
+            throw new ShelfDecisionRuleValidationException(
+                "Cannot delete an active shelf decision rule. Please set it to inactive first.");
+        }
+
         _dbContext.ShelfDecisionRules.Remove(entity);
         await _dbContext.SaveChangesAsync(cancellationToken);
         return true;
@@ -128,6 +137,13 @@ public class ShelfDecisionRuleService : IShelfDecisionRuleService
 public class ShelfDecisionRuleConflictException : Exception
 {
     public ShelfDecisionRuleConflictException(string message) : base(message)
+    {
+    }
+}
+
+public class ShelfDecisionRuleValidationException : Exception
+{
+    public ShelfDecisionRuleValidationException(string message) : base(message)
     {
     }
 }

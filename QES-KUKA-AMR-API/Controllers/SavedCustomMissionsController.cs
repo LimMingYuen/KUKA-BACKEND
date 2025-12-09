@@ -149,6 +149,7 @@ public class SavedCustomMissionsController : ControllerBase
             {
                 MissionName = request.MissionName,
                 Description = request.Description,
+                ConcurrencyMode = request.ConcurrencyMode ?? "Unlimited",
                 MissionType = request.MissionType,
                 RobotType = request.RobotType,
                 Priority = request.Priority,
@@ -200,23 +201,38 @@ public class SavedCustomMissionsController : ControllerBase
 
     [HttpDelete("{id:int}")]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ApiResponse<object>>> DeleteAsync(
         int id,
         CancellationToken cancellationToken)
     {
-        var deleted = await _savedCustomMissionService.DeleteAsync(id, cancellationToken);
-        if (!deleted)
+        try
         {
-            return NotFound(NotFoundProblem(id));
-        }
+            var deleted = await _savedCustomMissionService.DeleteAsync(id, cancellationToken);
+            if (!deleted)
+            {
+                return NotFound(NotFoundProblem(id));
+            }
 
-        return Ok(new ApiResponse<object>
+            return Ok(new ApiResponse<object>
+            {
+                Success = true,
+                Msg = "Saved custom mission deleted.",
+                Data = null
+            });
+        }
+        catch (SavedCustomMissionValidationException ex)
         {
-            Success = true,
-            Msg = "Saved custom mission deleted.",
-            Data = null
-        });
+            _logger.LogWarning(ex, "Validation error while deleting saved custom mission {Id}", id);
+            return BadRequest(new ProblemDetails
+            {
+                Title = "Cannot delete workflow template.",
+                Detail = ex.Message,
+                Status = StatusCodes.Status400BadRequest,
+                Type = "https://httpstatuses.com/400"
+            });
+        }
     }
 
     [HttpPatch("{id:int}/toggle-status")]
@@ -334,6 +350,7 @@ public class SavedCustomMissionsController : ControllerBase
             Id = mission.Id,
             MissionName = mission.MissionName,
             Description = mission.Description,
+            ConcurrencyMode = mission.ConcurrencyMode,
             MissionType = mission.MissionType,
             RobotType = mission.RobotType,
             Priority = mission.Priority,

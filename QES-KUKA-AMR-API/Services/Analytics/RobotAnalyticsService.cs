@@ -350,7 +350,7 @@ public class RobotAnalyticsService : IRobotAnalyticsService
         metrics.TotalChargingMinutes = chargingMinutesByBucket.Values.Sum();
         metrics.TotalWorkingMinutes = metrics.UtilizedMinutes; // Mission execution time
         metrics.TotalIdleMinutes = Math.Max(0,
-            metrics.TotalAvailableMinutes - metrics.ManualPauseMinutes - metrics.TotalWorkingMinutes - metrics.TotalChargingMinutes);
+            metrics.TotalAvailableMinutes - metrics.TotalWorkingMinutes - metrics.TotalChargingMinutes);
 
         // Update breakdown with charging, working, and idle minutes
         foreach (var bucket in metrics.Breakdown)
@@ -360,20 +360,19 @@ public class RobotAnalyticsService : IRobotAnalyticsService
             bucket.ChargingMinutes = Math.Round(chargingMinutes, 2);
             bucket.WorkingMinutes = bucket.UtilizedMinutes; // Mission execution time
             bucket.IdleMinutes = Math.Max(0,
-                bucket.TotalAvailableMinutes - bucket.ManualPauseMinutes - bucket.WorkingMinutes - bucket.ChargingMinutes);
+                bucket.TotalAvailableMinutes - bucket.WorkingMinutes - bucket.ChargingMinutes);
         }
 
-        // Recalculate utilization to include charging as productive time
-        var effectiveAvailableWithCharging = Math.Max(0, metrics.TotalAvailableMinutes - metrics.ManualPauseMinutes);
-        if (effectiveAvailableWithCharging <= 0)
+        // Calculate utilization: Working / (Available - Charging)
+        var effectiveAvailableExcludingCharging = Math.Max(0, metrics.TotalAvailableMinutes - metrics.TotalChargingMinutes);
+        if (effectiveAvailableExcludingCharging <= 0)
         {
             metrics.UtilizationPercent = 0;
         }
         else
         {
-            // Utilization = (Working + Charging) / Available
-            var totalProductive = metrics.TotalWorkingMinutes + metrics.TotalChargingMinutes;
-            metrics.UtilizationPercent = Math.Round(Math.Min(totalProductive / effectiveAvailableWithCharging, 1.0) * 100, 2);
+            // Utilization = Working / (Available - Charging)
+            metrics.UtilizationPercent = Math.Round(Math.Min(metrics.TotalWorkingMinutes / effectiveAvailableExcludingCharging, 1.0) * 100, 2);
         }
 
         // Round metrics

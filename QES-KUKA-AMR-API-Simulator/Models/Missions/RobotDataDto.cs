@@ -103,4 +103,16 @@ public class RobotDataDto
 
     [JsonPropertyName("errorMessage")]
     public string? ErrorMessage { get; set; }
+
+    /// <summary>
+    /// Indicates if the robot is waiting at a manual waypoint for confirmation
+    /// </summary>
+    [JsonPropertyName("isWaitingForManualResume")]
+    public bool? IsWaitingForManualResume { get; set; }
+
+    /// <summary>
+    /// The current step position (area or node code) when waiting at manual waypoint
+    /// </summary>
+    [JsonPropertyName("currentStepPosition")]
+    public string? CurrentStepPosition { get; set; }
 }

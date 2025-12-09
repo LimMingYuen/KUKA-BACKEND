@@ -363,6 +363,17 @@ public class AmrController : ControllerBase
             activeJob = ActiveJobs.Values.FirstOrDefault(j => j.RobotId == request.RobotId && !j.IsCompleted && !j.IsCancelled);
         }
 
+        // Get current step position for manual waypoint tracking
+        string? currentStepPosition = null;
+        if (activeJob?.MissionSteps != null && activeJob.MissionSteps.Count > 0)
+        {
+            var stepIndex = activeJob.CurrentStepIndex;
+            if (stepIndex < activeJob.MissionSteps.Count)
+            {
+                currentStepPosition = activeJob.MissionSteps[stepIndex].Position;
+            }
+        }
+
         // Simulate robot position data
         var robotData = new RobotDataDto
         {
@@ -373,11 +384,13 @@ public class AmrController : ControllerBase
             BatteryLevel = 85,
             RobotType = request.RobotType ?? "LIFT",
             MapCode = request.MapCode ?? "M001",
-            FloorNumber = request.FloorNumber ?? "A001"
+            FloorNumber = request.FloorNumber ?? "A001",
+            IsWaitingForManualResume = activeJob?.IsWaitingForManualResume,
+            CurrentStepPosition = activeJob?.IsWaitingForManualResume == true ? currentStepPosition : null
         };
 
-        _logger.LogInformation("✓ Robot {RobotId} position: NodeCode={NodeCode}, MissionCode={MissionCode}, Status={Status}",
-            robotData.RobotId, robotData.NodeCode, robotData.MissionCode, robotData.Status);
+        _logger.LogInformation("✓ Robot {RobotId} position: NodeCode={NodeCode}, MissionCode={MissionCode}, Status={Status}, IsWaitingForManualResume={IsWaiting}",
+            robotData.RobotId, robotData.NodeCode, robotData.MissionCode, robotData.Status, activeJob?.IsWaitingForManualResume);
 
         if (activeJob != null)
         {
@@ -394,30 +407,41 @@ public class AmrController : ControllerBase
                 var isManual = string.Equals(currentStep.PassStrategy, "MANUAL", StringComparison.OrdinalIgnoreCase);
                 var manualCompleted = activeJob.CompletedManualPositions.Contains(currentStep.Position);
 
-                _logger.LogDebug(
-                    "RobotQuery comparison - MissionCode={MissionCode}, NodeCode={NodeCode}, CurrentStepIndex={StepIndex}, StepSequence={Sequence}, StepPosition={StepPosition}, PassStrategy={PassStrategy}, MatchesStep={MatchesStep}, ManualCompleted={ManualCompleted}, WaitingForManual={WaitingForManual}",
+                // Log at Information level for visibility
+                _logger.LogInformation(
+                    "📍 MANUAL WAYPOINT CHECK - MissionCode={MissionCode}, RobotNodeCode={NodeCode}, CurrentStepIndex={StepIndex}, StepPosition={StepPosition}, PassStrategy={PassStrategy}, IsManual={IsManual}, ManualCompleted={ManualCompleted}, IsWaitingForManualResume={WaitingForManual}",
                     activeJob.Request.MissionCode,
                     robotData.NodeCode,
                     currentIndex,
-                    currentStep.Sequence,
                     currentStep.Position,
                     currentStep.PassStrategy,
-                    matchesStep,
+                    isManual,
                     manualCompleted,
                     activeJob.IsWaitingForManualResume);
+
+                // Log all mission steps for debugging
+                _logger.LogInformation("📋 All mission steps for {MissionCode}:", activeJob.Request.MissionCode);
+                for (int i = 0; i < activeJob.MissionSteps.Count; i++)
+                {
+                    var step = activeJob.MissionSteps[i];
+                    var isCurrent = i == currentIndex ? " << CURRENT" : "";
+                    var isConfirmed = activeJob.CompletedManualPositions.Contains(step.Position) ? " [CONFIRMED]" : "";
+                    _logger.LogInformation("   Step {Index}: Position={Position}, PassStrategy={PassStrategy}{Current}{Confirmed}",
+                        i, step.Position, step.PassStrategy, isCurrent, isConfirmed);
+                }
             }
             else
             {
-                _logger.LogDebug(
-                    "RobotQuery comparison - MissionCode={MissionCode} has no missionData steps; using legacy simulated path. NodeCode={NodeCode}",
+                _logger.LogInformation(
+                    "RobotQuery - MissionCode={MissionCode} has no missionData steps; using legacy simulated path. NodeCode={NodeCode}",
                     activeJob.Request.MissionCode,
                     robotData.NodeCode);
             }
         }
         else
         {
-            _logger.LogDebug(
-                "RobotQuery comparison - No active mission for RobotId={RobotId}. NodeCode={NodeCode}",
+            _logger.LogInformation(
+                "RobotQuery - No active mission for RobotId={RobotId}. NodeCode={NodeCode}",
                 robotData.RobotId,
                 robotData.NodeCode);
         }
@@ -672,11 +696,51 @@ public class AmrController : ControllerBase
             return 10; // Created
         }
 
-        // Calculate elapsed time since first query
-        var elapsed = (now - job.FirstQueryTime.Value).TotalSeconds;
+        // If waiting for manual resume, stay in Executing/Waiting state - do NOT progress to Complete
+        if (job.IsWaitingForManualResume)
+        {
+            _logger.LogDebug("Job {MissionCode} waiting for manual resume - holding in Executing state",
+                job.Request.MissionCode);
+            return 20; // Executing - waiting for manual confirmation
+        }
+
+        // For missions with MANUAL steps, use step-based progression instead of time-based
+        if (job.MissionSteps != null && job.MissionSteps.Any())
+        {
+            // Check if mission is complete (all steps done)
+            if (job.CurrentStepIndex >= job.MissionSteps.Count)
+            {
+                // Mark as completed
+                if (!job.IsCompleted)
+                {
+                    job.IsCompleted = true;
+                    job.CompletedAt = now;
+                    _logger.LogInformation("Job {MissionCode} completed all {StepCount} steps",
+                        job.Request.MissionCode, job.MissionSteps.Count);
+
+                    // End robot simulation (completed)
+                    _simulationService.EndJob(job.RobotId, cancelled: false);
+                }
+                return 30; // Complete
+            }
+
+            // Still executing steps
+            var createdToExecuting = _configuration.GetValue<int>("JobSimulation:ProgressionTimingSeconds:CreatedToExecuting", 3);
+            var elapsed = (now - job.FirstQueryTime.Value).TotalSeconds;
+
+            if (elapsed < createdToExecuting)
+            {
+                return 10; // Created
+            }
+
+            return 20; // Executing - processing mission steps
+        }
+
+        // Legacy time-based progression for missions without step data
+        var elapsedTotal = (now - job.FirstQueryTime.Value).TotalSeconds;
 
         // Read timing configuration from appsettings.json
-        var createdToExecuting = _configuration.GetValue<int>("JobSimulation:ProgressionTimingSeconds:CreatedToExecuting", 3);
+        var createdToExecutingLegacy = _configuration.GetValue<int>("JobSimulation:ProgressionTimingSeconds:CreatedToExecuting", 3);
         var executingToWaiting = _configuration.GetValue<int>("JobSimulation:ProgressionTimingSeconds:ExecutingToWaiting", 5);
         var waitingToExecuting = _configuration.GetValue<int>("JobSimulation:ProgressionTimingSeconds:WaitingToExecuting", 3);
         var executingToComplete = _configuration.GetValue<int>("JobSimulation:ProgressionTimingSeconds:ExecutingToComplete", 10);
@@ -684,25 +748,25 @@ public class AmrController : ControllerBase
         // Status progression timeline:
         // Created (10) -> Executing (20) -> Waiting (25) -> Executing (20) -> Complete (30)
 
-        if (elapsed < createdToExecuting)
+        if (elapsedTotal < createdToExecutingLegacy)
         {
             return 10; // Created
         }
 
-        var stage1End = createdToExecuting + executingToWaiting;
-        if (elapsed < stage1End)
+        var stage1End = createdToExecutingLegacy + executingToWaiting;
+        if (elapsedTotal < stage1End)
         {
             return 20; // Executing (first phase)
         }
 
         var stage2End = stage1End + waitingToExecuting;
-        if (elapsed < stage2End)
+        if (elapsedTotal < stage2End)
         {
             return 25; // Waiting
         }
 
         var stage3End = stage2End + executingToComplete;
-        if (elapsed < stage3End)
+        if (elapsedTotal < stage3End)
         {
             return 20; // Executing (resumed, second phase)
         }

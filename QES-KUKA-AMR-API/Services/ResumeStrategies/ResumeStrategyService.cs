@@ -99,6 +99,15 @@ public class ResumeStrategyService : IResumeStrategyService
             return false;
         }
 
+        // Prevent deletion of active resume strategies
+        if (entity.IsActive)
+        {
+            _logger.LogWarning("Cannot delete active resume strategy {Id} ('{DisplayName}'). Set to inactive first.",
+                id, entity.DisplayName);
+            throw new ResumeStrategyValidationException(
+                "Cannot delete an active resume strategy. Please set it to inactive first.");
+        }
+
         _dbContext.ResumeStrategies.Remove(entity);
         await _dbContext.SaveChangesAsync(cancellationToken);
         return true;
@@ -129,6 +138,13 @@ public class ResumeStrategyService : IResumeStrategyService
 public class ResumeStrategyConflictException : Exception
 {
     public ResumeStrategyConflictException(string message) : base(message)
+    {
+    }
+}
+
+public class ResumeStrategyValidationException : Exception
+{
+    public ResumeStrategyValidationException(string message) : base(message)
     {
     }
 }

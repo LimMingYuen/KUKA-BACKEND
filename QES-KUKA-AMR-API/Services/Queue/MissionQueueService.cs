@@ -28,6 +28,20 @@ public interface IMissionQueueService
     Task<MissionQueueStatistics> GetStatisticsAsync(CancellationToken cancellationToken = default);
     Task<MissionQueue?> GetNextQueuedItemAsync(CancellationToken cancellationToken = default);
     Task UpdateQueuePositionsAsync(CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Get count of active mission instances for a saved template
+    /// </summary>
+    Task<int> GetActiveInstanceCountAsync(int savedMissionId, CancellationToken cancellationToken = default);
+}
+
+/// <summary>
+/// Exception thrown when concurrency validation fails
+/// </summary>
+public class ConcurrencyViolationException : Exception
+{
+    public ConcurrencyViolationException(string message) : base(message)
+    {
+    }
 }
 
 public class MissionQueueStatistics
@@ -106,6 +120,27 @@ public class MissionQueueService : IMissionQueueService
 
     public async Task<MissionQueue> AddToQueueAsync(MissionQueue queueItem, CancellationToken cancellationToken = default)
     {
+        // Check concurrency mode if this is from a saved template
+        if (queueItem.SavedMissionId.HasValue)
+        {
+            var savedMission = await _dbContext.SavedCustomMissions
+                .AsNoTracking()
+                .FirstOrDefaultAsync(m => m.Id == queueItem.SavedMissionId.Value, cancellationToken);
+
+            if (savedMission?.ConcurrencyMode == "Wait")
+            {
+                var activeCount = await GetActiveInstanceCountAsync(savedMission.Id, cancellationToken);
+                if (activeCount > 0)
+                {
+                    _logger.LogWarning("Concurrency violation: Template '{MissionName}' has {ActiveCount} active mission(s)",
+                        savedMission.MissionName, activeCount);
+                    throw new ConcurrencyViolationException(
+                        $"Template '{savedMission.MissionName}' has {activeCount} active mission(s). " +
+                        "Please wait for completion before triggering again.");
+                }
+            }
+        }
+
         queueItem.CreatedUtc = _timeProvider.GetUtcNow().UtcDateTime;
         queueItem.Status = MissionQueueStatus.Queued;
 
@@ -462,5 +497,20 @@ public class MissionQueueService : IMissionQueueService
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Get count of active mission instances for a saved template.
+    /// Active means: Queued, Processing, or Assigned status.
+    /// </summary>
+    public async Task<int> GetActiveInstanceCountAsync(int savedMissionId, CancellationToken cancellationToken = default)
+    {
+        return await _dbContext.MissionQueues
+            .CountAsync(q =>
+                q.SavedMissionId == savedMissionId &&
+                (q.Status == MissionQueueStatus.Queued ||
+                 q.Status == MissionQueueStatus.Processing ||
+                 q.Status == MissionQueueStatus.Assigned),
+                cancellationToken);
     }
 }

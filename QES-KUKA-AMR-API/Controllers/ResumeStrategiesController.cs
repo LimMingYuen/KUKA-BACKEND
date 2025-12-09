@@ -130,21 +130,36 @@ public class ResumeStrategiesController : ControllerBase
 
     [HttpDelete("{id:int}")]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ApiResponse<object>>> DeleteStrategyAsync(int id, CancellationToken cancellationToken)
     {
-        var deleted = await _strategyService.DeleteAsync(id, cancellationToken);
-        if (!deleted)
+        try
         {
-            return NotFound(NotFoundProblem(id));
-        }
+            var deleted = await _strategyService.DeleteAsync(id, cancellationToken);
+            if (!deleted)
+            {
+                return NotFound(NotFoundProblem(id));
+            }
 
-        return Ok(new ApiResponse<object>
+            return Ok(new ApiResponse<object>
+            {
+                Success = true,
+                Msg = "Resume strategy deleted.",
+                Data = null
+            });
+        }
+        catch (ResumeStrategyValidationException ex)
         {
-            Success = true,
-            Msg = "Resume strategy deleted.",
-            Data = null
-        });
+            _logger.LogWarning(ex, "Validation error while deleting resume strategy {Id}", id);
+            return BadRequest(new ProblemDetails
+            {
+                Title = "Cannot delete resume strategy.",
+                Detail = ex.Message,
+                Status = StatusCodes.Status400BadRequest,
+                Type = "https://httpstatuses.com/400"
+            });
+        }
     }
 
     private static ResumeStrategyDto MapToDto(ResumeStrategy strategy) => new()

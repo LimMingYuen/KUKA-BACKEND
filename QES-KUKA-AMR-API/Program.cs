@@ -10,6 +10,7 @@ using QES_KUKA_AMR_API.Options;
 using QES_KUKA_AMR_API.Services;
 using QES_KUKA_AMR_API.Services.Analytics;
 using QES_KUKA_AMR_API.Services.Areas;
+using QES_KUKA_AMR_API.Services.OrganizationIds;
 using QES_KUKA_AMR_API.Services.Auth;
 using QES_KUKA_AMR_API.Services.Login;
 using QES_KUKA_AMR_API.Services.Missions;
@@ -17,6 +18,7 @@ using QES_KUKA_AMR_API.Services.MissionTypes;
 using QES_KUKA_AMR_API.Services.ResumeStrategies;
 using QES_KUKA_AMR_API.Services.RobotTypes;
 using QES_KUKA_AMR_API.Services.Roles;
+using QES_KUKA_AMR_API.Converters;
 using QES_KUKA_AMR_API.Services.SavedCustomMissions;
 using QES_KUKA_AMR_API.Services.ShelfDecisionRules;
 using QES_KUKA_AMR_API.Services.Users;
@@ -52,7 +54,7 @@ builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        policy.WithOrigins("http://localhost:4200", "http://localhost:5109")
+        policy.WithOrigins("http://localhost:4200", "http://localhost:5109", "http://localhost:5003", "http://localhost:8004")
               .AllowAnyMethod()
               .AllowAnyHeader()
               .AllowCredentials(); // Required for SignalR
@@ -97,6 +99,8 @@ builder.Services.AddControllers()
     {
         // Serialize DateTime values as UTC with 'Z' suffix (ISO 8601)
         // This ensures JavaScript correctly interprets them as UTC and converts to local time
+        options.JsonSerializerOptions.Converters.Add(new UtcDateTimeJsonConverter());
+        options.JsonSerializerOptions.Converters.Add(new UtcNullableDateTimeJsonConverter());
         options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
     });
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
@@ -174,6 +178,7 @@ builder.Services.AddScoped<IRobotTypeService, RobotTypeService>();
 builder.Services.AddScoped<IShelfDecisionRuleService, ShelfDecisionRuleService>();
 builder.Services.AddScoped<IResumeStrategyService, ResumeStrategyService>();
 builder.Services.AddScoped<IAreaService, AreaService>();
+builder.Services.AddScoped<IOrganizationIdService, OrganizationIdService>();
 builder.Services.AddScoped<ISavedCustomMissionService, SavedCustomMissionService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IRoleService, RoleService>();
@@ -209,6 +214,7 @@ builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
 builder.Services.Configure<LogCleanupOptions>(
     builder.Configuration.GetSection(LogCleanupOptions.SectionName));
 builder.Services.AddScoped<LogCleanupService>();
+builder.Services.AddHostedService<LogCleanupHostedService>();
 
 // File Storage Configuration
 builder.Services.Configure<FileStorageOptions>(
@@ -243,6 +249,9 @@ app.UseSwaggerUI();
 // app.UseHttpsRedirection();
 
 app.UseCors();
+
+// Request/Response logging middleware - logs all API requests with parameters
+app.UseRequestResponseLogging();
 
 // License validation at startup
 using (var scope = app.Services.CreateScope())

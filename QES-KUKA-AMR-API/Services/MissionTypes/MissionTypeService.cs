@@ -103,6 +103,15 @@ public class MissionTypeService : IMissionTypeService
             return false;
         }
 
+        // Prevent deletion of active mission types
+        if (entity.IsActive)
+        {
+            _logger.LogWarning("Cannot delete active mission type {Id} ('{DisplayName}'). Set to inactive first.",
+                id, entity.DisplayName);
+            throw new MissionTypeValidationException(
+                "Cannot delete an active mission type. Please set it to inactive first.");
+        }
+
         _dbContext.MissionTypes.Remove(entity);
         await _dbContext.SaveChangesAsync(cancellationToken);
         return true;
@@ -132,6 +141,13 @@ public class MissionTypeService : IMissionTypeService
 public class MissionTypeConflictException : Exception
 {
     public MissionTypeConflictException(string message) : base(message)
+    {
+    }
+}
+
+public class MissionTypeValidationException : Exception
+{
+    public MissionTypeValidationException(string message) : base(message)
     {
     }
 }

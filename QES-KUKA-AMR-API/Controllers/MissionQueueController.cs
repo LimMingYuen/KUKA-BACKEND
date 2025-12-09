@@ -141,6 +141,32 @@ public class MissionQueueController : ControllerBase
     }
 
     /// <summary>
+    /// Get count of active mission instances for a saved template
+    /// </summary>
+    [HttpGet("active-count/{savedMissionId}")]
+    public async Task<ActionResult<ApiResponse<int>>> GetActiveCount(int savedMissionId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var count = await _queueService.GetActiveInstanceCountAsync(savedMissionId, cancellationToken);
+            return Ok(new ApiResponse<int>
+            {
+                Success = true,
+                Data = count
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting active count for template {SavedMissionId}", savedMissionId);
+            return StatusCode(500, new ApiResponse<int>
+            {
+                Success = false,
+                Msg = "Failed to get active instance count"
+            });
+        }
+    }
+
+    /// <summary>
     /// Add mission to queue
     /// </summary>
     [HttpPost]
@@ -172,6 +198,15 @@ public class MissionQueueController : ControllerBase
                 Success = true,
                 Data = MapToDto(result),
                 Msg = $"Mission added to queue at position {result.QueuePosition}"
+            });
+        }
+        catch (ConcurrencyViolationException ex)
+        {
+            _logger.LogWarning("Concurrency violation: {Message}", ex.Message);
+            return Conflict(new ApiResponse<MissionQueueDto>
+            {
+                Success = false,
+                Msg = ex.Message
             });
         }
         catch (Exception ex)

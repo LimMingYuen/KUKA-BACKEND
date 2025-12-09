@@ -136,23 +136,38 @@ public class MissionTypesController : ControllerBase
 
     [HttpDelete("{id:int}")]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ApiResponse<object>>> DeleteMissionTypeAsync(
         int id,
         CancellationToken cancellationToken)
     {
-        var deleted = await _missionTypeService.DeleteAsync(id, cancellationToken);
-        if (!deleted)
+        try
         {
-            return NotFound(NotFoundProblem(id));
-        }
+            var deleted = await _missionTypeService.DeleteAsync(id, cancellationToken);
+            if (!deleted)
+            {
+                return NotFound(NotFoundProblem(id));
+            }
 
-        return Ok(new ApiResponse<object>
+            return Ok(new ApiResponse<object>
+            {
+                Success = true,
+                Msg = "Mission type deleted.",
+                Data = null
+            });
+        }
+        catch (MissionTypeValidationException ex)
         {
-            Success = true,
-            Msg = "Mission type deleted.",
-            Data = null
-        });
+            _logger.LogWarning(ex, "Validation error while deleting mission type {Id}", id);
+            return BadRequest(new ProblemDetails
+            {
+                Title = "Cannot delete mission type.",
+                Detail = ex.Message,
+                Status = StatusCodes.Status400BadRequest,
+                Type = "https://httpstatuses.com/400"
+            });
+        }
     }
 
     private static MissionTypeDto MapToDto(MissionType missionType) => new()

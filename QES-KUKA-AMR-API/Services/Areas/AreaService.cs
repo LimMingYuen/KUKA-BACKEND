@@ -98,6 +98,15 @@ public class AreaService : IAreaService
             return false;
         }
 
+        // Prevent deletion of active areas
+        if (entity.IsActive)
+        {
+            _logger.LogWarning("Cannot delete active area {Id} ('{DisplayName}'). Set to inactive first.",
+                id, entity.DisplayName);
+            throw new AreaValidationException(
+                "Cannot delete an active area. Please set it to inactive first.");
+        }
+
         _dbContext.Areas.Remove(entity);
         await _dbContext.SaveChangesAsync(cancellationToken);
         return true;
@@ -128,6 +137,13 @@ public class AreaService : IAreaService
 public class AreaConflictException : Exception
 {
     public AreaConflictException(string message) : base(message)
+    {
+    }
+}
+
+public class AreaValidationException : Exception
+{
+    public AreaValidationException(string message) : base(message)
     {
     }
 }

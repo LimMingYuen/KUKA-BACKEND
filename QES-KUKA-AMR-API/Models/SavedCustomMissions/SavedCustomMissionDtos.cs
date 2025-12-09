@@ -29,6 +29,10 @@ public class SavedCustomMissionDto
     public DateTime CreatedUtc { get; set; }
     public DateTime UpdatedUtc { get; set; }
     public bool IsActive { get; set; }
+    /// <summary>
+    /// Concurrency mode: "Unlimited" (default) or "Wait"
+    /// </summary>
+    public string ConcurrencyMode { get; set; } = "Unlimited";
     public SavedMissionScheduleSummaryDto ScheduleSummary { get; set; } = new();
 }
 
@@ -94,6 +98,12 @@ public class SavedCustomMissionCreateRequest
     /// Whether this template is active. Defaults to true.
     /// </summary>
     public bool IsActive { get; set; } = true;
+
+    /// <summary>
+    /// Concurrency mode: "Unlimited" (default) or "Wait"
+    /// </summary>
+    [MaxLength(20)]
+    public string ConcurrencyMode { get; set; } = "Unlimited";
 }
 
 /// <summary>
@@ -158,6 +168,12 @@ public class SavedCustomMissionUpdateRequest
     /// Whether this template is active.
     /// </summary>
     public bool IsActive { get; set; }
+
+    /// <summary>
+    /// Concurrency mode: "Unlimited" or "Wait"
+    /// </summary>
+    [MaxLength(20)]
+    public string ConcurrencyMode { get; set; } = "Unlimited";
 }
 
 /// <summary>

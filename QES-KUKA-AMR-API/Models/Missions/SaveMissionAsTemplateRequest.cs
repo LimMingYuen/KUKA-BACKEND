@@ -124,6 +124,15 @@ public class SaveMissionAsTemplateRequest
     public string? Description { get; set; }
 
     /// <summary>
+    /// Concurrency mode for this template:
+    /// - "Unlimited" (default): Can trigger multiple times, missions queue up
+    /// - "Wait": Must wait for all active instances to complete before re-triggering
+    /// </summary>
+    [MaxLength(20)]
+    [JsonPropertyName("concurrencyMode")]
+    public string ConcurrencyMode { get; set; } = "Unlimited";
+
+    /// <summary>
     /// The mission template data (excludes requestId and missionCode which are auto-generated on trigger)
     /// </summary>
     [Required(ErrorMessage = "Mission template data is required")]

@@ -104,6 +104,15 @@ public class RobotTypeService : IRobotTypeService
             return false;
         }
 
+        // Prevent deletion of active robot types
+        if (entity.IsActive)
+        {
+            _logger.LogWarning("Cannot delete active robot type {Id} ('{DisplayName}'). Set to inactive first.",
+                id, entity.DisplayName);
+            throw new RobotTypeValidationException(
+                "Cannot delete an active robot type. Please set it to inactive first.");
+        }
+
         _dbContext.RobotTypes.Remove(entity);
         await _dbContext.SaveChangesAsync(cancellationToken);
         return true;
@@ -151,6 +160,13 @@ public class RobotTypeService : IRobotTypeService
 public class RobotTypeConflictException : Exception
 {
     public RobotTypeConflictException(string message) : base(message)
+    {
+    }
+}
+
+public class RobotTypeValidationException : Exception
+{
+    public RobotTypeValidationException(string message) : base(message)
     {
     }
 }

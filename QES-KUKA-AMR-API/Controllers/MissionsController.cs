@@ -78,6 +78,7 @@ public class MissionsController : ControllerBase
             {
                 MissionName = request.MissionName,
                 Description = request.Description,
+                ConcurrencyMode = request.ConcurrencyMode ?? "Unlimited",
                 MissionType = template.MissionType,
                 RobotType = template.RobotType,
                 Priority = template.Priority,

@@ -130,21 +130,36 @@ public class AreasController : ControllerBase
 
     [HttpDelete("{id:int}")]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ApiResponse<object>>> DeleteAreaAsync(int id, CancellationToken cancellationToken)
     {
-        var deleted = await _areaService.DeleteAsync(id, cancellationToken);
-        if (!deleted)
+        try
         {
-            return NotFound(NotFoundProblem(id));
-        }
+            var deleted = await _areaService.DeleteAsync(id, cancellationToken);
+            if (!deleted)
+            {
+                return NotFound(NotFoundProblem(id));
+            }
 
-        return Ok(new ApiResponse<object>
+            return Ok(new ApiResponse<object>
+            {
+                Success = true,
+                Msg = "Area deleted.",
+                Data = null
+            });
+        }
+        catch (AreaValidationException ex)
         {
-            Success = true,
-            Msg = "Area deleted.",
-            Data = null
-        });
+            _logger.LogWarning(ex, "Validation error while deleting area {Id}", id);
+            return BadRequest(new ProblemDetails
+            {
+                Title = "Cannot delete area.",
+                Detail = ex.Message,
+                Status = StatusCodes.Status400BadRequest,
+                Type = "https://httpstatuses.com/400"
+            });
+        }
     }
 
     private static AreaDto MapToDto(Area area) => new()

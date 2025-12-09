@@ -145,6 +145,15 @@ public class SavedCustomMission
     public bool IsActive { get; set; } = true;
 
     /// <summary>
+    /// Concurrency mode for this template:
+    /// - "Unlimited" (default): Can trigger multiple times, missions queue up
+    /// - "Wait": Must wait for all active instances (Queued, Processing, Assigned) to complete
+    /// </summary>
+    [Required]
+    [MaxLength(20)]
+    public string ConcurrencyMode { get; set; } = "Unlimited";
+
+    /// <summary>
     /// Soft delete flag
     /// </summary>
     [Required]

@@ -130,21 +130,36 @@ public class ShelfDecisionRulesController : ControllerBase
 
     [HttpDelete("{id:int}")]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ApiResponse<object>>> DeleteRuleAsync(int id, CancellationToken cancellationToken)
     {
-        var deleted = await _ruleService.DeleteAsync(id, cancellationToken);
-        if (!deleted)
+        try
         {
-            return NotFound(NotFoundProblem(id));
-        }
+            var deleted = await _ruleService.DeleteAsync(id, cancellationToken);
+            if (!deleted)
+            {
+                return NotFound(NotFoundProblem(id));
+            }
 
-        return Ok(new ApiResponse<object>
+            return Ok(new ApiResponse<object>
+            {
+                Success = true,
+                Msg = "Shelf decision rule deleted.",
+                Data = null
+            });
+        }
+        catch (ShelfDecisionRuleValidationException ex)
         {
-            Success = true,
-            Msg = "Shelf decision rule deleted.",
-            Data = null
-        });
+            _logger.LogWarning(ex, "Validation error while deleting shelf decision rule {Id}", id);
+            return BadRequest(new ProblemDetails
+            {
+                Title = "Cannot delete shelf decision rule.",
+                Detail = ex.Message,
+                Status = StatusCodes.Status400BadRequest,
+                Type = "https://httpstatuses.com/400"
+            });
+        }
     }
 
     private static ShelfDecisionRuleDto MapToDto(ShelfDecisionRule rule) => new()

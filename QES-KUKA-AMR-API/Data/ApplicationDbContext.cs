@@ -36,6 +36,8 @@ public class ApplicationDbContext : DbContext
 
     public DbSet<Area> Areas => Set<Area>();
 
+    public DbSet<OrganizationId> OrganizationIds => Set<OrganizationId>();
+
     public DbSet<SavedCustomMission> SavedCustomMissions => Set<SavedCustomMission>();
 
     public DbSet<RobotManualPause> RobotManualPauses => Set<RobotManualPause>();
@@ -175,6 +177,16 @@ public class ApplicationDbContext : DbContext
         });
 
         modelBuilder.Entity<Area>(entity =>
+        {
+            entity.HasIndex(e => e.ActualValue).IsUnique();
+            entity.Property(e => e.DisplayName).HasMaxLength(128);
+            entity.Property(e => e.ActualValue).HasMaxLength(128);
+            entity.Property(e => e.Description).HasMaxLength(512);
+            entity.Property(e => e.CreatedUtc).HasColumnType("datetime2");
+            entity.Property(e => e.UpdatedUtc).HasColumnType("datetime2");
+        });
+
+        modelBuilder.Entity<OrganizationId>(entity =>
         {
             entity.HasIndex(e => e.ActualValue).IsUnique();
             entity.Property(e => e.DisplayName).HasMaxLength(128);

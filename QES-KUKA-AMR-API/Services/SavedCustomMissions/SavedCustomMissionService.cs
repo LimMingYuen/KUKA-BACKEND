@@ -147,6 +147,7 @@ public class SavedCustomMissionService : ISavedCustomMissionService
         existing.UnlockMissionCode = mission.UnlockMissionCode;
         existing.MissionStepsJson = mission.MissionStepsJson;
         existing.IsActive = mission.IsActive;
+        existing.ConcurrencyMode = mission.ConcurrencyMode;
         existing.UpdatedUtc = DateTime.UtcNow;
 
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -164,6 +165,15 @@ public class SavedCustomMissionService : ISavedCustomMissionService
         if (entity is null)
         {
             return false;
+        }
+
+        // Prevent deletion of active workflow templates
+        if (entity.IsActive)
+        {
+            _logger.LogWarning("Cannot delete active workflow template {Id} ('{MissionName}'). Set to inactive first.",
+                id, entity.MissionName);
+            throw new SavedCustomMissionValidationException(
+                "Cannot delete an active workflow template. Please set it to inactive first.");
         }
 
         // Soft delete
