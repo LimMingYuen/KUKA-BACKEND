@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using QES_KUKA_AMR_API.Data;
 
@@ -11,9 +12,11 @@ using QES_KUKA_AMR_API.Data;
 namespace QES_KUKA_AMR_API.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251213052722_AddTemplateCategories")]
+    partial class AddTemplateCategories
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1629,9 +1632,6 @@ namespace QES_KUKA_AMR_API.Migrations
                         .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
-
-                    b.Property<bool>("SkipIfRunning")
-                        .HasColumnType("bit");
 
                     b.Property<DateTime?>("UpdatedUtc")
                         .HasColumnType("datetime2");

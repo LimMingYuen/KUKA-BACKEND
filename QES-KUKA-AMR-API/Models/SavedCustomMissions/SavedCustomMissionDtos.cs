@@ -33,6 +33,17 @@ public class SavedCustomMissionDto
     /// Concurrency mode: "Unlimited" (default) or "Wait"
     /// </summary>
     public string ConcurrencyMode { get; set; } = "Unlimited";
+
+    /// <summary>
+    /// Category ID for manual organization. Null means "Uncategorized".
+    /// </summary>
+    public int? CategoryId { get; set; }
+
+    /// <summary>
+    /// Category name (populated from navigation property)
+    /// </summary>
+    public string? CategoryName { get; set; }
+
     public SavedMissionScheduleSummaryDto ScheduleSummary { get; set; } = new();
 }
 
@@ -104,6 +115,11 @@ public class SavedCustomMissionCreateRequest
     /// </summary>
     [MaxLength(20)]
     public string ConcurrencyMode { get; set; } = "Unlimited";
+
+    /// <summary>
+    /// Category ID for manual organization. Null means "Uncategorized".
+    /// </summary>
+    public int? CategoryId { get; set; }
 }
 
 /// <summary>
@@ -174,6 +190,11 @@ public class SavedCustomMissionUpdateRequest
     /// </summary>
     [MaxLength(20)]
     public string ConcurrencyMode { get; set; } = "Unlimited";
+
+    /// <summary>
+    /// Category ID for manual organization. Null means "Uncategorized".
+    /// </summary>
+    public int? CategoryId { get; set; }
 }
 
 /// <summary>

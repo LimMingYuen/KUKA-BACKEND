@@ -1,50 +1,27 @@
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace QES_KUKA_AMR_API.Middleware;
 
 /// <summary>
-/// Middleware that logs detailed information about every HTTP request and response.
-/// Includes: method, path, query parameters, headers, request body, response status, and duration.
+/// Middleware that logs all HTTP requests and responses with full body content.
+/// Automatically masks sensitive data like passwords and tokens.
 /// </summary>
 public class RequestResponseLoggingMiddleware
 {
     private readonly RequestDelegate _next;
     private readonly ILogger<RequestResponseLoggingMiddleware> _logger;
 
-    // Paths to skip logging (reduce noise)
-    private static readonly string[] SkipPaths = new[]
-    {
-        "/swagger",
-        "/favicon.ico",
-        "/hubs/queue",        // SignalR hub (too noisy)
-        "/health"
-    };
+    // Paths to exclude from logging
+    private static readonly string[] ExcludedPaths = { "/swagger", "/favicon.ico", "/_framework" };
 
-    // Headers that contain sensitive data (will be redacted)
-    private static readonly string[] SensitiveHeaders = new[]
-    {
-        "Authorization",
-        "Cookie",
-        "X-Api-Key"
-    };
+    // Maximum body size to log (10KB) - larger bodies will be truncated
+    private const int MaxBodyLogSize = 10240;
 
-    // JSON properties that contain sensitive data (will be redacted)
-    private static readonly string[] SensitiveJsonProperties = new[]
-    {
-        "password",
-        "passwordHash",
-        "token",
-        "accessToken",
-        "refreshToken",
-        "secret",
-        "apiKey",
-        "secretKey"
-    };
-
-    // Maximum body size to log (prevent memory issues with large uploads)
-    private const int MaxBodyLogSize = 32 * 1024; // 32KB
+    // Sensitive field patterns to mask (case-insensitive)
+    private static readonly string[] SensitiveFieldPatterns = { "password", "token", "secret", "apikey", "api_key", "credential" };
 
     public RequestResponseLoggingMiddleware(RequestDelegate next, ILogger<RequestResponseLoggingMiddleware> logger)
     {
@@ -54,274 +31,316 @@ public class RequestResponseLoggingMiddleware
 
     public async Task InvokeAsync(HttpContext context)
     {
-        var path = context.Request.Path.Value?.ToLowerInvariant() ?? "";
-
         // Skip logging for excluded paths
-        if (SkipPaths.Any(skip => path.StartsWith(skip, StringComparison.OrdinalIgnoreCase)))
+        var path = context.Request.Path.Value?.ToLowerInvariant() ?? "";
+        if (ExcludedPaths.Any(excluded => path.StartsWith(excluded, StringComparison.OrdinalIgnoreCase)))
         {
             await _next(context);
             return;
         }
 
-        // Generate correlation ID for request tracing
-        var correlationId = context.TraceIdentifier;
-        if (string.IsNullOrEmpty(correlationId))
-        {
-            correlationId = Guid.NewGuid().ToString("N")[..8];
-        }
+        // Generate correlation ID for tracking request/response pairs
+        var correlationId = Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
 
-        // Add correlation ID to response headers for debugging
-        context.Response.Headers["X-Correlation-Id"] = correlationId;
+        // Enable buffering to allow multiple reads of request body
+        context.Request.EnableBuffering();
+
+        // Log the request
+        await LogRequestAsync(context, correlationId);
+
+        // Capture the original response body stream
+        var originalBodyStream = context.Response.Body;
+
+        using var responseBody = new MemoryStream();
+        context.Response.Body = responseBody;
 
         var stopwatch = Stopwatch.StartNew();
 
-        // Log request details
-        await LogRequestAsync(context, correlationId);
-
-        // Capture response for logging
-        var originalBodyStream = context.Response.Body;
-        using var responseBodyStream = new MemoryStream();
-        context.Response.Body = responseBodyStream;
-
         try
         {
+            // Call the next middleware in the pipeline
             await _next(context);
         }
         finally
         {
             stopwatch.Stop();
 
-            // Log response details
-            await LogResponseAsync(context, correlationId, stopwatch.ElapsedMilliseconds, responseBodyStream);
+            // Log the response
+            await LogResponseAsync(context, responseBody, correlationId, stopwatch.ElapsedMilliseconds);
 
-            // Copy response body back to original stream
-            responseBodyStream.Seek(0, SeekOrigin.Begin);
-            await responseBodyStream.CopyToAsync(originalBodyStream);
-            context.Response.Body = originalBodyStream;
+            // Copy the response body back to the original stream
+            responseBody.Seek(0, SeekOrigin.Begin);
+            await responseBody.CopyToAsync(originalBodyStream);
         }
     }
 
     private async Task LogRequestAsync(HttpContext context, string correlationId)
     {
-        var request = context.Request;
-
-        // Build headers dictionary with redaction
-        var headers = new Dictionary<string, string>();
-        foreach (var header in request.Headers)
+        try
         {
-            var headerValue = SensitiveHeaders.Contains(header.Key, StringComparer.OrdinalIgnoreCase)
-                ? "[REDACTED]"
-                : header.Value.ToString();
-            headers[header.Key] = headerValue;
-        }
+            var request = context.Request;
 
-        // Read and log request body
-        string requestBody = "";
-        if (request.ContentLength > 0 && request.ContentLength <= MaxBodyLogSize)
-        {
-            request.EnableBuffering();
-            using var reader = new StreamReader(
-                request.Body,
-                Encoding.UTF8,
-                detectEncodingFromByteOrderMarks: false,
-                bufferSize: 1024,
-                leaveOpen: true);
+            // Read request body
+            request.Body.Seek(0, SeekOrigin.Begin);
+            using var reader = new StreamReader(request.Body, Encoding.UTF8, leaveOpen: true);
+            var requestBody = await reader.ReadToEndAsync();
+            request.Body.Seek(0, SeekOrigin.Begin);
 
-            requestBody = await reader.ReadToEndAsync();
-            request.Body.Position = 0;
+            // Mask sensitive data
+            var maskedBody = MaskSensitiveData(requestBody);
 
-            // Redact sensitive data in JSON body
-            if (!string.IsNullOrEmpty(requestBody) &&
-                request.ContentType?.Contains("application/json", StringComparison.OrdinalIgnoreCase) == true)
+            // Truncate if too large
+            if (maskedBody.Length > MaxBodyLogSize)
             {
-                requestBody = RedactSensitiveJsonData(requestBody);
+                maskedBody = maskedBody[..MaxBodyLogSize] + "\n  [TRUNCATED - body exceeds 10KB]";
             }
-        }
-        else if (request.ContentLength > MaxBodyLogSize)
-        {
-            requestBody = $"[BODY TOO LARGE: {request.ContentLength} bytes]";
-        }
 
-        // Get user identity if authenticated
-        var userId = context.User?.Identity?.IsAuthenticated == true
-            ? context.User.Identity.Name ?? "Unknown"
-            : "Anonymous";
+            // Format body for logging
+            var formattedBody = FormatJsonBody(maskedBody);
 
-        // Build query string
-        var queryString = request.QueryString.HasValue ? request.QueryString.Value : "";
+            // Get masked authorization header
+            var authHeader = GetMaskedAuthorizationHeader(request);
 
-        _logger.LogInformation(
-            "[{CorrelationId}] REQUEST: {Method} {Path}{QueryString} | User: {UserId} | " +
-            "ContentType: {ContentType} | ContentLength: {ContentLength}",
-            correlationId,
-            request.Method,
-            request.Path,
-            queryString,
-            userId,
-            request.ContentType ?? "N/A",
-            request.ContentLength ?? 0);
-
-        // Log headers at Debug level (more verbose)
-        if (_logger.IsEnabled(LogLevel.Debug))
-        {
-            _logger.LogDebug(
-                "[{CorrelationId}] REQUEST HEADERS: {Headers}",
-                correlationId,
-                JsonSerializer.Serialize(headers, new JsonSerializerOptions { WriteIndented = false }));
-        }
-
-        // Log request body if present
-        if (!string.IsNullOrEmpty(requestBody))
-        {
             _logger.LogInformation(
-                "[{CorrelationId}] REQUEST BODY: {Body}",
+                "=== API REQUEST [{CorrelationId}] ===\n" +
+                "  Method: {Method}\n" +
+                "  Path: {Path}\n" +
+                "  Query: {Query}\n" +
+                "  Authorization: {Auth}\n" +
+                "  Content-Type: {ContentType}\n" +
+                "  Body: {Body}",
                 correlationId,
-                requestBody);
+                request.Method,
+                request.Path,
+                request.QueryString.HasValue ? request.QueryString.Value : "(none)",
+                authHeader,
+                request.ContentType ?? "(none)",
+                string.IsNullOrWhiteSpace(formattedBody) ? "(empty)" : formattedBody);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to log request [{CorrelationId}]", correlationId);
         }
     }
 
-    private async Task LogResponseAsync(HttpContext context, string correlationId, long elapsedMs, MemoryStream responseBodyStream)
+    private async Task LogResponseAsync(HttpContext context, MemoryStream responseBody, string correlationId, long durationMs)
     {
-        var response = context.Response;
-
-        // Read response body
-        responseBodyStream.Seek(0, SeekOrigin.Begin);
-        string responseBody = "";
-
-        if (responseBodyStream.Length > 0 && responseBodyStream.Length <= MaxBodyLogSize)
+        try
         {
-            responseBody = await new StreamReader(responseBodyStream).ReadToEndAsync();
+            // Read response body
+            responseBody.Seek(0, SeekOrigin.Begin);
+            using var reader = new StreamReader(responseBody, Encoding.UTF8, leaveOpen: true);
+            var responseContent = await reader.ReadToEndAsync();
+            responseBody.Seek(0, SeekOrigin.Begin);
 
-            // Redact sensitive data in JSON response
-            if (!string.IsNullOrEmpty(responseBody) &&
-                response.ContentType?.Contains("application/json", StringComparison.OrdinalIgnoreCase) == true)
+            // Mask sensitive data
+            var maskedBody = MaskSensitiveData(responseContent);
+
+            // Truncate if too large
+            if (maskedBody.Length > MaxBodyLogSize)
             {
-                responseBody = RedactSensitiveJsonData(responseBody);
+                maskedBody = maskedBody[..MaxBodyLogSize] + "\n  [TRUNCATED - body exceeds 10KB]";
             }
+
+            // Format body for logging
+            var formattedBody = FormatJsonBody(maskedBody);
+
+            // Determine log level based on status code
+            var statusCode = context.Response.StatusCode;
+            var logLevel = statusCode >= 500 ? LogLevel.Error
+                         : statusCode >= 400 ? LogLevel.Warning
+                         : LogLevel.Information;
+
+            _logger.Log(logLevel,
+                "=== API RESPONSE [{CorrelationId}] ===\n" +
+                "  Status: {StatusCode}\n" +
+                "  Duration: {Duration}ms\n" +
+                "  Content-Type: {ContentType}\n" +
+                "  Body: {Body}",
+                correlationId,
+                statusCode,
+                durationMs,
+                context.Response.ContentType ?? "(none)",
+                string.IsNullOrWhiteSpace(formattedBody) ? "(empty)" : formattedBody);
         }
-        else if (responseBodyStream.Length > MaxBodyLogSize)
+        catch (Exception ex)
         {
-            responseBody = $"[BODY TOO LARGE: {responseBodyStream.Length} bytes]";
-        }
-
-        // Determine log level based on status code
-        var logLevel = response.StatusCode switch
-        {
-            >= 500 => LogLevel.Error,
-            >= 400 => LogLevel.Warning,
-            _ => LogLevel.Information
-        };
-
-        _logger.Log(
-            logLevel,
-            "[{CorrelationId}] RESPONSE: {StatusCode} | Duration: {ElapsedMs}ms | " +
-            "ContentType: {ContentType} | ContentLength: {ContentLength}",
-            correlationId,
-            response.StatusCode,
-            elapsedMs,
-            response.ContentType ?? "N/A",
-            responseBodyStream.Length);
-
-        // Log response body (only for non-success or when debugging)
-        if (!string.IsNullOrEmpty(responseBody))
-        {
-            if (response.StatusCode >= 400 || _logger.IsEnabled(LogLevel.Debug))
-            {
-                _logger.Log(
-                    logLevel,
-                    "[{CorrelationId}] RESPONSE BODY: {Body}",
-                    correlationId,
-                    responseBody);
-            }
+            _logger.LogWarning(ex, "Failed to log response [{CorrelationId}]", correlationId);
         }
     }
 
     /// <summary>
-    /// Redacts sensitive fields in JSON data to prevent logging passwords, tokens, etc.
+    /// Masks sensitive data in JSON content
     /// </summary>
-    private string RedactSensitiveJsonData(string json)
+    private static string MaskSensitiveData(string content)
     {
-        if (string.IsNullOrWhiteSpace(json))
-            return json;
+        if (string.IsNullOrWhiteSpace(content))
+            return content;
 
         try
         {
-            using var doc = JsonDocument.Parse(json);
-            using var stream = new MemoryStream();
-            using var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = false });
-
-            RedactJsonElement(doc.RootElement, writer);
-
-            writer.Flush();
-            return Encoding.UTF8.GetString(stream.ToArray());
+            // Try to parse and mask JSON
+            using var doc = JsonDocument.Parse(content);
+            var maskedJson = MaskJsonElement(doc.RootElement);
+            return JsonSerializer.Serialize(maskedJson, new JsonSerializerOptions { WriteIndented = true });
         }
         catch
         {
-            // If JSON parsing fails, return original (might not be valid JSON)
-            return json;
+            // If not valid JSON, use regex to mask common patterns
+            return MaskSensitiveStrings(content);
         }
     }
 
-    private void RedactJsonElement(JsonElement element, Utf8JsonWriter writer)
+    /// <summary>
+    /// Recursively masks sensitive fields in JSON
+    /// </summary>
+    private static object? MaskJsonElement(JsonElement element)
     {
         switch (element.ValueKind)
         {
             case JsonValueKind.Object:
-                writer.WriteStartObject();
+                var dict = new Dictionary<string, object?>();
                 foreach (var property in element.EnumerateObject())
                 {
-                    writer.WritePropertyName(property.Name);
+                    var key = property.Name;
+                    var isSensitive = SensitiveFieldPatterns.Any(pattern =>
+                        key.Contains(pattern, StringComparison.OrdinalIgnoreCase));
 
-                    // Check if this property should be redacted
-                    if (SensitiveJsonProperties.Contains(property.Name, StringComparer.OrdinalIgnoreCase))
+                    if (isSensitive && property.Value.ValueKind == JsonValueKind.String)
                     {
-                        writer.WriteStringValue("[REDACTED]");
+                        var value = property.Value.GetString() ?? "";
+                        dict[key] = MaskValue(value);
                     }
                     else
                     {
-                        RedactJsonElement(property.Value, writer);
+                        dict[key] = MaskJsonElement(property.Value);
                     }
                 }
-                writer.WriteEndObject();
-                break;
+                return dict;
 
             case JsonValueKind.Array:
-                writer.WriteStartArray();
+                var list = new List<object?>();
                 foreach (var item in element.EnumerateArray())
                 {
-                    RedactJsonElement(item, writer);
+                    list.Add(MaskJsonElement(item));
                 }
-                writer.WriteEndArray();
-                break;
+                return list;
 
             case JsonValueKind.String:
-                writer.WriteStringValue(element.GetString());
-                break;
+                return element.GetString();
 
             case JsonValueKind.Number:
-                writer.WriteRawValue(element.GetRawText());
-                break;
+                if (element.TryGetInt64(out var longValue))
+                    return longValue;
+                return element.GetDouble();
 
             case JsonValueKind.True:
-                writer.WriteBooleanValue(true);
-                break;
+                return true;
 
             case JsonValueKind.False:
-                writer.WriteBooleanValue(false);
-                break;
+                return false;
 
             case JsonValueKind.Null:
-                writer.WriteNullValue();
-                break;
+            default:
+                return null;
+        }
+    }
+
+    /// <summary>
+    /// Masks a sensitive value, keeping first and last characters visible
+    /// </summary>
+    private static string MaskValue(string value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return "***MASKED***";
+
+        if (value.Length <= 6)
+            return "***MASKED***";
+
+        // For JWT tokens, show "eyJ...last4"
+        if (value.StartsWith("eyJ", StringComparison.Ordinal))
+            return $"eyJ***...{value[^4..]}";
+
+        // For other values, show first2...last2
+        return $"{value[..2]}***...{value[^2..]}";
+    }
+
+    /// <summary>
+    /// Fallback regex masking for non-JSON content
+    /// </summary>
+    private static string MaskSensitiveStrings(string content)
+    {
+        // Mask common patterns
+        var result = content;
+
+        // Mask password-like patterns: "password":"value" or password=value
+        result = Regex.Replace(result, @"([""']?password[""']?\s*[:=]\s*[""']?)([^""',\s}]+)", "$1***MASKED***", RegexOptions.IgnoreCase);
+
+        // Mask token-like patterns
+        result = Regex.Replace(result, @"([""']?token[""']?\s*[:=]\s*[""']?)([^""',\s}]+)", "$1***MASKED***", RegexOptions.IgnoreCase);
+
+        // Mask Bearer tokens
+        result = Regex.Replace(result, @"(Bearer\s+)(\S+)", "$1***MASKED***", RegexOptions.IgnoreCase);
+
+        return result;
+    }
+
+    /// <summary>
+    /// Gets the Authorization header with token masked
+    /// </summary>
+    private static string GetMaskedAuthorizationHeader(HttpRequest request)
+    {
+        if (!request.Headers.TryGetValue("Authorization", out var authValue))
+            return "(none)";
+
+        var auth = authValue.ToString();
+        if (string.IsNullOrEmpty(auth))
+            return "(none)";
+
+        // Mask Bearer token
+        if (auth.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) && auth.Length > 15)
+        {
+            return $"Bearer {auth[7..11]}***...{auth[^4..]}";
+        }
+
+        return "***MASKED***";
+    }
+
+    /// <summary>
+    /// Formats JSON body for better readability in logs
+    /// </summary>
+    private static string FormatJsonBody(string body)
+    {
+        if (string.IsNullOrWhiteSpace(body))
+            return body;
+
+        try
+        {
+            // If it's already formatted JSON, return as-is
+            if (body.Contains('\n'))
+                return body;
+
+            // Try to parse and format
+            using var doc = JsonDocument.Parse(body);
+            return JsonSerializer.Serialize(doc, new JsonSerializerOptions { WriteIndented = true });
+        }
+        catch
+        {
+            // Not JSON, return as-is
+            return body;
         }
     }
 }
 
 /// <summary>
-/// Extension method for cleaner middleware registration
+/// Extension methods for registering RequestResponseLoggingMiddleware
 /// </summary>
 public static class RequestResponseLoggingMiddlewareExtensions
 {
+    /// <summary>
+    /// Adds the request/response logging middleware to the pipeline.
+    /// This middleware logs all HTTP requests and responses with full body content.
+    /// </summary>
     public static IApplicationBuilder UseRequestResponseLogging(this IApplicationBuilder builder)
     {
         return builder.UseMiddleware<RequestResponseLoggingMiddleware>();

@@ -221,14 +221,23 @@ public class MissionQueueController : ControllerBase
     }
 
     /// <summary>
-    /// Cancel a queued mission
+    /// Cancel a queued mission with specified cancel mode
     /// </summary>
-    [HttpDelete("{id}")]
-    public async Task<ActionResult<ApiResponse<object>>> Cancel(int id, CancellationToken cancellationToken)
+    /// <param name="id">Queue item ID</param>
+    /// <param name="request">Cancel request with mode and optional reason</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    [HttpPost("{id}/cancel")]
+    public async Task<ActionResult<ApiResponse<object>>> Cancel(
+        int id,
+        [FromBody] CancelQueueRequest request,
+        CancellationToken cancellationToken)
     {
         try
         {
-            var success = await _queueService.CancelAsync(id, cancellationToken);
+            _logger.LogInformation("Cancel request received for queue item {Id} with mode {CancelMode}, reason: {Reason}",
+                id, request.CancelMode, request.Reason);
+
+            var success = await _queueService.CancelAsync(id, request.CancelMode, request.Reason, cancellationToken);
             if (!success)
             {
                 return BadRequest(new ApiResponse<object>
@@ -241,7 +250,7 @@ public class MissionQueueController : ControllerBase
             return Ok(new ApiResponse<object>
             {
                 Success = true,
-                Msg = "Queue item cancelled successfully"
+                Msg = $"Queue item cancelled successfully (mode: {request.CancelMode})"
             });
         }
         catch (Exception ex)
@@ -475,4 +484,10 @@ public class AddToQueueRequest
 public class ChangePriorityRequest
 {
     public int Priority { get; set; }
+}
+
+public class CancelQueueRequest
+{
+    public string CancelMode { get; set; } = "FORCE";
+    public string? Reason { get; set; }
 }

@@ -40,6 +40,8 @@ public class ApplicationDbContext : DbContext
 
     public DbSet<SavedCustomMission> SavedCustomMissions => Set<SavedCustomMission>();
 
+    public DbSet<TemplateCategory> TemplateCategories => Set<TemplateCategory>();
+
     public DbSet<RobotManualPause> RobotManualPauses => Set<RobotManualPause>();
 
     public DbSet<User> Users => Set<User>();
@@ -200,10 +202,26 @@ public class ApplicationDbContext : DbContext
         {
             entity.HasIndex(e => e.MissionName);
             entity.HasIndex(e => new { e.CreatedBy, e.IsDeleted });
+            entity.HasIndex(e => e.CategoryId);
             entity.Property(e => e.MissionStepsJson).HasColumnType("nvarchar(max)");
             entity.Property(e => e.CreatedUtc).HasColumnType("datetime2");
             entity.Property(e => e.UpdatedUtc).HasColumnType("datetime2");
             entity.HasQueryFilter(e => !e.IsDeleted);
+            // FK to TemplateCategory - SetNull on delete so templates become Uncategorized
+            entity.HasOne(e => e.Category)
+                .WithMany()
+                .HasForeignKey(e => e.CategoryId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<TemplateCategory>(entity =>
+        {
+            entity.ToTable("TemplateCategories");
+            entity.HasIndex(e => e.Name).IsUnique();
+            entity.Property(e => e.Name).HasMaxLength(128).IsRequired();
+            entity.Property(e => e.Description).HasMaxLength(512);
+            entity.Property(e => e.CreatedUtc).HasColumnType("datetime2");
+            entity.Property(e => e.UpdatedUtc).HasColumnType("datetime2");
         });
 
         modelBuilder.Entity<RobotManualPause>(entity =>

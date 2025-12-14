@@ -103,6 +103,12 @@ public class WorkflowSchedule
     public int? MaxExecutions { get; set; }
 
     /// <summary>
+    /// When enabled, skip triggering if any instance of the same SavedMission
+    /// is already running (Queued, Processing, or Assigned status).
+    /// </summary>
+    public bool SkipIfRunning { get; set; } = false;
+
+    /// <summary>
     /// User who created this schedule
     /// </summary>
     [Required]

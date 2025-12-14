@@ -21,6 +21,7 @@ using QES_KUKA_AMR_API.Services.Roles;
 using QES_KUKA_AMR_API.Converters;
 using QES_KUKA_AMR_API.Services.SavedCustomMissions;
 using QES_KUKA_AMR_API.Services.ShelfDecisionRules;
+using QES_KUKA_AMR_API.Services.TemplateCategories;
 using QES_KUKA_AMR_API.Services.Users;
 using QES_KUKA_AMR_API.Services.WorkflowNodeCodes;
 using QES_KUKA_AMR_API.Services.Pages;
@@ -54,7 +55,7 @@ builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        policy.WithOrigins("http://localhost:4200", "http://localhost:5109", "http://localhost:5003", "http://localhost:8004")
+        policy.WithOrigins("http://localhost:4200", "http://localhost:5109", "http://localhost:5003", "http://localhost:8004", "http://172.16.112.193:8004")
               .AllowAnyMethod()
               .AllowAnyHeader()
               .AllowCredentials(); // Required for SignalR
@@ -192,6 +193,7 @@ builder.Services.AddScoped<IUserTemplatePermissionService, UserTemplatePermissio
 builder.Services.AddScoped<IRobotAnalyticsService, RobotAnalyticsService>();
 builder.Services.AddScoped<IWorkflowNodeCodeService, WorkflowNodeCodeService>();
 builder.Services.AddScoped<IRobotMonitoringService, RobotMonitoringService>();
+builder.Services.AddScoped<ITemplateCategoryService, TemplateCategoryService>();
 
 // Authentication Services
 builder.Services.AddScoped<IAuthService, AuthService>();

@@ -95,6 +95,7 @@ public class WorkflowScheduleService : IWorkflowScheduleService
             CronExpression = request.CronExpression,
             IsEnabled = request.IsEnabled,
             MaxExecutions = request.MaxExecutions,
+            SkipIfRunning = request.SkipIfRunning,
             CreatedBy = createdBy,
             CreatedUtc = now,
             NextRunUtc = request.IsEnabled ? CalculateNextRun(request.ScheduleType, request.OneTimeUtc, request.IntervalMinutes, request.CronExpression, now) : null
@@ -136,6 +137,7 @@ public class WorkflowScheduleService : IWorkflowScheduleService
         if (request.IntervalMinutes.HasValue) schedule.IntervalMinutes = request.IntervalMinutes;
         if (request.CronExpression != null) schedule.CronExpression = request.CronExpression;
         if (request.MaxExecutions.HasValue) schedule.MaxExecutions = request.MaxExecutions;
+        if (request.SkipIfRunning.HasValue) schedule.SkipIfRunning = request.SkipIfRunning.Value;
 
         // Handle enabled state change
         if (request.IsEnabled.HasValue)
@@ -397,6 +399,44 @@ public class WorkflowScheduleService : IWorkflowScheduleService
         await _dbContext.SaveChangesAsync(ct);
     }
 
+    public async Task UpdateAfterSkippedAsync(int id, int activeInstanceCount, CancellationToken ct = default)
+    {
+        var schedule = await _dbContext.WorkflowSchedules.FindAsync(new object[] { id }, ct);
+        if (schedule == null) return;
+
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+
+        schedule.LastRunUtc = now;
+        schedule.LastRunStatus = "Skipped";
+        schedule.LastErrorMessage = $"Skipped: {activeInstanceCount} active instance(s) already running";
+        // Note: ExecutionCount is NOT incremented for skipped executions
+        schedule.UpdatedUtc = now;
+
+        // Still calculate next run time (schedule continues normally)
+        if (schedule.IsEnabled)
+        {
+            schedule.NextRunUtc = CalculateNextRun(
+                schedule.ScheduleType,
+                schedule.OneTimeUtc,
+                schedule.IntervalMinutes,
+                schedule.CronExpression,
+                now);
+
+            // For OneTime schedules, disable after being skipped (as the scheduled time has passed)
+            if (schedule.ScheduleType == "OneTime")
+            {
+                schedule.IsEnabled = false;
+                schedule.NextRunUtc = null;
+            }
+        }
+
+        await _dbContext.SaveChangesAsync(ct);
+
+        _logger.LogInformation(
+            "Schedule {ScheduleId} skipped (SkipIfRunning), next run: {NextRun}",
+            schedule.Id, schedule.NextRunUtc);
+    }
+
     #region Private Helpers
 
     private void ValidateScheduleParameters(string scheduleType, DateTime? oneTimeUtc, int? intervalMinutes, string? cronExpression)
@@ -480,6 +520,7 @@ public class WorkflowScheduleService : IWorkflowScheduleService
             LastErrorMessage = schedule.LastErrorMessage,
             ExecutionCount = schedule.ExecutionCount,
             MaxExecutions = schedule.MaxExecutions,
+            SkipIfRunning = schedule.SkipIfRunning,
             CreatedBy = schedule.CreatedBy,
             CreatedUtc = schedule.CreatedUtc,
             UpdatedUtc = schedule.UpdatedUtc

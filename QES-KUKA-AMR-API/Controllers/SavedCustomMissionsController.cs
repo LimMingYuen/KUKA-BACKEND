@@ -267,6 +267,41 @@ public class SavedCustomMissionsController : ControllerBase
         return Ok(Success(MapToDto(toggled)));
     }
 
+    /// <summary>
+    /// Assign a template to a category (or move to Uncategorized by setting categoryId to null)
+    /// </summary>
+    [HttpPatch("{id:int}/category")]
+    [ProducesResponseType(typeof(ApiResponse<SavedCustomMissionDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<ApiResponse<SavedCustomMissionDto>>> AssignCategoryAsync(
+        int id,
+        [FromBody] Models.TemplateCategories.AssignTemplateToCategoryRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var updated = await _savedCustomMissionService.AssignCategoryAsync(id, request.CategoryId, cancellationToken);
+            if (updated is null)
+            {
+                return NotFound(NotFoundProblem(id));
+            }
+
+            return Ok(Success(MapToDto(updated)));
+        }
+        catch (SavedCustomMissionValidationException ex)
+        {
+            _logger.LogWarning(ex, "Validation error while assigning category to template {Id}", id);
+            return BadRequest(new ProblemDetails
+            {
+                Title = "Invalid category.",
+                Detail = ex.Message,
+                Status = StatusCodes.Status400BadRequest,
+                Type = "https://httpstatuses.com/400"
+            });
+        }
+    }
+
     [HttpPost("{id:int}/trigger")]
     [ProducesResponseType(typeof(ApiResponse<TriggerMissionResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
@@ -370,6 +405,8 @@ public class SavedCustomMissionsController : ControllerBase
             CreatedUtc = mission.CreatedUtc,
             UpdatedUtc = mission.UpdatedUtc,
             IsActive = mission.IsActive,
+            CategoryId = mission.CategoryId,
+            CategoryName = mission.Category?.Name,
             ScheduleSummary = new SavedMissionScheduleSummaryDto
             {
                 TotalSchedules = 0,

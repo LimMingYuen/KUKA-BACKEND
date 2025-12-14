@@ -116,6 +116,23 @@ public class WorkflowSchedulerHostedService : BackgroundService
                 return;
             }
 
+            // Check if SkipIfRunning is enabled and there are active instances
+            if (schedule.SkipIfRunning)
+            {
+                var activeCount = await queueService.GetActiveInstanceCountAsync(schedule.SavedMissionId, ct);
+                if (activeCount > 0)
+                {
+                    _logger.LogInformation(
+                        "Skipping scheduled workflow: Schedule '{ScheduleName}' (ID: {ScheduleId}) - " +
+                        "{ActiveCount} active instance(s) of mission '{MissionName}' already running",
+                        schedule.ScheduleName, schedule.Id, activeCount,
+                        schedule.SavedMission?.MissionName ?? "Unknown");
+
+                    await scheduleService.UpdateAfterSkippedAsync(schedule.Id, activeCount, ct);
+                    return;
+                }
+            }
+
             // Generate unique IDs
             var timestamp = timeProvider.GetUtcNow().UtcDateTime.ToString("yyyyMMddHHmmss");
             var requestId = $"sched{schedule.Id}_{timestamp}";

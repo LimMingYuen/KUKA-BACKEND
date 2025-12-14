@@ -1,12 +1,17 @@
-using Microsoft.Extensions.DependencyInjection;
+using System.Net.Http.Json;
+using System.Security.Cryptography;
+using System.Text;
+using Microsoft.Extensions.Options;
+using QES_KUKA_AMR_API.Models;
 using QES_KUKA_AMR_API.Models.Login;
-using QES_KUKA_AMR_API.Services.Login;
+using QES_KUKA_AMR_API.Options;
 
 namespace QES_KUKA_AMR_API.Services.Auth;
 
 public class ExternalApiTokenService : IExternalApiTokenService
 {
-    private readonly IServiceScopeFactory _serviceScopeFactory;
+    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly LoginServiceOptions _loginOptions;
     private readonly ILogger<ExternalApiTokenService> _logger;
     private readonly TimeProvider _timeProvider;
     private readonly SemaphoreSlim _semaphore = new(1, 1);
@@ -21,11 +26,13 @@ public class ExternalApiTokenService : IExternalApiTokenService
     private DateTime? _tokenExpiresAt;
 
     public ExternalApiTokenService(
-        IServiceScopeFactory serviceScopeFactory,
+        IHttpClientFactory httpClientFactory,
+        IOptions<LoginServiceOptions> loginOptions,
         ILogger<ExternalApiTokenService> logger,
         TimeProvider timeProvider)
     {
-        _serviceScopeFactory = serviceScopeFactory;
+        _httpClientFactory = httpClientFactory;
+        _loginOptions = loginOptions.Value;
         _logger = logger;
         _timeProvider = timeProvider;
     }
@@ -37,9 +44,16 @@ public class ExternalApiTokenService : IExternalApiTokenService
         // Check if we have a valid cached token
         if (_cachedToken != null && _tokenExpiresAt != null && _tokenExpiresAt > now)
         {
-            _logger.LogDebug("Using cached external API token (expires at {ExpiresAt})", _tokenExpiresAt);
+            var tokenPreview = _cachedToken.Length > 20
+                ? $"{_cachedToken.Substring(0, 10)}...{_cachedToken.Substring(_cachedToken.Length - 10)}"
+                : _cachedToken;
+            _logger.LogInformation("Using cached external API token (expires at {ExpiresAt}, preview: {TokenPreview})",
+                _tokenExpiresAt, tokenPreview);
             return _cachedToken;
         }
+
+        _logger.LogInformation("No valid cached token. CachedToken={HasToken}, ExpiresAt={ExpiresAt}, Now={Now}",
+            _cachedToken != null, _tokenExpiresAt, now);
 
         // Token expired or doesn't exist, refresh it
         await RefreshTokenAsync(cancellationToken);
@@ -65,24 +79,33 @@ public class ExternalApiTokenService : IExternalApiTokenService
                 return;
             }
 
-            _logger.LogInformation("Refreshing external API token with credentials: {Username}", ExternalApiUsername);
+            if (string.IsNullOrWhiteSpace(_loginOptions.LoginUrl))
+            {
+                throw new InvalidOperationException("Login URL is not configured. Check LoginService:LoginUrl in appsettings.json");
+            }
+
+            _logger.LogInformation("Refreshing external API token from {LoginUrl} with credentials: {Username}",
+                _loginOptions.LoginUrl, ExternalApiUsername);
+
+            var password = _loginOptions.HashPassword
+                ? ComputeMd5Hash(ExternalApiPassword)
+                : ExternalApiPassword;
 
             var loginRequest = new LoginRequest
             {
                 Username = ExternalApiUsername,
-                Password = ExternalApiPassword
+                Password = password
             };
 
-            // Create a scope to resolve scoped ILoginServiceClient
-            using var scope = _serviceScopeFactory.CreateScope();
-            var loginServiceClient = scope.ServiceProvider.GetRequiredService<ILoginServiceClient>();
+            var httpClient = _httpClientFactory.CreateClient();
+            var response = await httpClient.PostAsJsonAsync(_loginOptions.LoginUrl, loginRequest, cancellationToken);
 
-            var response = await loginServiceClient.LoginAsync(loginRequest, cancellationToken);
+            var responseBody = await response.Content.ReadFromJsonAsync<ApiResponse<LoginResponseData>>(cancellationToken);
 
-            if (response.Body?.Success == true && response.Body.Data?.Token != null)
+            if (responseBody?.Success == true && responseBody.Data?.Token != null)
             {
                 // Strip "Bearer " prefix if present (simulator returns token with "Bearer " prefix)
-                var token = response.Body.Data.Token;
+                var token = responseBody.Data.Token;
                 if (token.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
                 {
                     token = token.Substring(7);
@@ -97,7 +120,7 @@ public class ExternalApiTokenService : IExternalApiTokenService
             }
             else
             {
-                var errorMsg = response.Body?.Msg ?? "Unknown error";
+                var errorMsg = responseBody?.Msg ?? "Unknown error";
                 _logger.LogError(
                     "Failed to obtain external API token. Status: {StatusCode}, Message: {Message}",
                     response.StatusCode,
@@ -115,5 +138,13 @@ public class ExternalApiTokenService : IExternalApiTokenService
         {
             _semaphore.Release();
         }
+    }
+
+    private static string ComputeMd5Hash(string input)
+    {
+        using var md5 = MD5.Create();
+        var inputBytes = Encoding.UTF8.GetBytes(input);
+        var hashBytes = md5.ComputeHash(inputBytes);
+        return Convert.ToHexString(hashBytes).ToLowerInvariant();
     }
 }

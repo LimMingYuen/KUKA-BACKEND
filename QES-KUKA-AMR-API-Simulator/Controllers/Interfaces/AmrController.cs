@@ -203,10 +203,18 @@ public class AmrController : ControllerBase
             {
                 job.IsCancelled = true;
                 job.CancelledAt ??= DateTime.UtcNow;
-                _logger.LogInformation("Job marked as cancelled: {MissionCode}", request.MissionCode);
+                job.CancelMode = string.IsNullOrWhiteSpace(request.CancelMode) ? "FORCE" : request.CancelMode.ToUpperInvariant();
+                job.StepIndexAtCancellation = job.CurrentStepIndex;
 
-                // End robot simulation (cancelled)
-                _simulationService.EndJob(job.RobotId, cancelled: true);
+                _logger.LogInformation("Job marked as cancelled: {MissionCode} with mode {CancelMode} at step {StepIndex}",
+                    request.MissionCode, job.CancelMode, job.StepIndexAtCancellation);
+
+                // For FORCE mode, end simulation immediately
+                // For NORMAL/REDIRECT_START, let DetermineJobStatus handle the gradual transition
+                if (job.CancelMode == "FORCE")
+                {
+                    _simulationService.EndJob(job.RobotId, cancelled: true);
+                }
             }
         }
 
@@ -680,13 +688,103 @@ public class AmrController : ControllerBase
 
     private int DetermineJobStatus(SimulatedJob job, DateTime now)
     {
-        // Handle cancelled state
+        // Handle cancelled state with differentiated behavior based on cancel mode
         if (job.IsCancelled)
         {
             job.CancelledAt ??= now;
             var cancelDuration = (now - job.CancelledAt.Value).TotalSeconds;
-            // Show Cancelling (28) for 2 seconds, then Cancelled (31)
-            return cancelDuration < 2 ? 28 : 31;
+            var travelTimePerNode = _configuration.GetValue<int>("JobSimulation:TravelTimePerNodeSeconds", 4);
+
+            switch (job.CancelMode)
+            {
+                case "FORCE":
+                    // Immediate cancellation - show Cancelling briefly then Cancelled
+                    return cancelDuration < 2 ? 28 : 31;
+
+                case "NORMAL":
+                    // Complete current step first, then cancel
+                    if (!job.HasCompletedCurrentStepAfterCancel)
+                    {
+                        // Check if enough time has passed to complete current step
+                        var timeAtStep = job.CurrentStepStartTime.HasValue
+                            ? (now - job.CurrentStepStartTime.Value).TotalSeconds
+                            : cancelDuration;
+
+                        if (timeAtStep >= travelTimePerNode)
+                        {
+                            job.HasCompletedCurrentStepAfterCancel = true;
+                            _logger.LogInformation("NORMAL cancel: Job {MissionCode} completed current step, now cancelling",
+                                job.Request.MissionCode);
+                            // End simulation now
+                            _simulationService.EndJob(job.RobotId, cancelled: true);
+                        }
+                        else
+                        {
+                            _logger.LogInformation("NORMAL cancel: Job {MissionCode} still completing current step ({TimeRemaining:F1}s remaining)",
+                                job.Request.MissionCode, travelTimePerNode - timeAtStep);
+                            return 20; // Still executing current step
+                        }
+                    }
+                    // After completing current step, show Cancelling briefly then Cancelled
+                    var normalCancelDuration = job.HasCompletedCurrentStepAfterCancel
+                        ? (now - job.CancelledAt.Value).TotalSeconds - travelTimePerNode
+                        : cancelDuration;
+                    return normalCancelDuration < 2 ? 28 : 31;
+
+                case "REDIRECT_START":
+                    // Complete current step, then return to start node, then cancel
+                    if (!job.HasCompletedCurrentStepAfterCancel)
+                    {
+                        // Check if enough time has passed to complete current step
+                        var timeAtStep = job.CurrentStepStartTime.HasValue
+                            ? (now - job.CurrentStepStartTime.Value).TotalSeconds
+                            : cancelDuration;
+
+                        if (timeAtStep >= travelTimePerNode)
+                        {
+                            job.HasCompletedCurrentStepAfterCancel = true;
+                            job.IsReturningToStart = true;
+                            job.ReturnToStartBeganAt = now;
+                            _logger.LogInformation("REDIRECT_START cancel: Job {MissionCode} completed current step, now returning to start node {StartNode}",
+                                job.Request.MissionCode, job.BeginCellCode);
+                        }
+                        else
+                        {
+                            _logger.LogInformation("REDIRECT_START cancel: Job {MissionCode} still completing current step",
+                                job.Request.MissionCode);
+                            return 20; // Still executing current step
+                        }
+                    }
+
+                    if (job.IsReturningToStart && job.ReturnToStartBeganAt.HasValue)
+                    {
+                        // Calculate return journey time based on steps traveled
+                        var stepsToReturn = Math.Max(1, job.StepIndexAtCancellation);
+                        var returnJourneyTime = stepsToReturn * travelTimePerNode;
+                        var returnProgress = (now - job.ReturnToStartBeganAt.Value).TotalSeconds;
+
+                        if (returnProgress < returnJourneyTime)
+                        {
+                            _logger.LogInformation("REDIRECT_START cancel: Job {MissionCode} returning to start ({Progress:F1}s / {Total}s)",
+                                job.Request.MissionCode, returnProgress, returnJourneyTime);
+                            return 20; // Still returning to start
+                        }
+                        else
+                        {
+                            // Reached start node
+                            job.IsReturningToStart = false;
+                            _logger.LogInformation("REDIRECT_START cancel: Job {MissionCode} reached start node, now cancelling",
+                                job.Request.MissionCode);
+                            _simulationService.EndJob(job.RobotId, cancelled: true);
+                        }
+                    }
+                    // After returning to start, show Cancelling briefly then Cancelled
+                    return cancelDuration < 2 ? 28 : 31;
+
+                default:
+                    // Unknown mode - treat as FORCE
+                    return cancelDuration < 2 ? 28 : 31;
+            }
         }
 
         // Initialize job on first query - starts in Created state
@@ -882,5 +980,12 @@ public class AmrController : ControllerBase
 
         // Area resolution cache: maps area code to resolved node code
         public Dictionary<string, string> AreaPositionToResolvedNode { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+        // Cancel mode tracking for differentiated cancellation behavior
+        public string CancelMode { get; set; } = "FORCE";
+        public int StepIndexAtCancellation { get; set; } = -1;  // Track which step robot was on when cancelled
+        public bool HasCompletedCurrentStepAfterCancel { get; set; }  // For NORMAL/REDIRECT_START modes
+        public bool IsReturningToStart { get; set; }  // For REDIRECT_START mode
+        public DateTime? ReturnToStartBeganAt { get; set; }  // Track when return journey started
     }
 }

@@ -169,17 +169,12 @@ public class QueueProcessorService : BackgroundService
         {
             var client = httpClientFactory.CreateClient();
 
-            // Get token (auto-cached, auto-refresh)
-            var token = await tokenService.GetTokenAsync(cancellationToken);
-
+            // AMR endpoints on port 10870 don't require authentication
             client.DefaultRequestHeaders.Clear();
             client.DefaultRequestHeaders.Add("accept", "*/*");
             client.DefaultRequestHeaders.Add("language", "en");
             client.DefaultRequestHeaders.Add("wizards", "FRONT_END");
-            if (!string.IsNullOrEmpty(token))
-            {
-                client.DefaultRequestHeaders.Add("Authorization", $"Bearer {token}");
-            }
+            // Note: No Authorization header - AMR endpoints don't require auth
 
             var request = new RobotQueryRequest { RobotId = robotId };
 
@@ -483,6 +478,20 @@ public class QueueProcessorService : BackgroundService
                     await UpdateMissionHistoryStatusAsync(dbContext, missionHistory.Id, "Completed",
                         jobResult.JobData?.RobotId ?? selectedRobotId, null, cancellationToken);
                 }
+                else if (jobResult.IsCancelled)
+                {
+                    _logger.LogInformation("⊘ Mission {MissionCode} was cancelled with status {Status}",
+                        mission.MissionCode, jobResult.FinalStatus);
+                    await queueService.UpdateStatusAsync(
+                        mission.Id,
+                        MissionQueueStatus.Cancelled,
+                        $"Job cancelled with status {jobResult.FinalStatus}: {jobResult.ErrorMessage}",
+                        cancellationToken);
+
+                    // Update MissionHistory to Cancelled
+                    await UpdateMissionHistoryStatusAsync(dbContext, missionHistory.Id, "Cancelled",
+                        jobResult.JobData?.RobotId ?? selectedRobotId, jobResult.ErrorMessage, cancellationToken);
+                }
                 else if (jobResult.IsFailed)
                 {
                     _logger.LogWarning("✗ Mission {MissionCode} failed with status {Status}",
@@ -664,16 +673,12 @@ public class QueueProcessorService : BackgroundService
         {
             var client = httpClientFactory.CreateClient();
 
-            var token = await tokenService.GetTokenAsync(cancellationToken);
-
+            // AMR endpoints on port 10870 don't require authentication
             client.DefaultRequestHeaders.Clear();
             client.DefaultRequestHeaders.Add("accept", "*/*");
             client.DefaultRequestHeaders.Add("language", "en");
             client.DefaultRequestHeaders.Add("wizards", "FRONT_END");
-            if (!string.IsNullOrEmpty(token))
-            {
-                client.DefaultRequestHeaders.Add("Authorization", $"Bearer {token}");
-            }
+            // Note: No Authorization header - AMR endpoints don't require auth
 
             // Parse the stored mission request JSON
             var missionRequest = JsonSerializer.Deserialize<JsonElement>(queueItem.MissionRequestJson);
@@ -744,8 +749,8 @@ public class QueueProcessorService : BackgroundService
                             attempt, missionCode, jobStatus.Status, GetJobStatusText(jobStatus.Status));
                     }
 
-                    // Check if completed (status 5, 30, or 32)
-                    if (jobStatus.Status == 5 || jobStatus.Status == 30 || jobStatus.Status == 32)
+                    // Check if completed (status 5, 30)
+                    if (jobStatus.Status == 5 || jobStatus.Status == 30)
                     {
                         return new JobPollResult
                         {
@@ -755,8 +760,21 @@ public class QueueProcessorService : BackgroundService
                         };
                     }
 
-                    // Check if failed (status 99) or cancelled (31)
-                    if (jobStatus.Status == 99 || jobStatus.Status == 31)
+                    // Check if cancelled (status 31, 32)
+                    if (jobStatus.Status == 31 || jobStatus.Status == 32)
+                    {
+                        _logger.LogInformation("Job {MissionCode} was cancelled (status {Status})", missionCode, jobStatus.Status);
+                        return new JobPollResult
+                        {
+                            IsCancelled = true,
+                            FinalStatus = jobStatus.Status,
+                            ErrorMessage = jobStatus.WarnCode ?? "Job cancelled",
+                            JobData = jobStatus
+                        };
+                    }
+
+                    // Check if failed (status 99)
+                    if (jobStatus.Status == 99)
                     {
                         return new JobPollResult
                         {
@@ -800,16 +818,12 @@ public class QueueProcessorService : BackgroundService
         {
             var client = httpClientFactory.CreateClient();
 
-            var token = await tokenService.GetTokenAsync(cancellationToken);
-
+            // AMR endpoints on port 10870 don't require authentication
             client.DefaultRequestHeaders.Clear();
             client.DefaultRequestHeaders.Add("accept", "*/*");
             client.DefaultRequestHeaders.Add("language", "en");
             client.DefaultRequestHeaders.Add("wizards", "FRONT_END");
-            if (!string.IsNullOrEmpty(token))
-            {
-                client.DefaultRequestHeaders.Add("Authorization", $"Bearer {token}");
-            }
+            // Note: No Authorization header - AMR endpoints don't require auth
 
             var request = new JobQueryRequest { JobCode = missionCode, Limit = 1 };
 
@@ -820,11 +834,28 @@ public class QueueProcessorService : BackgroundService
 
             if (!response.IsSuccessStatusCode)
             {
+                _logger.LogWarning("Job query HTTP failed for {MissionCode}: {StatusCode}", missionCode, response.StatusCode);
                 return null;
             }
 
-            var result = await response.Content.ReadFromJsonAsync<JobQueryResponse>(cancellationToken);
-            return result?.Data?.FirstOrDefault();
+            // Log raw response for debugging
+            var rawContent = await response.Content.ReadAsStringAsync(cancellationToken);
+            _logger.LogDebug("Job query raw response for {MissionCode}: {Response}", missionCode, rawContent);
+
+            var result = JsonSerializer.Deserialize<JobQueryResponse>(rawContent, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+            if (result?.Data == null || result.Data.Count == 0)
+            {
+                _logger.LogWarning("Job query returned no data for {MissionCode}. Raw response: {Response}",
+                    missionCode, rawContent.Length > 500 ? rawContent.Substring(0, 500) : rawContent);
+                return null;
+            }
+
+            var job = result.Data.FirstOrDefault();
+            _logger.LogInformation("Job query for {MissionCode}: Status={Status}, RobotId={RobotId}",
+                missionCode, job?.Status, job?.RobotId);
+
+            return job;
         }
         catch (Exception ex)
         {
@@ -851,7 +882,7 @@ public class QueueProcessorService : BackgroundService
             28 => "Cancelling",
             30 => "Complete",
             31 => "Cancelled",
-            32 => "Cancelled",
+            32 => "Cancelled (Manual)",  // 32 is also a cancelled status
             50 => "Waiting",
             99 => "Failed",
             _ => $"Unknown({status})"
@@ -865,6 +896,7 @@ public class QueueProcessorService : BackgroundService
 public class JobPollResult
 {
     public bool IsCompleted { get; set; }
+    public bool IsCancelled { get; set; }
     public bool IsFailed { get; set; }
     public bool IsTimeout { get; set; }
     public int FinalStatus { get; set; }

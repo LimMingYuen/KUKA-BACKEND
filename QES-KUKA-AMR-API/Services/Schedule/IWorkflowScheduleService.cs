@@ -57,4 +57,9 @@ public interface IWorkflowScheduleService
     /// Update a schedule after execution (used by scheduler hosted service)
     /// </summary>
     Task UpdateAfterExecutionAsync(int id, bool success, string? errorMessage, CancellationToken ct = default);
+
+    /// <summary>
+    /// Update a schedule after it was skipped due to running instances (used by scheduler hosted service)
+    /// </summary>
+    Task UpdateAfterSkippedAsync(int id, int activeInstanceCount, CancellationToken ct = default);
 }

@@ -19,6 +19,7 @@ public interface ISavedCustomMissionService
     Task<bool> DeleteAsync(int id, CancellationToken cancellationToken = default);
     Task<TriggerResult> TriggerAsync(int id, string triggeredBy, CancellationToken cancellationToken = default);
     Task<SavedCustomMission?> ToggleStatusAsync(int id, CancellationToken cancellationToken = default);
+    Task<SavedCustomMission?> AssignCategoryAsync(int templateId, int? categoryId, CancellationToken cancellationToken = default);
 }
 
 public class SavedCustomMissionService : ISavedCustomMissionService
@@ -42,7 +43,9 @@ public class SavedCustomMissionService : ISavedCustomMissionService
 
     public async Task<List<SavedCustomMission>> GetAllAsync(bool includeInactive = false, CancellationToken cancellationToken = default)
     {
-        var query = _dbContext.SavedCustomMissions.AsNoTracking();
+        var query = _dbContext.SavedCustomMissions
+            .Include(m => m.Category)
+            .AsNoTracking();
 
         if (!includeInactive)
         {
@@ -57,6 +60,7 @@ public class SavedCustomMissionService : ISavedCustomMissionService
     public async Task<SavedCustomMission?> GetByIdAsync(int id, CancellationToken cancellationToken = default)
     {
         return await _dbContext.SavedCustomMissions
+            .Include(m => m.Category)
             .AsNoTracking()
             .FirstOrDefaultAsync(m => m.Id == id, cancellationToken);
     }
@@ -420,6 +424,49 @@ public class SavedCustomMissionService : ISavedCustomMissionService
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Assigns a template to a category (or Uncategorized if categoryId is null)
+    /// </summary>
+    public async Task<SavedCustomMission?> AssignCategoryAsync(
+        int templateId,
+        int? categoryId,
+        CancellationToken cancellationToken = default)
+    {
+        var template = await _dbContext.SavedCustomMissions
+            .FirstOrDefaultAsync(m => m.Id == templateId, cancellationToken);
+
+        if (template is null)
+        {
+            return null;
+        }
+
+        // Validate categoryId if provided
+        if (categoryId.HasValue)
+        {
+            var categoryExists = await _dbContext.TemplateCategories
+                .AnyAsync(c => c.Id == categoryId.Value, cancellationToken);
+
+            if (!categoryExists)
+            {
+                throw new SavedCustomMissionValidationException($"Category with ID {categoryId.Value} does not exist.");
+            }
+        }
+
+        template.CategoryId = categoryId;
+        template.UpdatedUtc = DateTime.UtcNow;
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation("Template {Id} ('{MissionName}') assigned to category {CategoryId}",
+            templateId, template.MissionName, categoryId?.ToString() ?? "Uncategorized");
+
+        // Reload with category
+        return await _dbContext.SavedCustomMissions
+            .Include(m => m.Category)
+            .AsNoTracking()
+            .FirstOrDefaultAsync(m => m.Id == templateId, cancellationToken);
     }
 }
 

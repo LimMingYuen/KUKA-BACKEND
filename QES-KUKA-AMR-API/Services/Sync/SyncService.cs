@@ -424,13 +424,13 @@ public class SyncService : ISyncService
             }
 
             // Mobile robot uses specific request format matching QueryMobileRobotRequest
-            var request = CreateRequest(requestUri, token, new
+            var request = CreateRequest(requestUri, token, new QueryMobileRobotRequest
             {
-                query = new List<string>(),
-                pageNum = -1,
-                pageSize = SyncPageSize,
-                orderBy = "lastUpdateTime",
-                asc = false
+                Query = new MobileRobotQuery(),  // Empty object, not array
+                PageNum = -1,
+                PageSize = SyncPageSize,
+                OrderBy = "lastUpdateTime",
+                Asc = false
             });
 
             var (success, content, error) = await SendRequestAsync(request, cancellationToken);

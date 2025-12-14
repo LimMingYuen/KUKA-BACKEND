@@ -23,6 +23,7 @@ public class WorkflowScheduleDto
     public string? LastErrorMessage { get; set; }
     public int ExecutionCount { get; set; }
     public int? MaxExecutions { get; set; }
+    public bool SkipIfRunning { get; set; }
     public string CreatedBy { get; set; } = string.Empty;
     public DateTime CreatedUtc { get; set; }
     public DateTime? UpdatedUtc { get; set; }
@@ -77,6 +78,12 @@ public class CreateWorkflowScheduleRequest
     /// </summary>
     [Range(1, int.MaxValue, ErrorMessage = "MaxExecutions must be at least 1")]
     public int? MaxExecutions { get; set; }
+
+    /// <summary>
+    /// When enabled, skip triggering if any instance of the same saved mission
+    /// is already running (Queued, Processing, or Assigned status)
+    /// </summary>
+    public bool SkipIfRunning { get; set; } = false;
 }
 
 /// <summary>
@@ -105,6 +112,11 @@ public class UpdateWorkflowScheduleRequest
 
     [Range(1, int.MaxValue, ErrorMessage = "MaxExecutions must be at least 1")]
     public int? MaxExecutions { get; set; }
+
+    /// <summary>
+    /// When enabled, skip triggering if same mission is already running
+    /// </summary>
+    public bool? SkipIfRunning { get; set; }
 }
 
 /// <summary>

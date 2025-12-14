@@ -14,6 +14,7 @@ using QES_KUKA_AMR_API.Models.Missions;
 using QES_KUKA_AMR_API.Models.Jobs;
 using QES_KUKA_AMR_API.Options;
 using QES_KUKA_AMR_API.Services;
+using QES_KUKA_AMR_API.Services.Auth;
 using QES_KUKA_AMR_API.Services.SavedCustomMissions;
 
 namespace QES_KUKA_AMR_API.Controllers;
@@ -27,17 +28,23 @@ public class MissionsController : ControllerBase
     private readonly ILogger<MissionsController> _logger;
     private readonly MissionServiceOptions _missionOptions;
     private readonly ISavedCustomMissionService _savedCustomMissionService;
+    private readonly IExternalApiTokenService _externalApiTokenService;
+    private readonly ApplicationDbContext _dbContext;
 
     public MissionsController(
         IHttpClientFactory httpClientFactory,
         ILogger<MissionsController> logger,
         IOptions<MissionServiceOptions> missionOptions,
-        ISavedCustomMissionService savedCustomMissionService)
+        ISavedCustomMissionService savedCustomMissionService,
+        IExternalApiTokenService externalApiTokenService,
+        ApplicationDbContext dbContext)
     {
         _httpClientFactory = httpClientFactory;
         _logger = logger;
         _missionOptions = missionOptions.Value;
         _savedCustomMissionService = savedCustomMissionService;
+        _externalApiTokenService = externalApiTokenService;
+        _dbContext = dbContext;
     }
 
     [HttpPost("save-as-template")]
@@ -155,11 +162,13 @@ public class MissionsController : ControllerBase
             // DIRECT SUBMISSION TO AMR (BYPASSING QUEUE)
             _logger.LogInformation("Submitting mission {MissionCode} directly to AMR system", request.MissionCode);
 
+            // AMR endpoints on port 10870 don't require authentication
             var httpClient = _httpClientFactory.CreateClient();
             httpClient.DefaultRequestHeaders.Clear();
             httpClient.DefaultRequestHeaders.Add("language", "en");
             httpClient.DefaultRequestHeaders.Add("accept", "*/*");
             httpClient.DefaultRequestHeaders.Add("wizards", "FRONT_END");
+            // Note: No Authorization header - AMR endpoints don't require auth
 
             var amrResponse = await httpClient.PostAsJsonAsync(
                 _missionOptions.SubmitMissionUrl,
@@ -266,10 +275,16 @@ public class MissionsController : ControllerBase
         [FromBody] MissionCancelRequest request,
         CancellationToken cancellationToken)
     {
+        _logger.LogInformation(
+            "=== CANCEL MISSION REQUEST START ===");
+        _logger.LogInformation(
+            "Cancel request received - RequestId={RequestId}, MissionCode={MissionCode}, CancelMode={CancelMode}, Reason={Reason}, ContainerCode={ContainerCode}, Position={Position}",
+            request.RequestId, request.MissionCode, request.CancelMode, request.Reason, request.ContainerCode, request.Position);
+
         if (string.IsNullOrWhiteSpace(_missionOptions.MissionCancelUrl) ||
             !Uri.TryCreate(_missionOptions.MissionCancelUrl, UriKind.Absolute, out var requestUri))
         {
-            _logger.LogError("Mission cancel URL is not configured correctly.");
+            _logger.LogError("Mission cancel URL is not configured correctly. URL value: {Url}", _missionOptions.MissionCancelUrl);
             return StatusCode(StatusCodes.Status500InternalServerError, new MissionCancelResponse
             {
                 Code = "MISSION_SERVICE_CONFIGURATION_ERROR",
@@ -278,6 +293,7 @@ public class MissionsController : ControllerBase
             });
         }
 
+        // AMR endpoints on port 10870 don't require authentication
         var httpClient = _httpClientFactory.CreateClient();
 
         var apiRequest = new HttpRequestMessage(
@@ -287,7 +303,7 @@ public class MissionsController : ControllerBase
             Content = JsonContent.Create(request)
         };
 
-        // Add custom headers required by real backend (no auth required)
+        // Add custom headers required by real backend
         apiRequest.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json")
         {
             CharSet = "UTF-8"
@@ -295,27 +311,64 @@ public class MissionsController : ControllerBase
         apiRequest.Headers.Add("language", "en");
         apiRequest.Headers.Add("accept", "*/*");
         apiRequest.Headers.Add("wizards", "FRONT_END");
+        // Note: No Authorization header - AMR endpoints don't require auth
+
+        // Log the full request JSON being sent
+        var requestJson = JsonSerializer.Serialize(request, new JsonSerializerOptions { WriteIndented = true });
+        _logger.LogInformation(
+            "Sending cancel request to external AMR:\n  URL: {Url}\n  Headers: language=en, accept=*/*, wizards=FRONT_END\n  Request Body:\n{RequestJson}",
+            requestUri, requestJson);
 
         try
         {
             using var response = await httpClient.SendAsync(apiRequest, cancellationToken);
 
-            var serviceResponse =
-                await response.Content.ReadFromJsonAsync<MissionCancelResponse>(cancellationToken: cancellationToken);
+            // Read raw response first for logging
+            var rawResponse = await response.Content.ReadAsStringAsync(cancellationToken);
+            _logger.LogInformation(
+                "Raw response from external AMR:\n  HTTP Status: {StatusCode}\n  Response Body:\n{RawResponse}",
+                response.StatusCode, rawResponse);
+
+            // Try to parse the response
+            MissionCancelResponse? serviceResponse = null;
+            try
+            {
+                serviceResponse = JsonSerializer.Deserialize<MissionCancelResponse>(rawResponse,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            }
+            catch (JsonException jsonEx)
+            {
+                _logger.LogError(jsonEx, "Failed to parse cancel response JSON. Raw response: {RawResponse}", rawResponse);
+            }
 
             if (serviceResponse is null)
             {
                 _logger.LogError(
-                    "Mission service returned no content for mission cancel. Status: {StatusCode}",
-                    response.StatusCode);
+                    "Mission service returned unparseable content for mission cancel. Status: {StatusCode}, Raw: {RawResponse}",
+                    response.StatusCode, rawResponse);
 
                 return StatusCode(StatusCodes.Status502BadGateway, new MissionCancelResponse
                 {
                     Code = "MISSION_SERVICE_EMPTY_RESPONSE",
-                    Message = "Failed to retrieve a response from the mission service.",
+                    Message = $"Failed to parse response from mission service. Raw: {rawResponse}",
                     Success = false
                 });
             }
+
+            _logger.LogInformation(
+                "Parsed cancel response - Success={Success}, Code={Code}, Message={Message}",
+                serviceResponse.Success, serviceResponse.Code, serviceResponse.Message);
+
+            // Update MissionHistory if cancel was successful
+            if (serviceResponse.Success || response.IsSuccessStatusCode)
+            {
+                await UpdateMissionHistoryOnCancelAsync(
+                    request.MissionCode,
+                    request.Reason,
+                    cancellationToken);
+            }
+
+            _logger.LogInformation("=== CANCEL MISSION REQUEST END ===");
 
             return StatusCode((int)response.StatusCode, serviceResponse);
         }
@@ -332,6 +385,56 @@ public class MissionsController : ControllerBase
                 Message = "Unable to reach the mission cancel endpoint.",
                 Success = false
             });
+        }
+    }
+
+    /// <summary>
+    /// Update MissionHistory record to Cancelled status after successful cancel
+    /// </summary>
+    private async Task UpdateMissionHistoryOnCancelAsync(
+        string missionCode,
+        string? cancelReason,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            _logger.LogInformation("Updating MissionHistory for cancelled mission {MissionCode}", missionCode);
+
+            // Find the MissionHistory record by missionCode
+            var missionHistory = await _dbContext.MissionHistories
+                .FirstOrDefaultAsync(m => m.MissionCode == missionCode, cancellationToken);
+
+            if (missionHistory == null)
+            {
+                _logger.LogWarning("MissionHistory not found for cancelled mission {MissionCode}. " +
+                    "This may happen if the mission was submitted directly without queue.", missionCode);
+                return;
+            }
+
+            // Only update if not already in a terminal state
+            var terminalStatuses = new[] { "Completed", "Failed", "Cancelled", "Timeout" };
+            if (terminalStatuses.Contains(missionHistory.Status, StringComparer.OrdinalIgnoreCase))
+            {
+                _logger.LogInformation("MissionHistory {MissionCode} already in terminal state '{Status}', skipping update",
+                    missionCode, missionHistory.Status);
+                return;
+            }
+
+            // Update to Cancelled status
+            missionHistory.Status = "Cancelled";
+            missionHistory.CompletedDate = DateTime.UtcNow;
+            missionHistory.ErrorMessage = string.IsNullOrWhiteSpace(cancelReason)
+                ? "Cancelled by user"
+                : $"Cancelled: {cancelReason}";
+
+            await _dbContext.SaveChangesAsync(cancellationToken);
+
+            _logger.LogInformation("✓ MissionHistory {MissionCode} updated to Cancelled status", missionCode);
+        }
+        catch (Exception ex)
+        {
+            // Don't fail the cancel operation if history update fails
+            _logger.LogError(ex, "Failed to update MissionHistory for cancelled mission {MissionCode}", missionCode);
         }
     }
 
@@ -354,6 +457,7 @@ public class MissionsController : ControllerBase
             });
         }
 
+        // AMR endpoints on port 10870 don't require authentication
         var httpClient = _httpClientFactory.CreateClient();
 
         var apiRequest = new HttpRequestMessage(
@@ -363,7 +467,7 @@ public class MissionsController : ControllerBase
             Content = JsonContent.Create(request)
         };
 
-        // Add custom headers required by real backend (no auth required)
+        // Add custom headers required by real backend
         apiRequest.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json")
         {
             CharSet = "UTF-8"
@@ -371,10 +475,11 @@ public class MissionsController : ControllerBase
         apiRequest.Headers.Add("language", "en");
         apiRequest.Headers.Add("accept", "*/*");
         apiRequest.Headers.Add("wizards", "FRONT_END");
+        // Note: No Authorization header - AMR endpoints don't require auth
 
         // Log request details
         var requestBody = JsonSerializer.Serialize(request);
-        _logger.LogInformation("QueryJobsAsync Request - URL: {Url}, Body: {Body}",
+        _logger.LogInformation("QueryJobsAsync Request (no auth) - URL: {Url}, Body: {Body}",
             requestUri, requestBody);
 
         try
@@ -440,6 +545,7 @@ public class MissionsController : ControllerBase
             });
         }
 
+        // AMR endpoints on port 10870 don't require authentication
         var httpClient = _httpClientFactory.CreateClient();
 
         var apiRequest = new HttpRequestMessage(
@@ -449,7 +555,7 @@ public class MissionsController : ControllerBase
             Content = JsonContent.Create(request)
         };
 
-        // Add custom headers required by real backend (no auth required)
+        // Add custom headers required by real backend
         apiRequest.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json")
         {
             CharSet = "UTF-8"
@@ -457,6 +563,7 @@ public class MissionsController : ControllerBase
         apiRequest.Headers.Add("language", "en");
         apiRequest.Headers.Add("accept", "*/*");
         apiRequest.Headers.Add("wizards", "FRONT_END");
+        // Note: No Authorization header - AMR endpoints don't require auth
 
         try
         {
@@ -517,6 +624,7 @@ public class MissionsController : ControllerBase
             });
         }
 
+        // AMR endpoints on port 10870 don't require authentication
         var httpClient = _httpClientFactory.CreateClient();
 
         var apiRequest = new HttpRequestMessage(
@@ -526,7 +634,7 @@ public class MissionsController : ControllerBase
             Content = JsonContent.Create(request)
         };
 
-        // Add custom headers required by real backend (no auth required)
+        // Add custom headers required by real backend
         apiRequest.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json")
         {
             CharSet = "UTF-8"
@@ -534,6 +642,7 @@ public class MissionsController : ControllerBase
         apiRequest.Headers.Add("language", "en");
         apiRequest.Headers.Add("accept", "*/*");
         apiRequest.Headers.Add("wizards", "FRONT_END");
+        // Note: No Authorization header - AMR endpoints don't require auth
 
         try
         {

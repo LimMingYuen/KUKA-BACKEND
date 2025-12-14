@@ -158,4 +158,16 @@ public class SavedCustomMission
     /// </summary>
     [Required]
     public bool IsDeleted { get; set; } = false;
+
+    /// <summary>
+    /// Optional category for manual template organization.
+    /// Null means "Uncategorized".
+    /// </summary>
+    public int? CategoryId { get; set; }
+
+    /// <summary>
+    /// Navigation property to TemplateCategory
+    /// </summary>
+    [ForeignKey("CategoryId")]
+    public virtual TemplateCategory? Category { get; set; }
 }

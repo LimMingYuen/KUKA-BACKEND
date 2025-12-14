@@ -19,7 +19,7 @@ public interface IMissionQueueService
     Task<MissionQueue> AddToQueueAsync(MissionQueue queueItem, CancellationToken cancellationToken = default);
     Task<MissionQueue?> UpdateStatusAsync(int id, MissionQueueStatus status, string? errorMessage = null, CancellationToken cancellationToken = default);
     Task<MissionQueue?> AssignRobotAsync(int id, string robotId, CancellationToken cancellationToken = default);
-    Task<bool> CancelAsync(int id, CancellationToken cancellationToken = default);
+    Task<bool> CancelAsync(int id, string cancelMode = "FORCE", string? reason = null, CancellationToken cancellationToken = default);
     Task<bool> DeleteAsync(int id, CancellationToken cancellationToken = default);
     Task<MissionQueue?> RetryAsync(int id, CancellationToken cancellationToken = default);
     Task<bool> MoveUpAsync(int id, CancellationToken cancellationToken = default);
@@ -219,7 +219,7 @@ public class MissionQueueService : IMissionQueueService
         return queueItem;
     }
 
-    public async Task<bool> CancelAsync(int id, CancellationToken cancellationToken = default)
+    public async Task<bool> CancelAsync(int id, string cancelMode = "FORCE", string? reason = null, CancellationToken cancellationToken = default)
     {
         var queueItem = await _dbContext.MissionQueues.FindAsync(new object[] { id }, cancellationToken);
         if (queueItem == null) return false;
@@ -234,12 +234,23 @@ public class MissionQueueService : IMissionQueueService
             return false;
         }
 
+        // Validate cancel mode
+        var validCancelModes = new[] { "FORCE", "NORMAL", "REDIRECT_START" };
+        if (!validCancelModes.Contains(cancelMode, StringComparer.OrdinalIgnoreCase))
+        {
+            _logger.LogWarning("Invalid cancel mode {CancelMode}, defaulting to FORCE", cancelMode);
+            cancelMode = "FORCE";
+        }
+
+        var cancelReason = string.IsNullOrWhiteSpace(reason) ? "Cancelled by user from queue" : reason;
+
         // If mission is Assigned (already submitted to external AMR), call external cancel API first
         if (queueItem.Status == MissionQueueStatus.Assigned)
         {
-            _logger.LogInformation("Mission {MissionCode} is Assigned, calling external AMR cancel API...", queueItem.MissionCode);
+            _logger.LogInformation("Mission {MissionCode} is Assigned, calling external AMR cancel API with mode {CancelMode}...",
+                queueItem.MissionCode, cancelMode);
 
-            var cancelSuccess = await CancelExternalMissionAsync(queueItem.MissionCode, cancellationToken);
+            var cancelSuccess = await CancelExternalMissionAsync(queueItem.MissionCode, cancelMode, cancelReason, cancellationToken);
 
             if (!cancelSuccess)
             {
@@ -254,12 +265,63 @@ public class MissionQueueService : IMissionQueueService
         await _dbContext.SaveChangesAsync(cancellationToken);
         await UpdateQueuePositionsAsync(cancellationToken);
 
-        _logger.LogInformation("Mission {MissionCode} cancelled", queueItem.MissionCode);
+        // Update MissionHistory to Cancelled status
+        await UpdateMissionHistoryOnCancelAsync(queueItem.MissionCode, cancelReason, cancellationToken);
+
+        _logger.LogInformation("Mission {MissionCode} cancelled with mode {CancelMode}", queueItem.MissionCode, cancelMode);
 
         // Notify clients of cancellation
         await _notificationService.NotifyMissionStatusChangedAsync(id, MissionQueueStatus.Cancelled, cancellationToken);
 
         return true;
+    }
+
+    /// <summary>
+    /// Update MissionHistory record to Cancelled status after successful cancel
+    /// </summary>
+    private async Task UpdateMissionHistoryOnCancelAsync(
+        string missionCode,
+        string cancelReason,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            _logger.LogInformation("Updating MissionHistory for cancelled mission {MissionCode}", missionCode);
+
+            // Find the MissionHistory record by missionCode
+            var missionHistory = await _dbContext.MissionHistories
+                .FirstOrDefaultAsync(m => m.MissionCode == missionCode, cancellationToken);
+
+            if (missionHistory == null)
+            {
+                _logger.LogWarning("MissionHistory not found for cancelled mission {MissionCode}. " +
+                    "This may happen if the mission was not yet submitted to AMR.", missionCode);
+                return;
+            }
+
+            // Only update if not already in a terminal state
+            var terminalStatuses = new[] { "Completed", "Failed", "Cancelled", "Timeout" };
+            if (terminalStatuses.Contains(missionHistory.Status, StringComparer.OrdinalIgnoreCase))
+            {
+                _logger.LogInformation("MissionHistory {MissionCode} already in terminal state '{Status}', skipping update",
+                    missionCode, missionHistory.Status);
+                return;
+            }
+
+            // Update to Cancelled status
+            missionHistory.Status = "Cancelled";
+            missionHistory.CompletedDate = _timeProvider.GetUtcNow().UtcDateTime;
+            missionHistory.ErrorMessage = cancelReason;
+
+            await _dbContext.SaveChangesAsync(cancellationToken);
+
+            _logger.LogInformation("✓ MissionHistory {MissionCode} updated to Cancelled status", missionCode);
+        }
+        catch (Exception ex)
+        {
+            // Don't fail the cancel operation if history update fails
+            _logger.LogError(ex, "Failed to update MissionHistory for cancelled mission {MissionCode}", missionCode);
+        }
     }
 
     public async Task<bool> DeleteAsync(int id, CancellationToken cancellationToken = default)
@@ -289,11 +351,18 @@ public class MissionQueueService : IMissionQueueService
     /// <summary>
     /// Cancel mission in external AMR system
     /// </summary>
-    private async Task<bool> CancelExternalMissionAsync(string missionCode, CancellationToken cancellationToken)
+    /// <param name="missionCode">The mission code to cancel</param>
+    /// <param name="cancelMode">Cancel mode: FORCE, NORMAL, or REDIRECT_START</param>
+    /// <param name="reason">Reason for cancellation</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    private async Task<bool> CancelExternalMissionAsync(string missionCode, string cancelMode, string reason, CancellationToken cancellationToken)
     {
+        _logger.LogInformation("=== QUEUE CANCEL EXTERNAL MISSION START ===");
+        _logger.LogInformation("Attempting to cancel mission {MissionCode} in external AMR system with mode {CancelMode}", missionCode, cancelMode);
+
         if (string.IsNullOrEmpty(_missionOptions.MissionCancelUrl))
         {
-            _logger.LogWarning("MissionCancelUrl is not configured");
+            _logger.LogWarning("MissionCancelUrl is not configured. Cannot cancel in external system.");
             return false;
         }
 
@@ -304,40 +373,49 @@ public class MissionQueueService : IMissionQueueService
             client.DefaultRequestHeaders.Add("language", "en");
             client.DefaultRequestHeaders.Add("wizards", "FRONT_END");
 
-            // Get token
-            using var tokenScope = _serviceProvider.CreateScope();
-            var tokenService = tokenScope.ServiceProvider.GetRequiredService<IExternalApiTokenService>();
-            var token = await tokenService.GetTokenAsync();
-            if (!string.IsNullOrEmpty(token))
-            {
-                client.DefaultRequestHeaders.Add("Authorization", $"Bearer {token}");
-            }
+            // AMR endpoints on port 10870 don't require authentication
 
             var request = new MissionCancelRequest
             {
                 MissionCode = missionCode,
-                Reason = "Cancelled by user from queue"
+                Reason = reason,
+                CancelMode = cancelMode,
+                RequestId = $"queue_cancel_{missionCode}_{DateTime.UtcNow:yyyyMMddHHmmss}"
             };
+
+            // Log the request being sent
+            _logger.LogInformation(
+                "Sending cancel request to external AMR:\n  URL: {Url}\n  MissionCode: {MissionCode}\n  CancelMode: {CancelMode}\n  Reason: {Reason}\n  RequestId: {RequestId}",
+                _missionOptions.MissionCancelUrl, request.MissionCode, request.CancelMode, request.Reason, request.RequestId);
 
             var response = await client.PostAsJsonAsync(
                 _missionOptions.MissionCancelUrl,
                 request,
                 cancellationToken);
 
+            // Read and log the raw response
+            var rawResponse = await response.Content.ReadAsStringAsync(cancellationToken);
+            _logger.LogInformation(
+                "Raw response from external AMR:\n  HTTP Status: {StatusCode}\n  Response Body: {RawResponse}",
+                response.StatusCode, rawResponse);
+
             if (response.IsSuccessStatusCode)
             {
-                _logger.LogInformation("✓ Mission {MissionCode} cancelled in external AMR system", missionCode);
+                _logger.LogInformation("✓ Mission {MissionCode} cancel request accepted by external AMR system", missionCode);
+                _logger.LogInformation("=== QUEUE CANCEL EXTERNAL MISSION END (SUCCESS) ===");
                 return true;
             }
             else
             {
-                _logger.LogWarning("External AMR cancel failed with status {StatusCode}", response.StatusCode);
+                _logger.LogWarning("✗ External AMR cancel failed - HTTP {StatusCode}: {RawResponse}", response.StatusCode, rawResponse);
+                _logger.LogInformation("=== QUEUE CANCEL EXTERNAL MISSION END (FAILED) ===");
                 return false;
             }
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error calling external AMR cancel API for {MissionCode}", missionCode);
+            _logger.LogInformation("=== QUEUE CANCEL EXTERNAL MISSION END (EXCEPTION) ===");
             return false;
         }
     }

@@ -35,6 +35,10 @@ public class RobotAnalyticsService : IRobotAnalyticsService
     private readonly IExternalApiTokenService _externalApiTokenService;
     private readonly ILogger<RobotAnalyticsService> _logger;
 
+    // External KUKA API returns timestamps in Malaysia local time (UTC+8)
+    private static readonly TimeZoneInfo MalaysiaTimeZone =
+        TimeZoneInfo.FindSystemTimeZoneById("Singapore Standard Time");
+
     public RobotAnalyticsService(
         ApplicationDbContext dbContext,
         IWorkflowAnalyticsService workflowAnalyticsService,
@@ -665,32 +669,34 @@ public class RobotAnalyticsService : IRobotAnalyticsService
                 continue;
             }
 
-            // Parse begin and end times
+            // Parse begin and end times (external API returns Malaysia local time UTC+8)
             if (!DateTime.TryParseExact(
                 mission.BeginTime,
                 "yyyy-MM-dd HH:mm:ss",
                 CultureInfo.InvariantCulture,
-                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
-                out var beginTime))
+                DateTimeStyles.None,
+                out var localBeginTime))
             {
                 _logger.LogWarning(
                     "Failed to parse BeginTime '{BeginTime}' for mission {MissionCode}",
                     mission.BeginTime, mission.Code);
                 continue;
             }
+            var beginTime = TimeZoneInfo.ConvertTimeToUtc(localBeginTime, MalaysiaTimeZone);
 
             if (!DateTime.TryParseExact(
                 mission.EndTime,
                 "yyyy-MM-dd HH:mm:ss",
                 CultureInfo.InvariantCulture,
-                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
-                out var endTime))
+                DateTimeStyles.None,
+                out var localEndTime))
             {
                 _logger.LogWarning(
                     "Failed to parse EndTime '{EndTime}' for mission {MissionCode}",
                     mission.EndTime, mission.Code);
                 continue;
             }
+            var endTime = TimeZoneInfo.ConvertTimeToUtc(localEndTime, MalaysiaTimeZone);
 
             var duration = (endTime - beginTime).TotalMinutes;
 

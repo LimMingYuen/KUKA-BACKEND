@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using QES_KUKA_AMR_API.Models.Missions;
 using QES_KUKA_AMR_API.Options;
+using QES_KUKA_AMR_API.Services.Auth;
 
 namespace QES_KUKA_AMR_API.Controllers;
 
@@ -17,15 +18,18 @@ public class OperationFeedbackController : ControllerBase
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<OperationFeedbackController> _logger;
     private readonly AmrServiceOptions _amrOptions;
+    private readonly IExternalApiTokenService _externalApiTokenService;
 
     public OperationFeedbackController(
         IHttpClientFactory httpClientFactory,
         ILogger<OperationFeedbackController> logger,
-        IOptions<AmrServiceOptions> amrOptions)
+        IOptions<AmrServiceOptions> amrOptions,
+        IExternalApiTokenService externalApiTokenService)
     {
         _httpClientFactory = httpClientFactory;
         _logger = logger;
         _amrOptions = amrOptions.Value;
+        _externalApiTokenService = externalApiTokenService;
     }
 
     [HttpPost]
@@ -49,6 +53,7 @@ public class OperationFeedbackController : ControllerBase
             });
         }
 
+        // AMR endpoints on port 10870 don't require authentication
         var httpClient = _httpClientFactory.CreateClient();
 
         var apiRequest = new HttpRequestMessage(HttpMethod.Post, requestUri)
@@ -64,6 +69,7 @@ public class OperationFeedbackController : ControllerBase
         apiRequest.Headers.Add("language", "en");
         apiRequest.Headers.Add("accept", "*/*");
         apiRequest.Headers.Add("wizards", "FRONT_END");
+        // Note: No Authorization header - AMR endpoints don't require auth
 
         try
         {
