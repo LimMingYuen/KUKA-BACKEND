@@ -55,7 +55,18 @@ builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        policy.WithOrigins("http://localhost:4200", "http://localhost:5109", "http://localhost:5003", "http://localhost:8004", "http://172.16.112.193:8004")
+        policy.WithOrigins(
+                "http://localhost:4200",      // Dev frontend
+                "http://localhost:5109",      // Dev backend
+                "http://localhost:5003",
+                "http://localhost:8003",      // Production backend
+                "http://localhost:8004",
+                "http://172.16.112.193:8003", // Production (IP)
+                "http://172.16.112.193:8004",
+                "http://172.28.2.187:8003", // Production (IP)
+                "http://172.28.2.187:8004"
+
+              )
               .AllowAnyMethod()
               .AllowAnyHeader()
               .AllowCredentials(); // Required for SignalR
@@ -235,6 +246,7 @@ builder.Services.AddScoped<IMissionQueueService, MissionQueueService>();
 builder.Services.AddScoped<IRobotSelectionService, RobotSelectionService>();
 builder.Services.AddScoped<IJobOptimizationService, JobOptimizationService>();
 builder.Services.AddHostedService<QueueProcessorService>();
+builder.Services.AddHostedService<WaitingMissionMonitorService>();
 
 // SignalR for real-time updates
 builder.Services.AddSignalR();

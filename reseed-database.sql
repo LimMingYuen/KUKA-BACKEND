@@ -51,6 +51,10 @@ PRINT '  - WorkflowSchedules cleared';
 DELETE FROM SavedCustomMissions;
 PRINT '  - SavedCustomMissions cleared';
 
+-- Level 2: Delete TemplateCategories (after SavedCustomMissions deleted due to FK)
+DELETE FROM TemplateCategories;
+PRINT '  - TemplateCategories cleared';
+
 -- Level 2: Other mission/workflow tables (no FK dependencies on them)
 DELETE FROM MissionQueues;
 PRINT '  - MissionQueues cleared';
@@ -100,6 +104,9 @@ PRINT '  - ResumeStrategies cleared';
 DELETE FROM Areas;
 PRINT '  - Areas cleared';
 
+DELETE FROM OrganizationIds;
+PRINT '  - OrganizationIds cleared';
+
 -- Level 2: System tables
 DELETE FROM SystemSetting;
 PRINT '  - SystemSetting cleared';
@@ -129,6 +136,7 @@ DBCC CHECKIDENT ('RoleTemplatePermissions', RESEED, 0);
 DBCC CHECKIDENT ('RolePermissions', RESEED, 0);
 DBCC CHECKIDENT ('WorkflowSchedules', RESEED, 0);
 DBCC CHECKIDENT ('SavedCustomMissions', RESEED, 0);
+DBCC CHECKIDENT ('TemplateCategories', RESEED, 0);
 DBCC CHECKIDENT ('MissionQueues', RESEED, 0);
 DBCC CHECKIDENT ('MissionHistories', RESEED, 0);
 DBCC CHECKIDENT ('WorkflowZoneMappings', RESEED, 0);
@@ -144,6 +152,7 @@ DBCC CHECKIDENT ('RobotTypes', RESEED, 0);
 DBCC CHECKIDENT ('ShelfDecisionRules', RESEED, 0);
 DBCC CHECKIDENT ('ResumeStrategies', RESEED, 0);
 DBCC CHECKIDENT ('Areas', RESEED, 0);
+DBCC CHECKIDENT ('OrganizationIds', RESEED, 0);
 DBCC CHECKIDENT ('Users', RESEED, 0);
 DBCC CHECKIDENT ('Roles', RESEED, 0);
 DBCC CHECKIDENT ('Pages', RESEED, 0);
@@ -206,5 +215,7 @@ UNION ALL SELECT 'MissionHistories', COUNT(*) FROM MissionHistories
 UNION ALL SELECT 'WorkflowDiagrams', COUNT(*) FROM WorkflowDiagrams
 UNION ALL SELECT 'MobileRobots', COUNT(*) FROM MobileRobots
 UNION ALL SELECT 'QrCodes', COUNT(*) FROM QrCodes
+UNION ALL SELECT 'TemplateCategories', COUNT(*) FROM TemplateCategories
+UNION ALL SELECT 'OrganizationIds', COUNT(*) FROM OrganizationIds
 ORDER BY TableName;
 GO

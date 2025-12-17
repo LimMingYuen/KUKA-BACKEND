@@ -432,7 +432,7 @@ public class QueueProcessorService : BackgroundService
                 mission.MissionCode, missionHistory.Id);
 
             // Submit mission to external AMR system
-            var submitSuccess = await SubmitMissionAsync(
+            var submitResult = await SubmitMissionAsync(
                 httpClientFactory,
                 missionOptions,
                 tokenService,
@@ -440,7 +440,7 @@ public class QueueProcessorService : BackgroundService
                 selectedRobotId,
                 cancellationToken);
 
-            if (submitSuccess)
+            if (submitResult.Success)
             {
                 _logger.LogInformation("Mission {MissionCode} submitted successfully, polling job status...",
                     mission.MissionCode);
@@ -506,6 +506,19 @@ public class QueueProcessorService : BackgroundService
                     await UpdateMissionHistoryStatusAsync(dbContext, missionHistory.Id, "Failed",
                         jobResult.JobData?.RobotId ?? selectedRobotId, jobResult.ErrorMessage, cancellationToken);
                 }
+                else if (jobResult.IsWaitingForRobot)
+                {
+                    _logger.LogInformation("⏳ Mission {MissionCode} is waiting for robot assignment in external AMR system",
+                        mission.MissionCode);
+
+                    // Keep queue status as Assigned - the mission is valid, just waiting for a robot
+                    // Update MissionHistory to WaitingForRobot status (not an error)
+                    await UpdateMissionHistoryStatusAsync(dbContext, missionHistory.Id, "WaitingForRobot",
+                        null, "Waiting for robot assignment in external AMR system", cancellationToken);
+
+                    // Note: The WaitingMissionMonitorService will periodically check these missions
+                    // and update their status when they complete
+                }
                 else if (jobResult.IsTimeout)
                 {
                     _logger.LogWarning("⏱ Mission {MissionCode} polling timeout - marking as failed",
@@ -523,16 +536,18 @@ public class QueueProcessorService : BackgroundService
             }
             else
             {
-                _logger.LogError("Failed to submit mission {MissionCode} to AMR system", mission.MissionCode);
+                var errorMessage = submitResult.ErrorMessage ?? "Failed to submit to AMR system";
+                _logger.LogError("Failed to submit mission {MissionCode} to AMR system: {Error}",
+                    mission.MissionCode, errorMessage);
                 await queueService.UpdateStatusAsync(
                     mission.Id,
                     MissionQueueStatus.Failed,
-                    "Failed to submit to AMR system",
+                    errorMessage,
                     cancellationToken);
 
-                // Update MissionHistory to Failed
+                // Update MissionHistory to Failed with actual error from AMR API
                 await UpdateMissionHistoryStatusAsync(dbContext, missionHistory.Id, "Failed",
-                    selectedRobotId, "Failed to submit to AMR system", cancellationToken);
+                    selectedRobotId, errorMessage, cancellationToken);
             }
         }
         catch (Exception ex)
@@ -655,7 +670,7 @@ public class QueueProcessorService : BackgroundService
     /// <summary>
     /// Submit mission to external AMR system
     /// </summary>
-    private async Task<bool> SubmitMissionAsync(
+    private async Task<MissionSubmitResult> SubmitMissionAsync(
         IHttpClientFactory httpClientFactory,
         MissionServiceOptions options,
         IExternalApiTokenService tokenService,
@@ -666,7 +681,7 @@ public class QueueProcessorService : BackgroundService
         if (string.IsNullOrEmpty(options.SubmitMissionUrl))
         {
             _logger.LogError("SubmitMissionUrl is not configured");
-            return false;
+            return MissionSubmitResult.Failed("SubmitMissionUrl is not configured");
         }
 
         try
@@ -705,16 +720,24 @@ public class QueueProcessorService : BackgroundService
             {
                 var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
                 _logger.LogError("Mission submit failed: {Error}", errorContent);
-                return false;
+                return MissionSubmitResult.Failed($"HTTP {(int)response.StatusCode}: {errorContent}");
             }
 
             var result = await response.Content.ReadFromJsonAsync<ApiResponse<object>>(cancellationToken);
-            return result?.Success ?? false;
+            if (result?.Success == true)
+            {
+                return MissionSubmitResult.Succeeded();
+            }
+
+            // API returned success=false with a message
+            var apiErrorMessage = result?.Message ?? "AMR API returned success=false";
+            _logger.LogError("Mission submit API error: {Error}", apiErrorMessage);
+            return MissionSubmitResult.Failed(apiErrorMessage);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error submitting mission {MissionCode}", queueItem.MissionCode);
-            return false;
+            return MissionSubmitResult.Failed($"Exception: {ex.Message}");
         }
     }
 
@@ -731,8 +754,12 @@ public class QueueProcessorService : BackgroundService
     {
         const int pollingIntervalMs = 1000; // 1 second
         const int maxAttempts = 120; // 2 minutes max
+        const int waitingCheckThreshold = 30; // After 30 seconds, check if job is waiting for robot
 
         _logger.LogDebug("Starting job status polling for {MissionCode}", missionCode);
+
+        int? lastKnownStatus = null;
+        string? lastKnownRobotId = null;
 
         for (int attempt = 1; attempt <= maxAttempts && !cancellationToken.IsCancellationRequested; attempt++)
         {
@@ -742,15 +769,18 @@ public class QueueProcessorService : BackgroundService
 
                 if (jobStatus != null)
                 {
+                    lastKnownStatus = jobStatus.Status;
+                    lastKnownRobotId = jobStatus.RobotId;
+
                     // Log every 10 attempts to reduce noise
                     if (attempt % 10 == 0 || attempt == 1)
                     {
-                        _logger.LogDebug("Poll #{Attempt}: Job {MissionCode} - Status={Status} ({StatusText})",
-                            attempt, missionCode, jobStatus.Status, GetJobStatusText(jobStatus.Status));
+                        _logger.LogDebug("Poll #{Attempt}: Job {MissionCode} - Status={Status} ({StatusText}), RobotId={RobotId}",
+                            attempt, missionCode, jobStatus.Status, GetJobStatusText(jobStatus.Status), jobStatus.RobotId ?? "null");
                     }
 
-                    // Check if completed (status 5, 30)
-                    if (jobStatus.Status == 5 || jobStatus.Status == 30)
+                    // Check if completed (status 5, 30, 35)
+                    if (jobStatus.Status == 5 || jobStatus.Status == 30 || jobStatus.Status == 35)
                     {
                         return new JobPollResult
                         {
@@ -784,6 +814,22 @@ public class QueueProcessorService : BackgroundService
                             JobData = jobStatus
                         };
                     }
+
+                    // Check if job is waiting for robot: status 20 (Executing) but no robot assigned yet
+                    // After threshold, if job is still in this state, mark as WaitingForRobot
+                    if (attempt >= waitingCheckThreshold && IsWaitingForRobotStatus(jobStatus.Status, jobStatus.RobotId))
+                    {
+                        _logger.LogInformation(
+                            "Job {MissionCode} is waiting for robot assignment (status {Status}, robotId=null) after {Attempt} attempts. " +
+                            "Will be monitored by WaitingMissionMonitorService.",
+                            missionCode, jobStatus.Status, attempt);
+                        return new JobPollResult
+                        {
+                            IsWaitingForRobot = true,
+                            FinalStatus = jobStatus.Status,
+                            JobData = jobStatus
+                        };
+                    }
                 }
 
                 await Task.Delay(pollingIntervalMs, cancellationToken);
@@ -795,8 +841,36 @@ public class QueueProcessorService : BackgroundService
             }
         }
 
-        _logger.LogWarning("Job status polling timeout for {MissionCode} after {MaxAttempts} attempts", missionCode, maxAttempts);
+        // If we timed out but the last known status indicates waiting for robot, treat as WaitingForRobot
+        if (lastKnownStatus.HasValue && IsWaitingForRobotStatus(lastKnownStatus.Value, lastKnownRobotId))
+        {
+            _logger.LogInformation(
+                "Job {MissionCode} polling ended while waiting for robot (status {Status}, robotId=null). " +
+                "Will be monitored by WaitingMissionMonitorService.",
+                missionCode, lastKnownStatus.Value);
+            return new JobPollResult
+            {
+                IsWaitingForRobot = true,
+                FinalStatus = lastKnownStatus.Value
+            };
+        }
+
+        _logger.LogWarning("Job status polling timeout for {MissionCode} after {MaxAttempts} attempts (last status: {LastStatus}, robotId: {RobotId})",
+            missionCode, maxAttempts, lastKnownStatus?.ToString() ?? "unknown", lastKnownRobotId ?? "null");
         return new JobPollResult { IsTimeout = true };
+    }
+
+    /// <summary>
+    /// Check if the job is waiting for robot assignment
+    /// A job is waiting if it has status 10 (Created), 20 (Executing), or 25 (Waiting) but no robot assigned
+    /// </summary>
+    private static bool IsWaitingForRobotStatus(int status, string? robotId)
+    {
+        // Job is waiting for robot if:
+        // - Status is 10 (Created), 20 (Executing), or 25 (Waiting)
+        // - AND robotId is null or empty (no robot assigned yet)
+        var waitingStatuses = new[] { 10, 20, 25 };
+        return waitingStatuses.Contains(status) && string.IsNullOrEmpty(robotId);
     }
 
     /// <summary>
@@ -891,6 +965,18 @@ public class QueueProcessorService : BackgroundService
 }
 
 /// <summary>
+/// Result of mission submission to external AMR system
+/// </summary>
+public class MissionSubmitResult
+{
+    public bool Success { get; set; }
+    public string? ErrorMessage { get; set; }
+
+    public static MissionSubmitResult Succeeded() => new() { Success = true };
+    public static MissionSubmitResult Failed(string errorMessage) => new() { Success = false, ErrorMessage = errorMessage };
+}
+
+/// <summary>
 /// Result of job status polling
 /// </summary>
 public class JobPollResult
@@ -899,6 +985,11 @@ public class JobPollResult
     public bool IsCancelled { get; set; }
     public bool IsFailed { get; set; }
     public bool IsTimeout { get; set; }
+    /// <summary>
+    /// True if the job is waiting for a robot to be assigned in the external AMR system.
+    /// This is not an error - the mission is queued and will execute when a robot becomes available.
+    /// </summary>
+    public bool IsWaitingForRobot { get; set; }
     public int FinalStatus { get; set; }
     public string? ErrorMessage { get; set; }
     public JobDto? JobData { get; set; }

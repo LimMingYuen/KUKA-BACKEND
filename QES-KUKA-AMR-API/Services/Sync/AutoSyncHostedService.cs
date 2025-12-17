@@ -196,9 +196,11 @@ public class AutoSyncHostedService : BackgroundService
 
     private static DateTime? GetDateTimeSetting(Dictionary<string, string> settings, string key)
     {
-        if (settings.TryGetValue(key, out var value) && DateTime.TryParse(value, out var result))
+        if (settings.TryGetValue(key, out var value) &&
+            DateTime.TryParse(value, null, System.Globalization.DateTimeStyles.RoundtripKind, out var result))
         {
-            return result;
+            // Ensure UTC kind is preserved for proper timezone handling
+            return result.Kind == DateTimeKind.Utc ? result : result.ToUniversalTime();
         }
         return null;
     }

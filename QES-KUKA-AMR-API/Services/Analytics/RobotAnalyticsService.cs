@@ -18,6 +18,7 @@ public interface IRobotAnalyticsService
         DateTime periodEndUtc,
         UtilizationGroupingInterval grouping,
         string? jwtToken = null,
+        TimeSpan? clientTimezoneOffset = null,
         CancellationToken cancellationToken = default);
 
     Task<RobotUtilizationDiagnostics> GetUtilizationDiagnosticsAsync(
@@ -59,6 +60,7 @@ public class RobotAnalyticsService : IRobotAnalyticsService
         DateTime periodEndUtc,
         UtilizationGroupingInterval grouping,
         string? jwtToken = null,
+        TimeSpan? clientTimezoneOffset = null,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(robotId))
@@ -80,6 +82,9 @@ public class RobotAnalyticsService : IRobotAnalyticsService
             UtilizationGroupingInterval.Day => TimeSpan.FromDays(1),
             _ => throw new ArgumentOutOfRangeException(nameof(grouping), grouping, "Unsupported grouping interval.")
         };
+
+        // Use timezone offset to align buckets to client's local time instead of UTC
+        var timezoneOffset = clientTimezoneOffset ?? TimeSpan.Zero;
 
         var metrics = new RobotUtilizationMetrics
         {
@@ -138,7 +143,7 @@ public class RobotAnalyticsService : IRobotAnalyticsService
         {
             var start = NormalizeToUtc(pause.PauseStartUtc);
             var end = NormalizeToUtc(pause.PauseEndUtc ?? normalizedEnd);
-            foreach (var segment in SplitInterval(start, end, normalizedStart, normalizedEnd, grouping, bucketSize))
+            foreach (var segment in SplitInterval(start, end, normalizedStart, normalizedEnd, grouping, bucketSize, timezoneOffset))
             {
                 manualMinutesByBucket.TryGetValue(segment.BucketStartUtc, out var existing);
                 manualMinutesByBucket[segment.BucketStartUtc] = existing + segment.Minutes;
@@ -190,7 +195,7 @@ public class RobotAnalyticsService : IRobotAnalyticsService
 
                 manualOverlapMinutes += (pauseEnd - pauseStart).TotalMinutes;
 
-                foreach (var segment in SplitInterval(pauseStart, pauseEnd, normalizedStart, normalizedEnd, grouping, bucketSize))
+                foreach (var segment in SplitInterval(pauseStart, pauseEnd, normalizedStart, normalizedEnd, grouping, bucketSize, timezoneOffset))
                 {
                     manualOverlapsByBucket.TryGetValue(segment.BucketStartUtc, out var existing);
                     manualOverlapsByBucket[segment.BucketStartUtc] = existing + segment.Minutes;
@@ -199,7 +204,7 @@ public class RobotAnalyticsService : IRobotAnalyticsService
 
             var effectiveMissionMinutes = Math.Max(0, missionDurationMinutes - manualOverlapMinutes);
 
-            foreach (var segment in SplitInterval(boundedStart, boundedEnd, normalizedStart, normalizedEnd, grouping, bucketSize))
+            foreach (var segment in SplitInterval(boundedStart, boundedEnd, normalizedStart, normalizedEnd, grouping, bucketSize, timezoneOffset))
             {
                 missionMinutesByBucket.TryGetValue(segment.BucketStartUtc, out var existing);
                 missionMinutesByBucket[segment.BucketStartUtc] = existing + segment.Minutes;
@@ -238,13 +243,9 @@ public class RobotAnalyticsService : IRobotAnalyticsService
             }
         }
 
-        // Merge bucket data
-        var allBuckets = missionMinutesByBucket.Keys
-            .Union(manualMinutesByBucket.Keys)
-            .Union(manualOverlapsByBucket.Keys)
-            .Union(metrics.Breakdown.Select(b => b.BucketStartUtc))
-            .Distinct()
-            .OrderBy(b => b)
+        // Generate ALL buckets in the date range (fills gaps with zeros)
+        // Buckets are aligned to client's local midnight using timezoneOffset
+        var allBuckets = GenerateAllBuckets(normalizedStart, normalizedEnd, grouping, bucketSize, timezoneOffset)
             .ToList();
 
         var breakdownLookup = metrics.Breakdown.ToDictionary(b => b.BucketStartUtc);
@@ -344,25 +345,62 @@ public class RobotAnalyticsService : IRobotAnalyticsService
             }
 
             foreach (var segment in SplitInterval(
-                boundedStart, boundedEnd, normalizedStart, normalizedEnd, grouping, bucketSize))
+                boundedStart, boundedEnd, normalizedStart, normalizedEnd, grouping, bucketSize, timezoneOffset))
             {
                 chargingMinutesByBucket.TryGetValue(segment.BucketStartUtc, out var existing);
                 chargingMinutesByBucket[segment.BucketStartUtc] = existing + segment.Minutes;
             }
         }
 
-        metrics.TotalChargingMinutes = chargingMinutesByBucket.Values.Sum();
-        metrics.TotalWorkingMinutes = metrics.UtilizedMinutes; // Mission execution time
+        // Calculate totals with proper capping to ensure they don't exceed TotalAvailableMinutes
+        var rawTotalChargingMinutes = chargingMinutesByBucket.Values.Sum();
+        var rawTotalWorkingMinutes = metrics.UtilizedMinutes;
+
+        // Cap TotalWorkingMinutes to TotalAvailableMinutes
+        metrics.TotalWorkingMinutes = Math.Min(rawTotalWorkingMinutes, metrics.TotalAvailableMinutes);
+
+        // Cap TotalChargingMinutes to remaining available time after working
+        var remainingTotalAfterWorking = metrics.TotalAvailableMinutes - metrics.TotalWorkingMinutes;
+        metrics.TotalChargingMinutes = Math.Min(rawTotalChargingMinutes, remainingTotalAfterWorking);
+
+        // Calculate TotalIdleMinutes as the remainder
         metrics.TotalIdleMinutes = Math.Max(0,
             metrics.TotalAvailableMinutes - metrics.TotalWorkingMinutes - metrics.TotalChargingMinutes);
 
         // Update breakdown with charging, working, and idle minutes
+        // IMPORTANT: Ensure Working + Charging + Idle = TotalAvailableMinutes (no overlap causing >24h)
         foreach (var bucket in metrics.Breakdown)
         {
             chargingMinutesByBucket.TryGetValue(bucket.BucketStartUtc, out var chargingMinutes);
 
-            bucket.ChargingMinutes = Math.Round(chargingMinutes, 2);
-            bucket.WorkingMinutes = bucket.UtilizedMinutes; // Mission execution time
+            var rawWorkingMinutes = bucket.UtilizedMinutes;
+            var rawChargingMinutes = chargingMinutes;
+
+            // Step 1: Cap WorkingMinutes to TotalAvailableMinutes
+            // This handles cases where overlapping mission records cause accumulated time > 24h
+            bucket.WorkingMinutes = Math.Min(rawWorkingMinutes, bucket.TotalAvailableMinutes);
+
+            if (rawWorkingMinutes > bucket.TotalAvailableMinutes)
+            {
+                _logger.LogWarning(
+                    "WorkingMinutes ({RawWorking}min) exceeded TotalAvailableMinutes ({Available}min) for bucket {BucketStart}. " +
+                    "Capped to {Capped}min. This may indicate overlapping mission records in the database.",
+                    rawWorkingMinutes, bucket.TotalAvailableMinutes, bucket.BucketStartUtc, bucket.WorkingMinutes);
+            }
+
+            // Step 2: Cap ChargingMinutes to remaining available time after working
+            var remainingAfterWorking = bucket.TotalAvailableMinutes - bucket.WorkingMinutes;
+            bucket.ChargingMinutes = Math.Min(Math.Round(rawChargingMinutes, 2), remainingAfterWorking);
+
+            if (rawChargingMinutes > remainingAfterWorking)
+            {
+                _logger.LogDebug(
+                    "ChargingMinutes ({RawCharging}min) exceeded remaining time ({Remaining}min) for bucket {BucketStart}. " +
+                    "Capped to {Capped}min. Working and Charging time overlap detected.",
+                    rawChargingMinutes, remainingAfterWorking, bucket.BucketStartUtc, bucket.ChargingMinutes);
+            }
+
+            // Step 3: Calculate idle time as the remainder (guaranteed to be non-negative)
             bucket.IdleMinutes = Math.Max(0,
                 bucket.TotalAvailableMinutes - bucket.WorkingMinutes - bucket.ChargingMinutes);
         }
@@ -738,16 +776,26 @@ public class RobotAnalyticsService : IRobotAnalyticsService
     private static DateTime Min(DateTime first, DateTime second) =>
         first <= second ? first : second;
 
-    private static DateTime GetBucketStart(DateTime value, UtilizationGroupingInterval grouping)
+    private static DateTime GetBucketStart(DateTime value, UtilizationGroupingInterval grouping, TimeSpan timezoneOffset = default)
     {
         var normalized = NormalizeToUtc(value);
 
-        return grouping switch
+        // To align buckets to client's local midnight instead of UTC midnight:
+        // 1. Convert UTC time to local time by adding the offset
+        // 2. Truncate to local midnight/hour
+        // 3. Convert back to UTC by subtracting the offset
+        var localTime = normalized.Add(timezoneOffset);
+
+        var localBucketStart = grouping switch
         {
-            UtilizationGroupingInterval.Hour => new DateTime(normalized.Year, normalized.Month, normalized.Day, normalized.Hour, 0, 0, DateTimeKind.Utc),
-            UtilizationGroupingInterval.Day => new DateTime(normalized.Year, normalized.Month, normalized.Day, 0, 0, 0, DateTimeKind.Utc),
+            UtilizationGroupingInterval.Hour => new DateTime(localTime.Year, localTime.Month, localTime.Day, localTime.Hour, 0, 0, DateTimeKind.Unspecified),
+            UtilizationGroupingInterval.Day => new DateTime(localTime.Year, localTime.Month, localTime.Day, 0, 0, 0, DateTimeKind.Unspecified),
             _ => throw new ArgumentOutOfRangeException(nameof(grouping), grouping, "Unsupported grouping interval.")
         };
+
+        // Convert back to UTC
+        var utcBucketStart = DateTime.SpecifyKind(localBucketStart.Subtract(timezoneOffset), DateTimeKind.Utc);
+        return utcBucketStart;
     }
 
     private static IEnumerable<(DateTime BucketStartUtc, double Minutes)> SplitInterval(
@@ -756,7 +804,8 @@ public class RobotAnalyticsService : IRobotAnalyticsService
         DateTime periodStart,
         DateTime periodEnd,
         UtilizationGroupingInterval grouping,
-        TimeSpan bucketSize)
+        TimeSpan bucketSize,
+        TimeSpan timezoneOffset = default)
     {
         var boundedStart = Max(intervalStart, periodStart);
         var boundedEnd = Min(intervalEnd, periodEnd);
@@ -765,7 +814,7 @@ public class RobotAnalyticsService : IRobotAnalyticsService
             yield break;
         }
 
-        var currentBucketStart = GetBucketStart(boundedStart, grouping);
+        var currentBucketStart = GetBucketStart(boundedStart, grouping, timezoneOffset);
         while (currentBucketStart < boundedEnd)
         {
             var bucketEnd = currentBucketStart.Add(bucketSize);
@@ -778,6 +827,29 @@ public class RobotAnalyticsService : IRobotAnalyticsService
             }
 
             currentBucketStart = bucketEnd;
+        }
+    }
+
+    /// <summary>
+    /// Generates all bucket start timestamps for the given date range.
+    /// This ensures the breakdown includes all time periods, even those with no activity.
+    /// Buckets are aligned to the client's local midnight using the provided timezone offset.
+    /// </summary>
+    private static IEnumerable<DateTime> GenerateAllBuckets(
+        DateTime periodStart,
+        DateTime periodEnd,
+        UtilizationGroupingInterval grouping,
+        TimeSpan bucketSize,
+        TimeSpan timezoneOffset)
+    {
+        // Get the bucket containing the start of the period, aligned to local midnight
+        var currentBucket = GetBucketStart(periodStart, grouping, timezoneOffset);
+
+        // Generate buckets until we've covered the entire period
+        while (currentBucket < periodEnd)
+        {
+            yield return currentBucket;
+            currentBucket = currentBucket.Add(bucketSize);
         }
     }
 }

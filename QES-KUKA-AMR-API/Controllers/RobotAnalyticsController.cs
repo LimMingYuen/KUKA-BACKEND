@@ -40,6 +40,10 @@ public class RobotAnalyticsController : ControllerBase
     {
         try
         {
+            // Extract timezone offset from client's request (for bucket alignment)
+            // Default to UTC if not provided
+            var clientOffset = start?.Offset ?? TimeSpan.Zero;
+
             var effectiveEnd = end?.ToUniversalTime().UtcDateTime ?? DateTime.UtcNow;
             var effectiveStart = start?.ToUniversalTime().UtcDateTime ?? effectiveEnd.AddDays(-7);
 
@@ -101,6 +105,7 @@ public class RobotAnalyticsController : ControllerBase
                 effectiveEnd,
                 grouping.Value,
                 jwtToken,
+                clientOffset,
                 cancellationToken);
 
             var response = new
