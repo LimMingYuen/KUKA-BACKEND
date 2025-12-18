@@ -169,6 +169,8 @@ builder.Services.Configure<MobileRobotServiceOptions>(
     builder.Configuration.GetSection(MobileRobotServiceOptions.SectionName));
 builder.Services.Configure<MissionListServiceOptions>(
     builder.Configuration.GetSection(MissionListServiceOptions.SectionName));
+builder.Services.Configure<MapNodeServiceOptions>(
+    builder.Configuration.GetSection(MapNodeServiceOptions.SectionName));
 
 builder.Services.Configure<AmrServiceOptions>(
     builder.Configuration.GetSection(AmrServiceOptions.SectionName));
@@ -252,6 +254,13 @@ builder.Services.AddHostedService<WaitingMissionMonitorService>();
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<IQueueNotificationService, QueueNotificationService>();
 
+// Robot Realtime SignalR Services
+builder.Services.Configure<RobotRealtimePollingOptions>(
+    builder.Configuration.GetSection(RobotRealtimePollingOptions.SectionName));
+builder.Services.AddSingleton<ISignalRConnectionTracker, SignalRConnectionTracker>();
+builder.Services.AddSingleton<IRobotRealtimeNotificationService, RobotRealtimeNotificationService>();
+builder.Services.AddHostedService<RobotRealtimePollingService>();
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -328,6 +337,7 @@ app.MapControllers();
 
 // Map SignalR hubs for real-time updates
 app.MapHub<QueueHub>("/hubs/queue");
+app.MapHub<RobotRealtimeHub>("/hubs/robot-realtime");
 
 // Seed database with default admin user
 using (var scope = app.Services.CreateScope())

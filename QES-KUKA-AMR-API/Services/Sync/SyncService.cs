@@ -8,6 +8,7 @@ using QES_KUKA_AMR_API.Data;
 using QES_KUKA_AMR_API.Data.Entities;
 using QES_KUKA_AMR_API.Models.AutoSync;
 using QES_KUKA_AMR_API.Models.Config;
+using QES_KUKA_AMR_API.Models.MapNode;
 using QES_KUKA_AMR_API.Models.MapZone;
 using QES_KUKA_AMR_API.Models.MobileRobot;
 using QES_KUKA_AMR_API.Models.QrCode;
@@ -33,6 +34,7 @@ public class SyncService : ISyncService
     private readonly QrCodeServiceOptions _qrCodeOptions;
     private readonly MapZoneServiceOptions _mapZoneOptions;
     private readonly MobileRobotServiceOptions _mobileRobotOptions;
+    private readonly MapNodeServiceOptions _mapNodeOptions;
 
     public SyncService(
         ApplicationDbContext dbContext,
@@ -42,7 +44,8 @@ public class SyncService : ISyncService
         IOptions<MissionServiceOptions> missionOptions,
         IOptions<QrCodeServiceOptions> qrCodeOptions,
         IOptions<MapZoneServiceOptions> mapZoneOptions,
-        IOptions<MobileRobotServiceOptions> mobileRobotOptions)
+        IOptions<MobileRobotServiceOptions> mobileRobotOptions,
+        IOptions<MapNodeServiceOptions> mapNodeOptions)
     {
         _dbContext = dbContext;
         _httpClientFactory = httpClientFactory;
@@ -52,6 +55,7 @@ public class SyncService : ISyncService
         _qrCodeOptions = qrCodeOptions.Value;
         _mapZoneOptions = mapZoneOptions.Value;
         _mobileRobotOptions = mobileRobotOptions.Value;
+        _mapNodeOptions = mapNodeOptions.Value;
     }
 
     #region Workflows Sync
@@ -591,6 +595,145 @@ public class SyncService : ISyncService
             Total = mobileRobots.Count,
             Inserted = inserted,
             Updated = updated
+        };
+    }
+
+    #endregion
+
+    #region Map Node Coordinates Sync
+
+    public async Task<CoordinateSyncResultDto> SyncMapNodeCoordinatesAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(_mapNodeOptions.MapNodeListUrl) ||
+                !Uri.TryCreate(_mapNodeOptions.MapNodeListUrl, UriKind.Absolute, out var requestUri))
+            {
+                return new CoordinateSyncResultDto
+                {
+                    ErrorMessage = "Map Node list URL is not configured."
+                };
+            }
+
+            // This API does not require authentication - it's a simple GET request
+            var httpClient = _httpClientFactory.CreateClient();
+            var request = new HttpRequestMessage(HttpMethod.Get, requestUri);
+
+            _logger.LogInformation("Fetching map nodes from {Url}", requestUri);
+
+            using var response = await httpClient.SendAsync(request, cancellationToken);
+            var content = await response.Content.ReadAsStringAsync(cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("Map node API returned {StatusCode}: {Content}",
+                    response.StatusCode, content.Length > 200 ? content.Substring(0, 200) : content);
+                return new CoordinateSyncResultDto
+                {
+                    ErrorMessage = $"Map node API returned {response.StatusCode}"
+                };
+            }
+
+            var jsonOptions = new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            };
+
+            var apiResponse = JsonSerializer.Deserialize<MapNodeApiResponse>(content, jsonOptions);
+            if (apiResponse == null || !apiResponse.Succ || apiResponse.Data == null)
+            {
+                _logger.LogWarning("Map node API returned unsuccessful response: {Msg}", apiResponse?.Msg);
+                return new CoordinateSyncResultDto
+                {
+                    ErrorMessage = apiResponse?.Msg ?? "Failed to parse map node response"
+                };
+            }
+
+            _logger.LogInformation("Received {Count} map nodes from external API", apiResponse.Data.Count);
+
+            return await ProcessMapNodeCoordinatesAsync(apiResponse.Data, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error syncing map node coordinates");
+            return new CoordinateSyncResultDto
+            {
+                ErrorMessage = ex.Message
+            };
+        }
+    }
+
+    private async Task<CoordinateSyncResultDto> ProcessMapNodeCoordinatesAsync(
+        List<ExternalMapNodeDto> mapNodes,
+        CancellationToken cancellationToken)
+    {
+        // Load all existing QR codes
+        var allQrCodes = await _dbContext.QrCodes.ToListAsync(cancellationToken);
+
+        // Create lookup dictionary by NodeLabel + MapCode (case-insensitive)
+        var qrCodeLookup = allQrCodes.ToDictionary(
+            q => $"{q.NodeLabel.ToUpperInvariant()}|{q.MapCode.ToUpperInvariant()}",
+            q => q);
+
+        var updated = 0;
+        var skipped = 0;
+
+        foreach (var mapNode in mapNodes)
+        {
+            if (string.IsNullOrWhiteSpace(mapNode.NodeLabel) || string.IsNullOrWhiteSpace(mapNode.MapCode))
+            {
+                skipped++;
+                continue;
+            }
+
+            // Parse coordinates from string to double
+            if (!double.TryParse(mapNode.X, out var xCoord) || !double.TryParse(mapNode.Y, out var yCoord))
+            {
+                _logger.LogDebug("Skipping node {NodeLabel} - invalid coordinates: X={X}, Y={Y}",
+                    mapNode.NodeLabel, mapNode.X, mapNode.Y);
+                skipped++;
+                continue;
+            }
+
+            var key = $"{mapNode.NodeLabel.ToUpperInvariant()}|{mapNode.MapCode.ToUpperInvariant()}";
+
+            if (qrCodeLookup.TryGetValue(key, out var qrCode))
+            {
+                // Update coordinates
+                qrCode.XCoordinate = xCoord;
+                qrCode.YCoordinate = yCoord;
+
+                // Also update NodeUuid from CellCode if not already set
+                if (string.IsNullOrWhiteSpace(qrCode.NodeUuid) && !string.IsNullOrWhiteSpace(mapNode.CellCode))
+                {
+                    qrCode.NodeUuid = mapNode.CellCode;
+                }
+
+                // Update NodeType if provided
+                if (mapNode.NodeFunctionType.HasValue && !qrCode.NodeType.HasValue)
+                {
+                    qrCode.NodeType = mapNode.NodeFunctionType;
+                }
+
+                updated++;
+            }
+            else
+            {
+                // QR code doesn't exist - skip (we only update existing records)
+                skipped++;
+            }
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation("Map node coordinate sync completed: {Updated} updated, {Skipped} skipped",
+            updated, skipped);
+
+        return new CoordinateSyncResultDto
+        {
+            Total = mapNodes.Count,
+            Updated = updated,
+            Skipped = skipped
         };
     }
 

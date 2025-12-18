@@ -8,10 +8,12 @@ using Microsoft.Extensions.Options;
 using QES_KUKA_AMR_API.Data;
 using QES_KUKA_AMR_API.Data.Entities;
 using QES_KUKA_AMR_API.Models.Config;
+using QES_KUKA_AMR_API.Models.MapNode;
 using QES_KUKA_AMR_API.Models.QrCode;
 using QES_KUKA_AMR_API.Models.RobotMonitoring;
 using QES_KUKA_AMR_API.Options;
 using QES_KUKA_AMR_API.Services.Auth;
+using QES_KUKA_AMR_API.Services.Sync;
 
 namespace QES_KUKA_AMR_API.Controllers;
 
@@ -28,23 +30,26 @@ public class QrCodesController : ControllerBase
     private readonly ILogger<QrCodesController> _logger;
     private readonly QrCodeServiceOptions _qrCodeOptions;
     private readonly IExternalApiTokenService _externalApiTokenService;
+    private readonly ISyncService _syncService;
 
     public QrCodesController(
         ApplicationDbContext dbContext,
         IHttpClientFactory httpClientFactory,
         ILogger<QrCodesController> logger,
         IOptions<QrCodeServiceOptions> qrCodeOptions,
-        IExternalApiTokenService externalApiTokenService)
+        IExternalApiTokenService externalApiTokenService,
+        ISyncService syncService)
     {
         _dbContext = dbContext;
         _httpClientFactory = httpClientFactory;
         _logger = logger;
         _qrCodeOptions = qrCodeOptions.Value;
         _externalApiTokenService = externalApiTokenService;
+        _syncService = syncService;
     }
 
     [HttpPost("sync")]
-    public async Task<ActionResult<QrCodeSyncResultDto>> SyncAsync(CancellationToken cancellationToken)
+    public async Task<ActionResult<QrCodeWithCoordinateSyncResultDto>> SyncAsync(CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(_qrCodeOptions.QrCodeListUrl) ||
             !Uri.TryCreate(_qrCodeOptions.QrCodeListUrl, UriKind.Absolute, out var requestUri))
@@ -158,11 +163,17 @@ public class QrCodesController : ControllerBase
 
                 if (qrCodes is null || qrCodes.Count == 0)
                 {
-                    return Ok(new QrCodeSyncResultDto
+                    // No QR codes to sync, but still try to sync coordinates
+                    var coordResult = await _syncService.SyncMapNodeCoordinatesAsync(cancellationToken);
+                    return Ok(new QrCodeWithCoordinateSyncResultDto
                     {
-                        Total = 0,
-                        Inserted = 0,
-                        Updated = 0
+                        QrCodeTotal = 0,
+                        QrCodeInserted = 0,
+                        QrCodeUpdated = 0,
+                        CoordinateTotal = coordResult.Total,
+                        CoordinateUpdated = coordResult.Updated,
+                        CoordinateSkipped = coordResult.Skipped,
+                        CoordinateSyncError = coordResult.ErrorMessage
                     });
                 }
 
@@ -201,11 +212,17 @@ public class QrCodesController : ControllerBase
 
                 if (qrCodes is null || qrCodes.Count == 0)
                 {
-                    return Ok(new QrCodeSyncResultDto
+                    // No QR codes to sync, but still try to sync coordinates
+                    var coordResult = await _syncService.SyncMapNodeCoordinatesAsync(cancellationToken);
+                    return Ok(new QrCodeWithCoordinateSyncResultDto
                     {
-                        Total = 0,
-                        Inserted = 0,
-                        Updated = 0
+                        QrCodeTotal = 0,
+                        QrCodeInserted = 0,
+                        QrCodeUpdated = 0,
+                        CoordinateTotal = coordResult.Total,
+                        CoordinateUpdated = coordResult.Updated,
+                        CoordinateSkipped = coordResult.Skipped,
+                        CoordinateSyncError = coordResult.ErrorMessage
                     });
                 }
 
@@ -224,7 +241,7 @@ public class QrCodesController : ControllerBase
         }
     }
 
-    private async Task<ActionResult<QrCodeSyncResultDto>> ProcessQrCodesAsync(
+    private async Task<ActionResult<QrCodeWithCoordinateSyncResultDto>> ProcessQrCodesAsync(
         IEnumerable<QrCodeDto> qrCodes,
         CancellationToken cancellationToken)
     {
@@ -282,11 +299,19 @@ public class QrCodesController : ControllerBase
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
-        return Ok(new QrCodeSyncResultDto
+        // Now sync coordinates from Map Node API
+        _logger.LogInformation("QR code sync completed. Now syncing map node coordinates...");
+        var coordinateResult = await _syncService.SyncMapNodeCoordinatesAsync(cancellationToken);
+
+        return Ok(new QrCodeWithCoordinateSyncResultDto
         {
-            Total = qrCodeList.Count,
-            Inserted = inserted,
-            Updated = updated
+            QrCodeTotal = qrCodeList.Count,
+            QrCodeInserted = inserted,
+            QrCodeUpdated = updated,
+            CoordinateTotal = coordinateResult.Total,
+            CoordinateUpdated = coordinateResult.Updated,
+            CoordinateSkipped = coordinateResult.Skipped,
+            CoordinateSyncError = coordinateResult.ErrorMessage
         });
     }
 

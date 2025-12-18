@@ -1,4 +1,5 @@
 using QES_KUKA_AMR_API.Models.AutoSync;
+using QES_KUKA_AMR_API.Models.MapNode;
 
 namespace QES_KUKA_AMR_API.Services.Sync;
 
@@ -26,6 +27,11 @@ public interface ISyncService
     /// Sync mobile robots from external API
     /// </summary>
     Task<SyncResultDto> SyncMobileRobotsAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Sync map node coordinates from external Map Node API to QrCodes table
+    /// </summary>
+    Task<CoordinateSyncResultDto> SyncMapNodeCoordinatesAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Run all enabled syncs based on settings
