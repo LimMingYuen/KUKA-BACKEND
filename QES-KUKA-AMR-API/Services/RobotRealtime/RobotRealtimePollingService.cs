@@ -15,11 +15,11 @@ public class RobotRealtimePollingService : BackgroundService
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<RobotRealtimePollingService> _logger;
     private readonly IRobotRealtimeNotificationService _notificationService;
-    private readonly ISignalRConnectionTracker _connectionTracker;
+    private readonly IMapSubscriptionTracker _mapSubscriptionTracker;
     private readonly RobotRealtimePollingOptions _options;
 
-    // Cache last known positions for change detection
-    private readonly Dictionary<string, RobotPositionDto> _lastPositions = new();
+    // Cache last known positions for change detection - keyed by subscription
+    private readonly Dictionary<MapSubscriptionKey, Dictionary<string, RobotPositionDto>> _lastPositionsBySubscription = new();
     private readonly object _cacheLock = new();
 
     // Track polling state for logging
@@ -29,13 +29,13 @@ public class RobotRealtimePollingService : BackgroundService
         IServiceProvider serviceProvider,
         ILogger<RobotRealtimePollingService> logger,
         IRobotRealtimeNotificationService notificationService,
-        ISignalRConnectionTracker connectionTracker,
+        IMapSubscriptionTracker mapSubscriptionTracker,
         IOptions<RobotRealtimePollingOptions> options)
     {
         _serviceProvider = serviceProvider;
         _logger = logger;
         _notificationService = notificationService;
-        _connectionTracker = connectionTracker;
+        _mapSubscriptionTracker = mapSubscriptionTracker;
         _options = options.Value;
     }
 
@@ -58,30 +58,32 @@ public class RobotRealtimePollingService : BackgroundService
         {
             try
             {
-                // Only poll if there are active SignalR connections
-                if (_connectionTracker.HasActiveConnections)
+                // Only poll if there are active map/floor subscriptions
+                if (_mapSubscriptionTracker.HasActiveSubscriptions)
                 {
+                    var activeSubscriptions = _mapSubscriptionTracker.GetActiveSubscriptions();
+
                     if (!_wasPolling)
                     {
                         _logger.LogInformation(
-                            "Starting robot realtime polling - {Count} client(s) connected",
-                            _connectionTracker.ConnectionCount);
+                            "Starting robot realtime polling - {Count} active subscription(s)",
+                            activeSubscriptions.Count);
                         _wasPolling = true;
                     }
 
-                    await PollAndBroadcastAsync(stoppingToken);
+                    await PollAndBroadcastAsync(activeSubscriptions, stoppingToken);
                 }
                 else
                 {
                     if (_wasPolling)
                     {
-                        _logger.LogInformation("Pausing robot realtime polling - no clients connected");
+                        _logger.LogInformation("Pausing robot realtime polling - no active subscriptions");
                         _wasPolling = false;
 
                         // Clear cached positions when pausing so we get fresh data on resume
                         lock (_cacheLock)
                         {
-                            _lastPositions.Clear();
+                            _lastPositionsBySubscription.Clear();
                         }
                     }
                 }
@@ -101,37 +103,65 @@ public class RobotRealtimePollingService : BackgroundService
         _logger.LogInformation("Robot Realtime Polling Service stopped.");
     }
 
-    private async Task PollAndBroadcastAsync(CancellationToken cancellationToken)
+    private async Task PollAndBroadcastAsync(
+        IReadOnlyCollection<MapSubscriptionKey> subscriptions,
+        CancellationToken cancellationToken)
     {
         using var scope = _serviceProvider.CreateScope();
         var realtimeClient = scope.ServiceProvider.GetRequiredService<IRobotRealtimeClient>();
 
-        // Fetch all robots (no map filter - we filter when broadcasting)
-        var realtimeData = await realtimeClient.GetRealtimeInfoAsync(
-            floorNumber: null,
-            mapCode: null,
-            isFirst: false,
-            cancellationToken: cancellationToken);
+        var allPositions = new List<RobotPositionDto>();
 
-        if (realtimeData?.RobotRealtimeList == null || realtimeData.RobotRealtimeList.Count == 0)
+        // Poll for each active subscription
+        foreach (var subscription in subscriptions)
         {
-            _logger.LogDebug("No robots returned from realtime API");
-            return;
+            try
+            {
+                // Skip "all" subscriptions - external API requires mapCode/floorNumber
+                // Robots will still be broadcast to "all" group via RobotRealtimeNotificationService
+                if (subscription.IsAllSubscription)
+                {
+                    _logger.LogDebug("Skipping 'all' subscription - external API requires mapCode/floorNumber");
+                    continue;
+                }
+
+                var realtimeData = await realtimeClient.GetRealtimeInfoAsync(
+                    floorNumber: subscription.FloorNumber,
+                    mapCode: subscription.MapCode,
+                    isFirst: false,
+                    cancellationToken: cancellationToken);
+
+                if (realtimeData?.RobotRealtimeList == null || realtimeData.RobotRealtimeList.Count == 0)
+                {
+                    _logger.LogDebug("No robots returned for MapCode={MapCode}, FloorNumber={FloorNumber}",
+                        subscription.MapCode, subscription.FloorNumber);
+                    continue;
+                }
+
+                // Map to lightweight DTOs
+                var positions = realtimeData.RobotRealtimeList
+                    .Select(MapToPositionDto)
+                    .ToList();
+
+                // Optional: Only broadcast if positions changed (reduces network traffic)
+                var positionsToSend = _options.BroadcastOnlyChanges
+                    ? FilterChangedPositions(subscription, positions)
+                    : positions;
+
+                allPositions.AddRange(positionsToSend);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex,
+                    "Error polling realtime info for MapCode={MapCode}, FloorNumber={FloorNumber}",
+                    subscription.MapCode, subscription.FloorNumber);
+            }
         }
 
-        // Map to lightweight DTOs
-        var positions = realtimeData.RobotRealtimeList
-            .Select(MapToPositionDto)
-            .ToList();
-
-        // Optional: Only broadcast if positions changed (reduces network traffic)
-        var changedPositions = _options.BroadcastOnlyChanges
-            ? FilterChangedPositions(positions)
-            : positions;
-
-        if (changedPositions.Count > 0)
+        // Broadcast all collected positions
+        if (allPositions.Count > 0)
         {
-            await _notificationService.BroadcastRobotPositionsAsync(changedPositions, cancellationToken);
+            await _notificationService.BroadcastRobotPositionsAsync(allPositions, cancellationToken);
         }
     }
 
@@ -158,19 +188,27 @@ public class RobotRealtimePollingService : BackgroundService
         };
     }
 
-    private List<RobotPositionDto> FilterChangedPositions(List<RobotPositionDto> positions)
+    private List<RobotPositionDto> FilterChangedPositions(
+        MapSubscriptionKey subscription,
+        List<RobotPositionDto> positions)
     {
         var changed = new List<RobotPositionDto>();
 
         lock (_cacheLock)
         {
+            if (!_lastPositionsBySubscription.TryGetValue(subscription, out var lastPositions))
+            {
+                lastPositions = new Dictionary<string, RobotPositionDto>();
+                _lastPositionsBySubscription[subscription] = lastPositions;
+            }
+
             foreach (var pos in positions)
             {
-                if (!_lastPositions.TryGetValue(pos.RobotId, out var lastPos) ||
+                if (!lastPositions.TryGetValue(pos.RobotId, out var lastPos) ||
                     HasSignificantChange(lastPos, pos))
                 {
                     changed.Add(pos);
-                    _lastPositions[pos.RobotId] = pos;
+                    lastPositions[pos.RobotId] = pos;
                 }
             }
         }

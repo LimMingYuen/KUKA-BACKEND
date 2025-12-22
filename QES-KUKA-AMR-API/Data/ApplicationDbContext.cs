@@ -68,6 +68,12 @@ public class ApplicationDbContext : DbContext
 
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
+    public DbSet<IoControllerDevice> IoControllerDevices => Set<IoControllerDevice>();
+
+    public DbSet<IoChannel> IoChannels => Set<IoChannel>();
+
+    public DbSet<IoStateLog> IoStateLogs => Set<IoStateLog>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -402,6 +408,58 @@ public class ApplicationDbContext : DbContext
             entity.HasOne(e => e.User)
                 .WithMany()
                 .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // IO Controller entities
+        modelBuilder.Entity<IoControllerDevice>(entity =>
+        {
+            entity.ToTable("IoControllerDevices");
+            // Index on DeviceName for display/search
+            entity.HasIndex(e => e.DeviceName);
+            // Unique constraint: one device per IP:Port combination
+            entity.HasIndex(e => new { e.IpAddress, e.Port }).IsUnique();
+            // Index for filtering active devices
+            entity.HasIndex(e => e.IsActive);
+            // DateTime columns
+            entity.Property(e => e.CreatedUtc).HasColumnType("datetime2");
+            entity.Property(e => e.UpdatedUtc).HasColumnType("datetime2");
+            entity.Property(e => e.LastPollUtc).HasColumnType("datetime2");
+        });
+
+        modelBuilder.Entity<IoChannel>(entity =>
+        {
+            entity.ToTable("IoChannels");
+            // Composite unique index: one channel per device/type/number combination
+            entity.HasIndex(e => new { e.DeviceId, e.ChannelType, e.ChannelNumber }).IsUnique();
+            // Index for querying all channels of a device
+            entity.HasIndex(e => e.DeviceId);
+            // DateTime columns
+            entity.Property(e => e.LastStateChangeUtc).HasColumnType("datetime2");
+            // Foreign key relationship with cascade delete
+            entity.HasOne(e => e.Device)
+                .WithMany()
+                .HasForeignKey(e => e.DeviceId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<IoStateLog>(entity =>
+        {
+            entity.ToTable("IoStateLogs");
+            // Index for querying logs by device
+            entity.HasIndex(e => e.DeviceId);
+            // Index for querying logs by timestamp
+            entity.HasIndex(e => e.ChangedUtc);
+            // Composite index for device-specific time-range queries
+            entity.HasIndex(e => new { e.DeviceId, e.ChangedUtc });
+            // Composite index for channel-specific queries
+            entity.HasIndex(e => new { e.DeviceId, e.ChannelNumber, e.ChannelType });
+            // DateTime columns
+            entity.Property(e => e.ChangedUtc).HasColumnType("datetime2");
+            // Foreign key relationship with cascade delete
+            entity.HasOne(e => e.Device)
+                .WithMany()
+                .HasForeignKey(e => e.DeviceId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 

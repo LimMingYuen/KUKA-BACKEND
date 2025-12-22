@@ -250,6 +250,35 @@ public class MissionHistoryController : ControllerBase
         }
     }
 
+    [HttpDelete("{id:int}")]
+    public async Task<IActionResult> DeleteHistoryAsync(int id, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var missionHistory = await _context.MissionHistories
+                .FirstOrDefaultAsync(m => m.Id == id, cancellationToken);
+
+            if (missionHistory == null)
+            {
+                _logger.LogWarning("Mission history not found for Id={Id}", id);
+                return NotFound(new { message = $"Mission history record with ID {id} not found" });
+            }
+
+            _context.MissionHistories.Remove(missionHistory);
+            await _context.SaveChangesAsync(cancellationToken);
+
+            _logger.LogInformation("Mission history record deleted: Id={Id}, MissionCode={MissionCode}",
+                id, missionHistory.MissionCode);
+
+            return Ok(new { message = $"Mission history record {missionHistory.MissionCode} deleted successfully" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting mission history record with Id={Id}", id);
+            return StatusCode(500, new { message = "Error deleting mission history record" });
+        }
+    }
+
     [HttpGet("count")]
     public async Task<ActionResult<int>> GetCountAsync(CancellationToken cancellationToken)
     {

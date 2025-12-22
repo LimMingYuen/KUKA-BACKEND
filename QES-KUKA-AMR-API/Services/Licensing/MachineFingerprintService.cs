@@ -1,4 +1,3 @@
-using System.Net.NetworkInformation;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Win32;
@@ -22,38 +21,20 @@ public class MachineFingerprintService : IMachineFingerprintService
             return _cachedFingerprint;
         }
 
-        var components = new List<string>();
-
-        // 1. Get MAC address of primary network adapter
-        var macAddress = GetMacAddress();
-        if (!string.IsNullOrEmpty(macAddress))
-        {
-            components.Add($"MAC:{macAddress}");
-        }
-
-        // 2. Get Windows Machine GUID
+        // Use only Windows Machine GUID - most stable identifier
+        // Only changes if Windows is reinstalled (valid reason to re-license)
         var machineGuid = GetWindowsMachineGuid();
-        if (!string.IsNullOrEmpty(machineGuid))
+
+        if (string.IsNullOrEmpty(machineGuid))
         {
-            components.Add($"GUID:{machineGuid}");
+            _logger.LogError("Failed to retrieve Windows Machine GUID - cannot generate fingerprint");
+            throw new InvalidOperationException("Cannot generate machine fingerprint: Windows Machine GUID not available");
         }
 
-        // 3. Get machine name
-        var machineName = Environment.MachineName;
-        if (!string.IsNullOrEmpty(machineName))
-        {
-            components.Add($"NAME:{machineName}");
-        }
-
-        // 4. Get processor count (basic but stable)
-        components.Add($"CPU:{Environment.ProcessorCount}");
-
-        // Combine all components and hash
-        var combinedString = string.Join("|", components);
-        _logger.LogDebug("Fingerprint components: {Components}", combinedString);
+        _logger.LogDebug("Fingerprint based on Windows Machine GUID");
 
         using var sha256 = SHA256.Create();
-        var hashBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(combinedString));
+        var hashBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes($"GUID:{machineGuid}"));
         _cachedFingerprint = Convert.ToHexString(hashBytes);
 
         return _cachedFingerprint;
@@ -75,34 +56,6 @@ public class MachineFingerprintService : IMachineFingerprintService
         }
 
         return formatted.ToString();
-    }
-
-    private string? GetMacAddress()
-    {
-        try
-        {
-            var networkInterfaces = NetworkInterface.GetAllNetworkInterfaces()
-                .Where(nic => nic.OperationalStatus == OperationalStatus.Up
-                           && nic.NetworkInterfaceType != NetworkInterfaceType.Loopback
-                           && nic.NetworkInterfaceType != NetworkInterfaceType.Tunnel)
-                .OrderByDescending(nic => nic.Speed)
-                .FirstOrDefault();
-
-            if (networkInterfaces != null)
-            {
-                var macBytes = networkInterfaces.GetPhysicalAddress().GetAddressBytes();
-                if (macBytes.Length > 0)
-                {
-                    return Convert.ToHexString(macBytes);
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to get MAC address");
-        }
-
-        return null;
     }
 
     private string? GetWindowsMachineGuid()

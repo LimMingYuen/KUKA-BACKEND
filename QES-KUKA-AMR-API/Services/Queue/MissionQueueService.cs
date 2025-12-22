@@ -153,8 +153,9 @@ public class MissionQueueService : IMissionQueueService
         _logger.LogInformation("Mission {MissionCode} added to queue with priority {Priority}",
             queueItem.MissionCode, queueItem.Priority);
 
-        // Notify clients of queue update
+        // Notify clients of queue update and statistics change
         await _notificationService.NotifyQueueUpdatedAsync(cancellationToken);
+        await _notificationService.NotifyStatisticsUpdatedAsync(cancellationToken);
 
         return queueItem;
     }
@@ -169,6 +170,10 @@ public class MissionQueueService : IMissionQueueService
         if (queueItem == null) return null;
 
         var now = _timeProvider.GetUtcNow().UtcDateTime;
+        var missionCode = queueItem.MissionCode;
+        var isTerminalStatus = status == MissionQueueStatus.Completed ||
+                               status == MissionQueueStatus.Failed ||
+                               status == MissionQueueStatus.Cancelled;
 
         queueItem.Status = status;
         queueItem.ErrorMessage = errorMessage;
@@ -191,10 +196,24 @@ public class MissionQueueService : IMissionQueueService
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation("Mission {MissionCode} status updated to {Status}",
-            queueItem.MissionCode, status);
+            missionCode, status);
 
-        // Notify clients of status change
+        // Notify clients of status change and statistics update
         await _notificationService.NotifyMissionStatusChangedAsync(id, status, cancellationToken);
+        await _notificationService.NotifyStatisticsUpdatedAsync(cancellationToken);
+
+        // Delete from queue if terminal status (Completed/Failed/Cancelled)
+        // MissionHistory already keeps the permanent record
+        if (isTerminalStatus)
+        {
+            _dbContext.MissionQueues.Remove(queueItem);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            _logger.LogInformation("Mission {MissionCode} removed from queue (terminal status: {Status})",
+                missionCode, status);
+
+            // Notify clients that queue has been updated (item removed)
+            await _notificationService.NotifyQueueUpdatedAsync(cancellationToken);
+        }
 
         return queueItem;
     }
@@ -213,8 +232,9 @@ public class MissionQueueService : IMissionQueueService
         _logger.LogInformation("Mission {MissionCode} assigned to robot {RobotId}",
             queueItem.MissionCode, robotId);
 
-        // Notify clients of assignment
+        // Notify clients of assignment and statistics update
         await _notificationService.NotifyMissionStatusChangedAsync(id, MissionQueueStatus.Assigned, cancellationToken);
+        await _notificationService.NotifyStatisticsUpdatedAsync(cancellationToken);
 
         return queueItem;
     }
@@ -270,8 +290,9 @@ public class MissionQueueService : IMissionQueueService
 
         _logger.LogInformation("Mission {MissionCode} cancelled with mode {CancelMode}", queueItem.MissionCode, cancelMode);
 
-        // Notify clients of cancellation
+        // Notify clients of cancellation and statistics update
         await _notificationService.NotifyMissionStatusChangedAsync(id, MissionQueueStatus.Cancelled, cancellationToken);
+        await _notificationService.NotifyStatisticsUpdatedAsync(cancellationToken);
 
         return true;
     }
@@ -344,6 +365,10 @@ public class MissionQueueService : IMissionQueueService
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation("Mission {MissionCode} deleted from queue", queueItem.MissionCode);
+
+        // Notify clients of queue update
+        await _notificationService.NotifyQueueUpdatedAsync(cancellationToken);
+        await _notificationService.NotifyStatisticsUpdatedAsync(cancellationToken);
 
         return true;
     }
@@ -454,6 +479,10 @@ public class MissionQueueService : IMissionQueueService
         _logger.LogInformation("Mission {MissionCode} queued for retry (attempt {RetryCount})",
             queueItem.MissionCode, queueItem.RetryCount);
 
+        // Notify clients of queue update
+        await _notificationService.NotifyQueueUpdatedAsync(cancellationToken);
+        await _notificationService.NotifyStatisticsUpdatedAsync(cancellationToken);
+
         return queueItem;
     }
 
@@ -478,6 +507,9 @@ public class MissionQueueService : IMissionQueueService
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation("Mission {MissionCode} moved up in queue", queueItem.MissionCode);
+
+        // Notify clients of queue update
+        await _notificationService.NotifyQueueUpdatedAsync(cancellationToken);
 
         return true;
     }
@@ -504,6 +536,9 @@ public class MissionQueueService : IMissionQueueService
 
         _logger.LogInformation("Mission {MissionCode} moved down in queue", queueItem.MissionCode);
 
+        // Notify clients of queue update
+        await _notificationService.NotifyQueueUpdatedAsync(cancellationToken);
+
         return true;
     }
 
@@ -518,6 +553,9 @@ public class MissionQueueService : IMissionQueueService
 
         _logger.LogInformation("Mission {MissionCode} priority changed to {Priority}",
             queueItem.MissionCode, newPriority);
+
+        // Notify clients of queue update
+        await _notificationService.NotifyQueueUpdatedAsync(cancellationToken);
 
         return queueItem;
     }

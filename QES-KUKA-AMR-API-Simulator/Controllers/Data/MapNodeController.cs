@@ -16,23 +16,6 @@ public class MapNodeController : ControllerBase
     // Static map node data with coordinates matching existing QR codes
     private static readonly IReadOnlyList<MapNodeDto> MapNodes = new[]
     {
-        new MapNodeDto { CellCode = "Sim1-1-RackPark1", MapCode = "Sim1", FloorNumber = "1", NodeLabel = "RackPark1", X = "19003.0", Y = "49548.0", NodeId = 16, NodeFunctionType = 2, MapNodeNumber = 1 },
-        new MapNodeDto { CellCode = "Sim1-1-RackPark2", MapCode = "Sim1", FloorNumber = "1", NodeLabel = "RackPark2", X = "19003.0", Y = "52073.0", NodeId = 17, NodeFunctionType = 2, MapNodeNumber = 14 },
-        new MapNodeDto { CellCode = "Sim1-1-RackPark3", MapCode = "Sim1", FloorNumber = "1", NodeLabel = "RackPark3", X = "19003.0", Y = "54598.0", NodeId = 18, NodeFunctionType = 2, MapNodeNumber = 2 },
-        new MapNodeDto { CellCode = "Sim1-1-RackPark4", MapCode = "Sim1", FloorNumber = "1", NodeLabel = "RackPark4", X = "19003.0", Y = "57123.0", NodeId = 19, NodeFunctionType = 2, MapNodeNumber = 3 },
-        new MapNodeDto { CellCode = "Sim1-1-RackPark5", MapCode = "Sim1", FloorNumber = "1", NodeLabel = "RackPark5", X = "19003.0", Y = "59648.0", NodeId = 20, NodeFunctionType = 2, MapNodeNumber = 16 },
-        new MapNodeDto { CellCode = "Sim1-1-RackPark6", MapCode = "Sim1", FloorNumber = "1", NodeLabel = "RackPark6", X = "19003.0", Y = "62173.0", NodeId = 21, NodeFunctionType = 2, MapNodeNumber = 17 },
-        new MapNodeDto { CellCode = "Sim1-1-RackPark7", MapCode = "Sim1", FloorNumber = "1", NodeLabel = "RackPark7", X = "19003.0", Y = "64698.0", NodeId = 22, NodeFunctionType = 2, MapNodeNumber = 5 },
-        new MapNodeDto { CellCode = "Sim1-1-RackPark8", MapCode = "Sim1", FloorNumber = "1", NodeLabel = "RackPark8", X = "20310.0", Y = "99665.0", NodeId = 23, NodeFunctionType = 2, MapNodeNumber = 6 },
-        new MapNodeDto { CellCode = "Sim1-1-RackPark9", MapCode = "Sim1", FloorNumber = "1", NodeLabel = "RackPark9", X = "19003.0", Y = "69748.0", NodeId = 24, NodeFunctionType = 2, MapNodeNumber = 19 },
-        new MapNodeDto { CellCode = "Sim1-1-RackPark10", MapCode = "Sim1", FloorNumber = "1", NodeLabel = "RackPark10", X = "19003.0", Y = "72273.0", NodeId = 25, NodeFunctionType = 2, MapNodeNumber = 20 },
-        new MapNodeDto { CellCode = "Sim1-1-RackPark11", MapCode = "Sim1", FloorNumber = "1", NodeLabel = "RackPark11", X = "19003.0", Y = "74798.0", NodeId = 26, NodeFunctionType = 2, MapNodeNumber = 24 },
-        new MapNodeDto { CellCode = "Sim1-1-RackPark12", MapCode = "Sim1", FloorNumber = "1", NodeLabel = "RackPark12", X = "19003.0", Y = "77323.0", NodeId = 27, NodeFunctionType = 2, MapNodeNumber = 25 },
-        new MapNodeDto { CellCode = "Sim1-1-RackPark13", MapCode = "Sim1", FloorNumber = "1", NodeLabel = "RackPark13", X = "19003.0", Y = "79848.0", NodeId = 28, NodeFunctionType = 2, MapNodeNumber = 22 },
-        new MapNodeDto { CellCode = "Sim1-1-RackPark14", MapCode = "Sim1", FloorNumber = "1", NodeLabel = "RackPark14", X = "19003.0", Y = "82373.0", NodeId = 29, NodeFunctionType = 2, MapNodeNumber = 23 },
-        new MapNodeDto { CellCode = "Sim1-1-RackPark15", MapCode = "Sim1", FloorNumber = "1", NodeLabel = "RackPark15", X = "19003.0", Y = "84898.0", NodeId = 30, NodeFunctionType = 2, MapNodeNumber = 27 },
-        new MapNodeDto { CellCode = "Sim1-1-RackPark16", MapCode = "Sim1", FloorNumber = "1", NodeLabel = "RackPark16", X = "19003.0", Y = "87423.0", NodeId = 31, NodeFunctionType = 2, MapNodeNumber = 28 },
-        new MapNodeDto { CellCode = "Sim1-1-ParkingAMR1001", MapCode = "Sim1", FloorNumber = "1", NodeLabel = "ParkingAMR1001", X = "16478.0", Y = "49548.0", NodeId = 32, NodeFunctionType = 3, MapNodeNumber = 12 },
         // Numbered nodes
         new MapNodeDto { CellCode = "Sim1-1-2", MapCode = "Sim1", FloorNumber = "1", NodeLabel = "2", X = "16478.0", Y = "54598.0", NodeId = 33, NodeFunctionType = 4, MapNodeNumber = 2 },
         new MapNodeDto { CellCode = "Sim1-1-3", MapCode = "Sim1", FloorNumber = "1", NodeLabel = "3", X = "16478.0", Y = "57123.0", NodeId = 34, NodeFunctionType = 4, MapNodeNumber = 3 },

@@ -12,13 +12,16 @@ public class RobotRealtimeHub : Hub
 {
     private readonly ILogger<RobotRealtimeHub> _logger;
     private readonly ISignalRConnectionTracker _connectionTracker;
+    private readonly IMapSubscriptionTracker _mapSubscriptionTracker;
 
     public RobotRealtimeHub(
         ILogger<RobotRealtimeHub> logger,
-        ISignalRConnectionTracker connectionTracker)
+        ISignalRConnectionTracker connectionTracker,
+        IMapSubscriptionTracker mapSubscriptionTracker)
     {
         _logger = logger;
         _connectionTracker = connectionTracker;
+        _mapSubscriptionTracker = mapSubscriptionTracker;
     }
 
     public override async Task OnConnectedAsync()
@@ -31,6 +34,7 @@ public class RobotRealtimeHub : Hub
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
         _connectionTracker.RemoveConnection(Context.ConnectionId);
+        _mapSubscriptionTracker.RemoveAllSubscriptions(Context.ConnectionId);
         _logger.LogInformation("Client disconnected from RobotRealtimeHub: {ConnectionId}", Context.ConnectionId);
         await base.OnDisconnectedAsync(exception);
     }
@@ -43,6 +47,7 @@ public class RobotRealtimeHub : Hub
     {
         var groupName = GetGroupName(mapCode, floorNumber);
         await Groups.AddToGroupAsync(Context.ConnectionId, groupName);
+        _mapSubscriptionTracker.AddSubscription(Context.ConnectionId, mapCode, floorNumber);
         _logger.LogInformation("Client {ConnectionId} subscribed to group: {GroupName}",
             Context.ConnectionId, groupName);
     }
@@ -54,6 +59,7 @@ public class RobotRealtimeHub : Hub
     {
         var groupName = GetGroupName(mapCode, floorNumber);
         await Groups.RemoveFromGroupAsync(Context.ConnectionId, groupName);
+        _mapSubscriptionTracker.RemoveSubscription(Context.ConnectionId, mapCode, floorNumber);
         _logger.LogInformation("Client {ConnectionId} unsubscribed from group: {GroupName}",
             Context.ConnectionId, groupName);
     }
@@ -64,6 +70,7 @@ public class RobotRealtimeHub : Hub
     public async Task SubscribeToAll()
     {
         await Groups.AddToGroupAsync(Context.ConnectionId, "all");
+        _mapSubscriptionTracker.AddSubscription(Context.ConnectionId, null, null);
         _logger.LogInformation("Client {ConnectionId} subscribed to all robots", Context.ConnectionId);
     }
 

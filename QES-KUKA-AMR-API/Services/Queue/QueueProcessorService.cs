@@ -114,14 +114,15 @@ public class QueueProcessorService : BackgroundService
             _logger.LogDebug("Received status for {Count} robot(s)", robotStatuses.Count);
         }
 
-        // Step 4: Get available (idle) robots
+        // Step 4: Get available (idle AND unoccupied) robots
+        // Status 3 = Idle, OccupyStatus 0 = Unoccupied
         var availableRobots = robotStatuses
-            .Where(r => r.Value.Status == 3) // Status 3 = Idle
+            .Where(r => r.Value.Status == 3 && r.Value.OccupyStatus == 0)
             .ToDictionary(r => r.Key, r => r.Value);
 
         if (availableRobots.Count == 0 && neededRobotIds.Count > 0)
         {
-            _logger.LogDebug("No idle robots available from preferred list, missions stay queued");
+            _logger.LogDebug("No available robots (idle + unoccupied) from preferred list, missions stay queued");
             return; // Missions remain in Queued status (no requeue needed)
         }
 
@@ -456,10 +457,13 @@ public class QueueProcessorService : BackgroundService
                 }
 
                 // Poll job status until completion
+                // Pass queue service and mission ID to update robot assignment in real-time
                 var jobResult = await PollJobStatusAsync(
                     httpClientFactory,
                     missionOptions,
                     tokenService,
+                    queueService,
+                    mission.Id,
                     mission.MissionCode,
                     selectedRobotId,
                     cancellationToken);
@@ -468,6 +472,16 @@ public class QueueProcessorService : BackgroundService
                 {
                     _logger.LogInformation("✓ Mission {MissionCode} completed with status {Status}",
                         mission.MissionCode, jobResult.FinalStatus);
+
+                    // Update MissionQueue with robot ID from external system (if available and not already set)
+                    var actualRobotId = jobResult.JobData?.RobotId ?? selectedRobotId;
+                    if (!string.IsNullOrEmpty(actualRobotId) && string.IsNullOrEmpty(selectedRobotId))
+                    {
+                        // Robot was assigned by external AMR system - update our queue record
+                        await queueService.AssignRobotAsync(mission.Id, actualRobotId, cancellationToken);
+                        _logger.LogInformation("Updated MissionQueue with robot {RobotId} from external AMR", actualRobotId);
+                    }
+
                     await queueService.UpdateStatusAsync(
                         mission.Id,
                         MissionQueueStatus.Completed,
@@ -476,7 +490,7 @@ public class QueueProcessorService : BackgroundService
 
                     // Update MissionHistory to Completed
                     await UpdateMissionHistoryStatusAsync(dbContext, missionHistory.Id, "Completed",
-                        jobResult.JobData?.RobotId ?? selectedRobotId, null, cancellationToken);
+                        actualRobotId, null, cancellationToken);
                 }
                 else if (jobResult.IsCancelled)
                 {
@@ -743,11 +757,14 @@ public class QueueProcessorService : BackgroundService
 
     /// <summary>
     /// Poll job status until completion, failure, or timeout
+    /// Updates MissionQueue with robot ID as soon as external AMR assigns one (for real-time UI updates)
     /// </summary>
     private async Task<JobPollResult> PollJobStatusAsync(
         IHttpClientFactory httpClientFactory,
         MissionServiceOptions options,
         IExternalApiTokenService tokenService,
+        IMissionQueueService queueService,
+        int missionId,
         string missionCode,
         string? robotId,
         CancellationToken cancellationToken)
@@ -760,6 +777,7 @@ public class QueueProcessorService : BackgroundService
 
         int? lastKnownStatus = null;
         string? lastKnownRobotId = null;
+        bool robotUpdatedInQueue = false; // Track if we've already updated the queue with robot ID
 
         for (int attempt = 1; attempt <= maxAttempts && !cancellationToken.IsCancellationRequested; attempt++)
         {
@@ -772,6 +790,25 @@ public class QueueProcessorService : BackgroundService
                     lastKnownStatus = jobStatus.Status;
                     lastKnownRobotId = jobStatus.RobotId;
 
+                    // Update MissionQueue with robot ID as soon as we detect it (for real-time UI updates)
+                    if (!robotUpdatedInQueue && !string.IsNullOrEmpty(jobStatus.RobotId) && string.IsNullOrEmpty(robotId))
+                    {
+                        _logger.LogInformation("Detected robot assignment from external AMR: {RobotId} for mission {MissionCode}",
+                            jobStatus.RobotId, missionCode);
+
+                        // Update queue record immediately - this triggers SignalR notification for real-time UI
+                        try
+                        {
+                            await queueService.AssignRobotAsync(missionId, jobStatus.RobotId, cancellationToken);
+                            _logger.LogInformation("✓ Updated MissionQueue with robot {RobotId} for real-time UI", jobStatus.RobotId);
+                            robotUpdatedInQueue = true;
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Failed to update queue with robot ID, will retry at completion");
+                        }
+                    }
+
                     // Log every 10 attempts to reduce noise
                     if (attempt % 10 == 0 || attempt == 1)
                     {
@@ -779,8 +816,8 @@ public class QueueProcessorService : BackgroundService
                             attempt, missionCode, jobStatus.Status, GetJobStatusText(jobStatus.Status), jobStatus.RobotId ?? "null");
                     }
 
-                    // Check if completed (status 5, 30, 35)
-                    if (jobStatus.Status == 5 || jobStatus.Status == 30 || jobStatus.Status == 35)
+                    // Check if completed (status 30 = Complete, 35 = ManualComplete)
+                    if (jobStatus.Status == 30 || jobStatus.Status == 35)
                     {
                         return new JobPollResult
                         {
@@ -790,8 +827,8 @@ public class QueueProcessorService : BackgroundService
                         };
                     }
 
-                    // Check if cancelled (status 31, 32)
-                    if (jobStatus.Status == 31 || jobStatus.Status == 32)
+                    // Check if cancelled (status 31)
+                    if (jobStatus.Status == 31)
                     {
                         _logger.LogInformation("Job {MissionCode} was cancelled (status {Status})", missionCode, jobStatus.Status);
                         return new JobPollResult
@@ -803,8 +840,8 @@ public class QueueProcessorService : BackgroundService
                         };
                     }
 
-                    // Check if failed (status 99)
-                    if (jobStatus.Status == 99)
+                    // Check if failed (status 60)
+                    if (jobStatus.Status == 60)
                     {
                         return new JobPollResult
                         {
@@ -940,25 +977,21 @@ public class QueueProcessorService : BackgroundService
 
     /// <summary>
     /// Get human-readable job status text
+    /// Status codes from external AMR API (configured in appsettings.json JobStatusPolling.StatusCodes)
     /// </summary>
     private static string GetJobStatusText(int status)
     {
         return status switch
         {
-            0 => "Pending",
-            2 => "Running",
-            3 => "Paused",
-            4 => "Resuming",
-            5 => "Completed",
             10 => "Created",
             20 => "Executing",
             25 => "Waiting",
             28 => "Cancelling",
             30 => "Complete",
             31 => "Cancelled",
-            32 => "Cancelled (Manual)",  // 32 is also a cancelled status
-            50 => "Waiting",
-            99 => "Failed",
+            35 => "ManualComplete",
+            50 => "Warning",
+            60 => "Failed",
             _ => $"Unknown({status})"
         };
     }

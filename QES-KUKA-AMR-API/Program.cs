@@ -37,6 +37,7 @@ using QES_KUKA_AMR_API.Services.Schedule;
 using QES_KUKA_AMR_API.Services.RobotRealtime;
 using QES_KUKA_AMR_API.Hubs;
 using QES_KUKA_AMR_API.Services.Licensing;
+using QES_KUKA_AMR_API.Services.IoController;
 using QES_KUKA_AMR_API.Middleware;
 using log4net;
 
@@ -258,8 +259,20 @@ builder.Services.AddSingleton<IQueueNotificationService, QueueNotificationServic
 builder.Services.Configure<RobotRealtimePollingOptions>(
     builder.Configuration.GetSection(RobotRealtimePollingOptions.SectionName));
 builder.Services.AddSingleton<ISignalRConnectionTracker, SignalRConnectionTracker>();
+builder.Services.AddSingleton<IMapSubscriptionTracker, MapSubscriptionTracker>();
 builder.Services.AddSingleton<IRobotRealtimeNotificationService, RobotRealtimeNotificationService>();
 builder.Services.AddHostedService<RobotRealtimePollingService>();
+
+// IO Controller Services
+builder.Services.Configure<IoPollingOptions>(
+    builder.Configuration.GetSection(IoPollingOptions.SectionName));
+builder.Services.AddScoped<IModbusTcpService, ModbusTcpService>();
+builder.Services.AddScoped<IIoControllerDeviceService, IoControllerDeviceService>();
+builder.Services.AddScoped<IIoChannelService, IoChannelService>();
+builder.Services.AddScoped<IIoStateLogService, IoStateLogService>();
+builder.Services.AddSingleton<IIoConnectionTracker, IoConnectionTracker>();
+builder.Services.AddSingleton<IIoNotificationService, IoNotificationService>();
+builder.Services.AddHostedService<IoPollingHostedService>();
 
 var app = builder.Build();
 
@@ -338,6 +351,7 @@ app.MapControllers();
 // Map SignalR hubs for real-time updates
 app.MapHub<QueueHub>("/hubs/queue");
 app.MapHub<RobotRealtimeHub>("/hubs/robot-realtime");
+app.MapHub<IoControllerHub>("/hubs/iocontroller");
 
 // Seed database with default admin user
 using (var scope = app.Services.CreateScope())

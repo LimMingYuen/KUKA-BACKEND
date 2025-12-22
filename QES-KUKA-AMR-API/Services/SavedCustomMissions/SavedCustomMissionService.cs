@@ -7,6 +7,7 @@ using QES_KUKA_AMR_API.Data;
 using QES_KUKA_AMR_API.Data.Entities;
 using QES_KUKA_AMR_API.Models.Missions;
 using QES_KUKA_AMR_API.Options;
+using QES_KUKA_AMR_API.Services.Queue;
 
 namespace QES_KUKA_AMR_API.Services.SavedCustomMissions;
 
@@ -28,17 +29,20 @@ public class SavedCustomMissionService : ISavedCustomMissionService
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly MissionServiceOptions _missionOptions;
     private readonly ILogger<SavedCustomMissionService> _logger;
+    private readonly IMissionQueueService _queueService;
 
     public SavedCustomMissionService(
         ApplicationDbContext dbContext,
         IHttpClientFactory httpClientFactory,
         IOptions<MissionServiceOptions> missionOptions,
-        ILogger<SavedCustomMissionService> logger)
+        ILogger<SavedCustomMissionService> logger,
+        IMissionQueueService queueService)
     {
         _dbContext = dbContext;
         _httpClientFactory = httpClientFactory;
         _missionOptions = missionOptions.Value;
         _logger = logger;
+        _queueService = queueService;
     }
 
     public async Task<List<SavedCustomMission>> GetAllAsync(bool includeInactive = false, CancellationToken cancellationToken = default)
@@ -212,7 +216,8 @@ public class SavedCustomMissionService : ISavedCustomMissionService
     }
 
     /// <summary>
-    /// Triggers a saved custom mission by submitting it to the external AMR system
+    /// Triggers a saved custom mission by adding it to the mission queue.
+    /// The QueueProcessorService will handle robot availability checking and submission to AMR.
     /// </summary>
     public async Task<TriggerResult> TriggerAsync(
         int id,
@@ -292,65 +297,50 @@ public class SavedCustomMissionService : ISavedCustomMissionService
             MissionData = missionData
         };
 
-        // Submit to external AMR system
-        if (string.IsNullOrWhiteSpace(_missionOptions.SubmitMissionUrl) ||
-            !Uri.TryCreate(_missionOptions.SubmitMissionUrl, UriKind.Absolute, out var requestUri))
+        // Create queue item instead of direct submission
+        // This ensures proper robot availability checking and queuing
+        var queueItem = new MissionQueue
         {
-            _logger.LogError("Submit mission URL is not configured correctly.");
-            throw new InvalidOperationException("Submit mission URL is not configured.");
-        }
-
-        var httpClient = _httpClientFactory.CreateClient();
-        var apiRequest = new HttpRequestMessage(HttpMethod.Post, requestUri)
-        {
-            Content = JsonContent.Create(submitRequest)
+            MissionCode = missionCode,
+            RequestId = requestId,
+            SavedMissionId = savedMission.Id,
+            MissionName = savedMission.MissionName,
+            MissionRequestJson = JsonSerializer.Serialize(submitRequest),
+            Status = MissionQueueStatus.Queued,
+            Priority = savedMission.Priority,
+            CreatedBy = triggeredBy,
+            RobotTypeFilter = savedMission.RobotType,
+            PreferredRobotIds = savedMission.RobotIds
         };
-
-        // Add custom headers required by real backend
-        apiRequest.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json")
-        {
-            CharSet = "UTF-8"
-        };
-        apiRequest.Headers.Add("language", "en");
-        apiRequest.Headers.Add("accept", "*/*");
-        apiRequest.Headers.Add("wizards", "FRONT_END");
 
         try
         {
-            using var response = await httpClient.SendAsync(apiRequest, cancellationToken);
-            var serviceResponse = await response.Content.ReadFromJsonAsync<SubmitMissionResponse>(cancellationToken: cancellationToken);
+            // Add to queue - QueueProcessorService will handle robot availability and submission
+            var result = await _queueService.AddToQueueAsync(queueItem, cancellationToken);
 
-            if (serviceResponse is null)
-            {
-                _logger.LogError("Mission service returned no content for submit mission. Status: {StatusCode}", response.StatusCode);
-                throw new InvalidOperationException("Failed to retrieve a response from the mission service.");
-            }
-
-            if (!serviceResponse.Success)
-            {
-                _logger.LogWarning("Mission submission failed for saved mission {Id}. Code: {Code}, Message: {Message}",
-                    id, serviceResponse.Code, serviceResponse.Message);
-                throw new SavedCustomMissionSubmissionException($"Mission submission failed: {serviceResponse.Message}");
-            }
-
-            _logger.LogInformation("Successfully triggered saved custom mission {Id} ('{MissionName}'). " +
-                "MissionCode: {MissionCode}, RequestId: {RequestId}",
-                id, savedMission.MissionName, missionCode, requestId);
+            _logger.LogInformation(
+                "Triggered saved custom mission {Id} ('{MissionName}') -> Added to queue with MissionCode: {MissionCode}, QueueId: {QueueId}, Position: {Position}",
+                id, savedMission.MissionName, missionCode, result.Id, result.QueuePosition);
 
             return new TriggerResult
             {
                 Success = true,
                 MissionCode = missionCode,
                 RequestId = requestId,
-                QueueId = null,
-                ExecuteImmediately = true,
-                Message = serviceResponse.Message ?? "Mission submitted successfully"
+                QueueId = result.Id,
+                ExecuteImmediately = false,
+                Message = $"Mission queued at position {result.QueuePosition}. Will execute when robot is available."
             };
         }
-        catch (HttpRequestException httpRequestException)
+        catch (ConcurrencyViolationException ex)
         {
-            _logger.LogError(httpRequestException, "Error while calling mission submit endpoint");
-            throw new SavedCustomMissionSubmissionException("Unable to reach the mission submit endpoint.", httpRequestException);
+            _logger.LogWarning(ex, "Concurrency violation while queuing mission {Id}", id);
+            throw new SavedCustomMissionSubmissionException($"Cannot queue mission: {ex.Message}", ex);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error while adding mission to queue for saved mission {Id}", id);
+            throw new SavedCustomMissionSubmissionException("Failed to add mission to queue.", ex);
         }
     }
 

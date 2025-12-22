@@ -109,8 +109,8 @@ public class WaitingMissionMonitorService : BackgroundService
             return;
         }
 
-        // Check if completed (status 5, 30, 35)
-        if (jobStatus.Status == 5 || jobStatus.Status == 30 || jobStatus.Status == 35)
+        // Check if completed (status 30 = Complete, 35 = ManualComplete)
+        if (jobStatus.Status == 30 || jobStatus.Status == 35)
         {
             _logger.LogInformation("✓ Waiting mission {MissionCode} has completed (status {Status}, robot {RobotId})",
                 mission.MissionCode, jobStatus.Status, jobStatus.RobotId);
@@ -125,8 +125,8 @@ public class WaitingMissionMonitorService : BackgroundService
             // Also update the MissionQueue if it exists
             await UpdateMissionQueueStatusAsync(dbContext, mission.MissionCode, Data.Entities.MissionQueueStatus.Completed, cancellationToken);
         }
-        // Check if cancelled (status 31, 32)
-        else if (jobStatus.Status == 31 || jobStatus.Status == 32)
+        // Check if cancelled (status 31)
+        else if (jobStatus.Status == 31)
         {
             _logger.LogInformation("⊘ Waiting mission {MissionCode} was cancelled (status {Status})",
                 mission.MissionCode, jobStatus.Status);
@@ -140,8 +140,8 @@ public class WaitingMissionMonitorService : BackgroundService
 
             await UpdateMissionQueueStatusAsync(dbContext, mission.MissionCode, Data.Entities.MissionQueueStatus.Cancelled, cancellationToken);
         }
-        // Check if failed (status 99)
-        else if (jobStatus.Status == 99)
+        // Check if failed (status 60)
+        else if (jobStatus.Status == 60)
         {
             _logger.LogWarning("✗ Waiting mission {MissionCode} failed (status {Status})",
                 mission.MissionCode, jobStatus.Status);

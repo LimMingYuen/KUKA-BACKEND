@@ -622,12 +622,17 @@ public class RobotAnalyticsService : IRobotAnalyticsService
 
         try
         {
+            // Convert UTC to Malaysia local time before sending to external API
+            // External KUKA API expects timestamps in Malaysia local time (UTC+8)
+            var startTimeMalaysia = TimeZoneInfo.ConvertTimeFromUtc(periodStartUtc, MalaysiaTimeZone);
+            var endTimeMalaysia = TimeZoneInfo.ConvertTimeFromUtc(periodEndUtc, MalaysiaTimeZone);
+
             // Format dates as required by the API (yyyy-MM-dd HH:mm:ss)
-            var startTimeStr = periodStartUtc.ToString("yyyy-MM-dd HH:mm:ss");
-            var endTimeStr = periodEndUtc.ToString("yyyy-MM-dd HH:mm:ss");
+            var startTimeStr = startTimeMalaysia.ToString("yyyy-MM-dd HH:mm:ss");
+            var endTimeStr = endTimeMalaysia.ToString("yyyy-MM-dd HH:mm:ss");
 
             _logger.LogInformation(
-                "Fetching charging sessions for robot {RobotId} from {Start} to {End}",
+                "Fetching charging sessions for robot {RobotId} from {Start} to {End} (Malaysia time)",
                 robotId, startTimeStr, endTimeStr);
 
             // Query for manualCharging missions
