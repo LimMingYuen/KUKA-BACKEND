@@ -39,6 +39,13 @@ public class UpdateIoDeviceRequest
     [MaxLength(100)]
     public string DeviceName { get; set; } = string.Empty;
 
+    [MaxLength(45)]
+    public string? IpAddress { get; set; }
+
+    public int? Port { get; set; }
+
+    public byte? UnitId { get; set; }
+
     [MaxLength(500)]
     public string? Description { get; set; }
 

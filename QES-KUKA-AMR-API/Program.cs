@@ -38,6 +38,9 @@ using QES_KUKA_AMR_API.Services.RobotRealtime;
 using QES_KUKA_AMR_API.Hubs;
 using QES_KUKA_AMR_API.Services.Licensing;
 using QES_KUKA_AMR_API.Services.IoController;
+using QES_KUKA_AMR_API.Services.Email;
+using QES_KUKA_AMR_API.Services.EmailRecipients;
+using QES_KUKA_AMR_API.Services.ErrorNotification;
 using QES_KUKA_AMR_API.Middleware;
 using log4net;
 
@@ -266,6 +269,7 @@ builder.Services.AddHostedService<RobotRealtimePollingService>();
 // IO Controller Services
 builder.Services.Configure<IoPollingOptions>(
     builder.Configuration.GetSection(IoPollingOptions.SectionName));
+builder.Services.AddSingleton<IModbusConnectionManager, ModbusConnectionManager>(); // Singleton - manages persistent connections
 builder.Services.AddScoped<IModbusTcpService, ModbusTcpService>();
 builder.Services.AddScoped<IIoControllerDeviceService, IoControllerDeviceService>();
 builder.Services.AddScoped<IIoChannelService, IoChannelService>();
@@ -273,6 +277,16 @@ builder.Services.AddScoped<IIoStateLogService, IoStateLogService>();
 builder.Services.AddSingleton<IIoConnectionTracker, IoConnectionTracker>();
 builder.Services.AddSingleton<IIoNotificationService, IoNotificationService>();
 builder.Services.AddHostedService<IoPollingHostedService>();
+
+// Email Notification Services
+builder.Services.Configure<SmtpOptions>(
+    builder.Configuration.GetSection(SmtpOptions.SectionName));
+builder.Services.Configure<ErrorNotificationOptions>(
+    builder.Configuration.GetSection(ErrorNotificationOptions.SectionName));
+builder.Services.AddScoped<IEmailService, SmtpEmailService>();
+builder.Services.AddScoped<IEmailRecipientService, EmailRecipientService>();
+builder.Services.AddSingleton<IErrorNotificationRateLimiter, ErrorNotificationRateLimiter>();
+builder.Services.AddScoped<IErrorNotificationService, ErrorNotificationService>();
 
 var app = builder.Build();
 

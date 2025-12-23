@@ -74,6 +74,8 @@ public class ApplicationDbContext : DbContext
 
     public DbSet<IoStateLog> IoStateLogs => Set<IoStateLog>();
 
+    public DbSet<EmailRecipient> EmailRecipients => Set<EmailRecipient>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -461,6 +463,26 @@ public class ApplicationDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(e => e.DeviceId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Email Recipients entity
+        modelBuilder.Entity<EmailRecipient>(entity =>
+        {
+            entity.ToTable("EmailRecipients");
+            // Unique index on email address
+            entity.HasIndex(e => e.EmailAddress).IsUnique();
+            // Index for filtering active recipients
+            entity.HasIndex(e => e.IsActive);
+            // String length constraints
+            entity.Property(e => e.EmailAddress).HasMaxLength(255).IsRequired();
+            entity.Property(e => e.DisplayName).HasMaxLength(128).IsRequired();
+            entity.Property(e => e.Description).HasMaxLength(512);
+            entity.Property(e => e.NotificationTypes).HasMaxLength(512).IsRequired();
+            entity.Property(e => e.CreatedBy).HasMaxLength(128);
+            entity.Property(e => e.UpdatedBy).HasMaxLength(128);
+            // DateTime columns
+            entity.Property(e => e.CreatedUtc).HasColumnType("datetime2");
+            entity.Property(e => e.UpdatedUtc).HasColumnType("datetime2");
         });
 
     }

@@ -6,6 +6,7 @@ namespace QES_KUKA_AMR_API.Services.IoController;
 
 /// <summary>
 /// Implementation of Modbus TCP communication for ADAM-6052 and compatible devices.
+/// Uses persistent connections via ModbusConnectionManager for improved stability.
 ///
 /// ADAM-6052 Modbus Register Mapping:
 /// - Digital Inputs (DI 0-7): Coil addresses 1-8 (0-based: 0-7)
@@ -16,6 +17,7 @@ namespace QES_KUKA_AMR_API.Services.IoController;
 public class ModbusTcpService : IModbusTcpService
 {
     private readonly ILogger<ModbusTcpService> _logger;
+    private readonly IModbusConnectionManager _connectionManager;
     private readonly IModbusFactory _modbusFactory;
 
     // ADAM-6052 register addresses (0-based for NModbus)
@@ -24,121 +26,223 @@ public class ModbusTcpService : IModbusTcpService
     private const ushort DoStartAddress = 16;   // DO 0-7 at coils 17-24 (0-based: 16-23)
     private const ushort DoCount = 8;
 
-    // ADAM-6052 FSV and WDT holding register addresses (approximate - may need adjustment)
-    // These addresses are based on ADAM-6052 Modbus mapping documentation
-    private const ushort FsvEnableRegister = 40101;  // FSV enable bits
-    private const ushort FsvValueRegister = 40102;   // FSV value bits
-    private const ushort WdtEnableRegister = 40501;  // WDT enable
-    private const ushort WdtTimeoutRegister = 40502; // WDT timeout value
+    // Default timeout if not specified
+    private const int DefaultTimeoutMs = 3000;
 
-    public ModbusTcpService(ILogger<ModbusTcpService> logger)
+    public ModbusTcpService(
+        ILogger<ModbusTcpService> logger,
+        IModbusConnectionManager connectionManager)
     {
         _logger = logger;
+        _connectionManager = connectionManager;
         _modbusFactory = new ModbusFactory();
     }
 
     public async Task<IoReadResult> ReadDigitalInputsAsync(string ipAddress, int port, byte unitId, CancellationToken ct = default)
     {
+        return await ReadDigitalInputsAsync(ipAddress, port, unitId, DefaultTimeoutMs, ct);
+    }
+
+    public async Task<IoReadResult> ReadDigitalInputsAsync(string ipAddress, int port, byte unitId, int timeoutMs, CancellationToken ct = default)
+    {
+        var sw = Stopwatch.StartNew();
+        var deviceKey = $"{ipAddress}:{port}";
+
+        _logger.LogDebug("[Modbus:DI] Starting read from {Device} Unit {UnitId}", deviceKey, unitId);
+
         try
         {
-            using var client = new TcpClient();
-            await client.ConnectAsync(ipAddress, port, ct);
+            // Get device ID from connection (using hash as a simple identifier)
+            var deviceId = GetDeviceId(ipAddress, port);
 
-            var master = _modbusFactory.CreateMaster(client);
-            master.Transport.ReadTimeout = 3000;
-            master.Transport.WriteTimeout = 3000;
+            var master = await _connectionManager.GetConnectionAsync(deviceId, ipAddress, port, unitId, timeoutMs, ct);
+            if (master == null)
+            {
+                sw.Stop();
+                _logger.LogError("[Modbus:DI] Failed to get connection for {Device} after {ElapsedMs}ms", deviceKey, sw.ElapsedMilliseconds);
+                return IoReadResult.Failure($"Failed to connect to {deviceKey}");
+            }
 
-            // Read DI coils (ADAM-6052: addresses 1-8, 0-based: 0-7)
-            var coils = await master.ReadCoilsAsync(unitId, DiStartAddress, DiCount);
+            _logger.LogDebug("[Modbus:DI] Connection acquired for {Device}, reading coils at address {Address} count {Count}...",
+                deviceKey, DiStartAddress, DiCount);
 
-            _logger.LogDebug("Read DI from {IpAddress}:{Port} Unit {UnitId}: {States}",
-                ipAddress, port, unitId, string.Join(",", coils.Select(c => c ? "1" : "0")));
+            bool[] coils;
+            try
+            {
+                coils = await master.ReadCoilsAsync(unitId, DiStartAddress, DiCount);
+            }
+            catch (Exception readEx)
+            {
+                sw.Stop();
+                _logger.LogError(readEx, "[Modbus:DI] Read operation failed for {Device} after {ElapsedMs}ms - invalidating connection",
+                    deviceKey, sw.ElapsedMilliseconds);
+
+                // Invalidate the connection so it will be recreated on next attempt
+                _connectionManager.InvalidateConnection(deviceId);
+
+                return IoReadResult.Failure($"Read failed: {readEx.Message}");
+            }
+
+            sw.Stop();
+            var statesStr = string.Join(",", coils.Select(c => c ? "1" : "0"));
+
+            _logger.LogDebug("[Modbus:DI] Read successful from {Device} in {ElapsedMs}ms: [{States}]",
+                deviceKey, sw.ElapsedMilliseconds, statesStr);
 
             return IoReadResult.Ok(coils);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to read DI from {IpAddress}:{Port} Unit {UnitId}", ipAddress, port, unitId);
+            sw.Stop();
+            _logger.LogError(ex, "[Modbus:DI] Unexpected error reading from {Device} after {ElapsedMs}ms",
+                deviceKey, sw.ElapsedMilliseconds);
             return IoReadResult.Failure($"Failed to read digital inputs: {ex.Message}");
         }
     }
 
     public async Task<IoReadResult> ReadDigitalOutputsAsync(string ipAddress, int port, byte unitId, CancellationToken ct = default)
     {
+        return await ReadDigitalOutputsAsync(ipAddress, port, unitId, DefaultTimeoutMs, ct);
+    }
+
+    public async Task<IoReadResult> ReadDigitalOutputsAsync(string ipAddress, int port, byte unitId, int timeoutMs, CancellationToken ct = default)
+    {
+        var sw = Stopwatch.StartNew();
+        var deviceKey = $"{ipAddress}:{port}";
+
+        _logger.LogDebug("[Modbus:DO] Starting read from {Device} Unit {UnitId}", deviceKey, unitId);
+
         try
         {
-            using var client = new TcpClient();
-            await client.ConnectAsync(ipAddress, port, ct);
+            var deviceId = GetDeviceId(ipAddress, port);
 
-            var master = _modbusFactory.CreateMaster(client);
-            master.Transport.ReadTimeout = 3000;
-            master.Transport.WriteTimeout = 3000;
+            var master = await _connectionManager.GetConnectionAsync(deviceId, ipAddress, port, unitId, timeoutMs, ct);
+            if (master == null)
+            {
+                sw.Stop();
+                _logger.LogError("[Modbus:DO] Failed to get connection for {Device} after {ElapsedMs}ms", deviceKey, sw.ElapsedMilliseconds);
+                return IoReadResult.Failure($"Failed to connect to {deviceKey}");
+            }
 
-            // Read DO coils (ADAM-6052: addresses 17-24, 0-based: 16-23)
-            var coils = await master.ReadCoilsAsync(unitId, DoStartAddress, DoCount);
+            _logger.LogDebug("[Modbus:DO] Connection acquired for {Device}, reading coils at address {Address} count {Count}...",
+                deviceKey, DoStartAddress, DoCount);
 
-            _logger.LogDebug("Read DO from {IpAddress}:{Port} Unit {UnitId}: {States}",
-                ipAddress, port, unitId, string.Join(",", coils.Select(c => c ? "1" : "0")));
+            bool[] coils;
+            try
+            {
+                coils = await master.ReadCoilsAsync(unitId, DoStartAddress, DoCount);
+            }
+            catch (Exception readEx)
+            {
+                sw.Stop();
+                _logger.LogError(readEx, "[Modbus:DO] Read operation failed for {Device} after {ElapsedMs}ms - invalidating connection",
+                    deviceKey, sw.ElapsedMilliseconds);
+
+                _connectionManager.InvalidateConnection(deviceId);
+
+                return IoReadResult.Failure($"Read failed: {readEx.Message}");
+            }
+
+            sw.Stop();
+            var statesStr = string.Join(",", coils.Select(c => c ? "1" : "0"));
+
+            _logger.LogDebug("[Modbus:DO] Read successful from {Device} in {ElapsedMs}ms: [{States}]",
+                deviceKey, sw.ElapsedMilliseconds, statesStr);
 
             return IoReadResult.Ok(coils);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to read DO from {IpAddress}:{Port} Unit {UnitId}", ipAddress, port, unitId);
+            sw.Stop();
+            _logger.LogError(ex, "[Modbus:DO] Unexpected error reading from {Device} after {ElapsedMs}ms",
+                deviceKey, sw.ElapsedMilliseconds);
             return IoReadResult.Failure($"Failed to read digital outputs: {ex.Message}");
         }
     }
 
     public async Task<IoWriteResult> WriteDigitalOutputAsync(string ipAddress, int port, byte unitId, int channel, bool value, CancellationToken ct = default)
     {
+        return await WriteDigitalOutputAsync(ipAddress, port, unitId, channel, value, DefaultTimeoutMs, ct);
+    }
+
+    public async Task<IoWriteResult> WriteDigitalOutputAsync(string ipAddress, int port, byte unitId, int channel, bool value, int timeoutMs, CancellationToken ct = default)
+    {
         if (channel < 0 || channel > 7)
         {
+            _logger.LogError("[Modbus:Write] Invalid channel number: {Channel}. Must be 0-7.", channel);
             return IoWriteResult.Failure($"Invalid channel number: {channel}. Must be 0-7.");
         }
 
+        var sw = Stopwatch.StartNew();
+        var deviceKey = $"{ipAddress}:{port}";
+
+        _logger.LogInformation("[Modbus:Write] Writing DO{Channel}={Value} to {Device} Unit {UnitId}",
+            channel, value ? "ON" : "OFF", deviceKey, unitId);
+
         try
         {
-            using var client = new TcpClient();
-            await client.ConnectAsync(ipAddress, port, ct);
+            var deviceId = GetDeviceId(ipAddress, port);
 
-            var master = _modbusFactory.CreateMaster(client);
-            master.Transport.ReadTimeout = 3000;
-            master.Transport.WriteTimeout = 3000;
+            var master = await _connectionManager.GetConnectionAsync(deviceId, ipAddress, port, unitId, timeoutMs, ct);
+            if (master == null)
+            {
+                sw.Stop();
+                _logger.LogError("[Modbus:Write] Failed to get connection for {Device} after {ElapsedMs}ms", deviceKey, sw.ElapsedMilliseconds);
+                return IoWriteResult.Failure($"Failed to connect to {deviceKey}");
+            }
 
-            // Write single coil (ADAM-6052 DO: 0-based address 16 + channel)
             ushort coilAddress = (ushort)(DoStartAddress + channel);
-            await master.WriteSingleCoilAsync(unitId, coilAddress, value);
 
-            _logger.LogInformation("Wrote DO{Channel}={Value} to {IpAddress}:{Port} Unit {UnitId}",
-                channel, value ? "ON" : "OFF", ipAddress, port, unitId);
+            _logger.LogDebug("[Modbus:Write] Writing to coil address {Address} value {Value}...", coilAddress, value);
+
+            try
+            {
+                await master.WriteSingleCoilAsync(unitId, coilAddress, value);
+            }
+            catch (Exception writeEx)
+            {
+                sw.Stop();
+                _logger.LogError(writeEx, "[Modbus:Write] Write operation failed for {Device} DO{Channel} after {ElapsedMs}ms - invalidating connection",
+                    deviceKey, channel, sw.ElapsedMilliseconds);
+
+                _connectionManager.InvalidateConnection(deviceId);
+
+                return IoWriteResult.Failure($"Write failed: {writeEx.Message}");
+            }
+
+            sw.Stop();
+            _logger.LogInformation("[Modbus:Write] Successfully wrote DO{Channel}={Value} to {Device} in {ElapsedMs}ms",
+                channel, value ? "ON" : "OFF", deviceKey, sw.ElapsedMilliseconds);
 
             return IoWriteResult.Ok();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to write DO{Channel} to {IpAddress}:{Port} Unit {UnitId}",
-                channel, ipAddress, port, unitId);
+            sw.Stop();
+            _logger.LogError(ex, "[Modbus:Write] Unexpected error writing to {Device} DO{Channel} after {ElapsedMs}ms",
+                deviceKey, channel, sw.ElapsedMilliseconds);
             return IoWriteResult.Failure($"Failed to write digital output: {ex.Message}");
         }
     }
 
     public async Task<IoFsvResult> ReadFsvSettingsAsync(string ipAddress, int port, byte unitId, CancellationToken ct = default)
     {
+        var deviceKey = $"{ipAddress}:{port}";
+
         try
         {
-            using var client = new TcpClient();
-            await client.ConnectAsync(ipAddress, port, ct);
+            var deviceId = GetDeviceId(ipAddress, port);
 
-            var master = _modbusFactory.CreateMaster(client);
-            master.Transport.ReadTimeout = 3000;
-            master.Transport.WriteTimeout = 3000;
+            var master = await _connectionManager.GetConnectionAsync(deviceId, ipAddress, port, unitId, DefaultTimeoutMs, ct);
+            if (master == null)
+            {
+                _logger.LogError("[Modbus:FSV] Failed to get connection for {Device}", deviceKey);
+                return IoFsvResult.Failure($"Failed to connect to {deviceKey}");
+            }
 
             // Note: FSV register addresses are ADAM-6052 specific
             // These may need adjustment based on actual device documentation
-            // For now, returning default values since FSV registers vary by device
-
-            _logger.LogWarning("FSV read not fully implemented - returning default values for {IpAddress}:{Port}",
-                ipAddress, port);
+            _logger.LogWarning("[Modbus:FSV] FSV read not fully implemented - returning default values for {Device}", deviceKey);
 
             // Return default FSV settings (all disabled, all LOW)
             var enabled = new bool[8];
@@ -148,7 +252,7 @@ public class ModbusTcpService : IModbusTcpService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to read FSV from {IpAddress}:{Port} Unit {UnitId}", ipAddress, port, unitId);
+            _logger.LogError(ex, "[Modbus:FSV] Failed to read FSV from {Device} Unit {UnitId}", deviceKey, unitId);
             return IoFsvResult.Failure($"Failed to read FSV settings: {ex.Message}");
         }
     }
@@ -160,65 +264,64 @@ public class ModbusTcpService : IModbusTcpService
             return IoWriteResult.Failure($"Invalid channel number: {channel}. Must be 0-7.");
         }
 
+        var deviceKey = $"{ipAddress}:{port}";
+
         try
         {
             // Note: FSV register addresses are ADAM-6052 specific
-            // Implementation depends on actual device Modbus mapping
-
-            _logger.LogWarning("FSV write not fully implemented for {IpAddress}:{Port} Channel {Channel}",
-                ipAddress, port, channel);
+            _logger.LogWarning("[Modbus:FSV] FSV write not fully implemented for {Device} Channel {Channel}", deviceKey, channel);
 
             // Placeholder - actual implementation requires device-specific register mapping
             return IoWriteResult.Ok();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to write FSV for channel {Channel} to {IpAddress}:{Port}",
-                channel, ipAddress, port);
+            _logger.LogError(ex, "[Modbus:FSV] Failed to write FSV for channel {Channel} to {Device}", channel, deviceKey);
             return IoWriteResult.Failure($"Failed to write FSV setting: {ex.Message}");
         }
     }
 
     public async Task<IoWdtResult> ReadWdtSettingsAsync(string ipAddress, int port, byte unitId, CancellationToken ct = default)
     {
+        var deviceKey = $"{ipAddress}:{port}";
+
         try
         {
-            using var client = new TcpClient();
-            await client.ConnectAsync(ipAddress, port, ct);
+            var deviceId = GetDeviceId(ipAddress, port);
 
-            var master = _modbusFactory.CreateMaster(client);
-            master.Transport.ReadTimeout = 3000;
-            master.Transport.WriteTimeout = 3000;
+            var master = await _connectionManager.GetConnectionAsync(deviceId, ipAddress, port, unitId, DefaultTimeoutMs, ct);
+            if (master == null)
+            {
+                _logger.LogError("[Modbus:WDT] Failed to get connection for {Device}", deviceKey);
+                return IoWdtResult.Failure($"Failed to connect to {deviceKey}");
+            }
 
             // Note: WDT register addresses are ADAM-6052 specific
-            // Implementation depends on actual device Modbus mapping
-
-            _logger.LogWarning("WDT read not fully implemented - returning default values for {IpAddress}:{Port}",
-                ipAddress, port);
+            _logger.LogWarning("[Modbus:WDT] WDT read not fully implemented - returning default values for {Device}", deviceKey);
 
             return IoWdtResult.Ok(false, 30); // Default: disabled, 30 seconds
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to read WDT from {IpAddress}:{Port} Unit {UnitId}", ipAddress, port, unitId);
+            _logger.LogError(ex, "[Modbus:WDT] Failed to read WDT from {Device} Unit {UnitId}", deviceKey, unitId);
             return IoWdtResult.Failure($"Failed to read WDT settings: {ex.Message}");
         }
     }
 
     public async Task<IoWriteResult> WriteWdtSettingsAsync(string ipAddress, int port, byte unitId, WdtSettings settings, CancellationToken ct = default)
     {
+        var deviceKey = $"{ipAddress}:{port}";
+
         try
         {
             // Note: WDT register addresses are ADAM-6052 specific
-            // Implementation depends on actual device Modbus mapping
-
-            _logger.LogWarning("WDT write not fully implemented for {IpAddress}:{Port}", ipAddress, port);
+            _logger.LogWarning("[Modbus:WDT] WDT write not fully implemented for {Device}", deviceKey);
 
             return IoWriteResult.Ok();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to write WDT to {IpAddress}:{Port}", ipAddress, port);
+            _logger.LogError(ex, "[Modbus:WDT] Failed to write WDT to {Device}", deviceKey);
             return IoWriteResult.Failure($"Failed to write WDT settings: {ex.Message}");
         }
     }
@@ -226,28 +329,45 @@ public class ModbusTcpService : IModbusTcpService
     public async Task<IoConnectionResult> TestConnectionAsync(string ipAddress, int port, byte unitId, int timeoutMs, CancellationToken ct = default)
     {
         var sw = Stopwatch.StartNew();
+        var deviceKey = $"{ipAddress}:{port}";
+
+        _logger.LogInformation("[Modbus:Test] Testing connection to {Device} Unit {UnitId} (Timeout: {Timeout}ms)...",
+            deviceKey, unitId, timeoutMs);
 
         try
         {
-            using var client = new TcpClient();
+            var deviceId = GetDeviceId(ipAddress, port);
 
-            // Set connection timeout
-            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            cts.CancelAfter(timeoutMs);
+            // Force a fresh connection for the test by invalidating any existing one
+            _connectionManager.InvalidateConnection(deviceId);
 
-            await client.ConnectAsync(ipAddress, port, cts.Token);
+            var master = await _connectionManager.GetConnectionAsync(deviceId, ipAddress, port, unitId, timeoutMs, ct);
+            if (master == null)
+            {
+                sw.Stop();
+                var message = $"Connection failed after {sw.ElapsedMilliseconds}ms";
+                _logger.LogError("[Modbus:Test] Connection test FAILED for {Device}: {Message}", deviceKey, message);
+                return IoConnectionResult.Failed(message);
+            }
 
-            var master = _modbusFactory.CreateMaster(client);
-            master.Transport.ReadTimeout = timeoutMs;
-            master.Transport.WriteTimeout = timeoutMs;
+            // Verify with a test read
+            _logger.LogDebug("[Modbus:Test] Connection established, performing test read...");
 
-            // Test by reading DI coils
-            await master.ReadCoilsAsync(unitId, DiStartAddress, DiCount);
+            try
+            {
+                await master.ReadCoilsAsync(unitId, DiStartAddress, DiCount);
+            }
+            catch (Exception readEx)
+            {
+                sw.Stop();
+                _logger.LogError(readEx, "[Modbus:Test] Test read failed for {Device} after {ElapsedMs}ms", deviceKey, sw.ElapsedMilliseconds);
+                _connectionManager.InvalidateConnection(deviceId);
+                return IoConnectionResult.Failed($"Test read failed: {readEx.Message}");
+            }
 
             sw.Stop();
-
-            _logger.LogInformation("Connection test successful to {IpAddress}:{Port} Unit {UnitId} in {Ms}ms",
-                ipAddress, port, unitId, sw.ElapsedMilliseconds);
+            _logger.LogInformation("[Modbus:Test] Connection test SUCCESSFUL for {Device} Unit {UnitId} in {ElapsedMs}ms",
+                deviceKey, unitId, sw.ElapsedMilliseconds);
 
             return IoConnectionResult.Connected((int)sw.ElapsedMilliseconds);
         }
@@ -255,14 +375,22 @@ public class ModbusTcpService : IModbusTcpService
         {
             sw.Stop();
             var message = $"Connection timeout after {timeoutMs}ms";
-            _logger.LogWarning("Connection test timeout to {IpAddress}:{Port} Unit {UnitId}", ipAddress, port, unitId);
+            _logger.LogWarning("[Modbus:Test] Connection test TIMEOUT for {Device}: {Message}", deviceKey, message);
             return IoConnectionResult.Failed(message);
         }
         catch (Exception ex)
         {
             sw.Stop();
-            _logger.LogError(ex, "Connection test failed to {IpAddress}:{Port} Unit {UnitId}", ipAddress, port, unitId);
+            _logger.LogError(ex, "[Modbus:Test] Connection test FAILED for {Device} after {ElapsedMs}ms", deviceKey, sw.ElapsedMilliseconds);
             return IoConnectionResult.Failed($"Connection failed: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Generate a consistent device ID from IP and port.
+    /// </summary>
+    private static int GetDeviceId(string ipAddress, int port)
+    {
+        return HashCode.Combine(ipAddress.ToLowerInvariant(), port);
     }
 }

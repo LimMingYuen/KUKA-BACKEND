@@ -9,10 +9,11 @@ using System.Text.Json;
 namespace QES_KUKA_AMR_API.Services.Queue;
 
 /// <summary>
-/// Background service that monitors missions with "WaitingForRobot" status.
-/// These are missions that were submitted to the external AMR system but are waiting
-/// for a robot to become available. This service periodically checks their status
-/// and updates MissionHistory when they complete.
+/// Background service that monitors missions with "WaitingForRobot" or "Executing" status.
+/// These are missions that were submitted to the external AMR system but either:
+/// - Are waiting for a robot to become available (WaitingForRobot)
+/// - Are actively running but polling period ended (Executing)
+/// This service periodically checks their status and updates MissionHistory when they complete.
 /// </summary>
 public class WaitingMissionMonitorService : BackgroundService
 {
@@ -30,7 +31,7 @@ public class WaitingMissionMonitorService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("WaitingMissionMonitorService started - monitoring missions waiting for robot assignment");
+        _logger.LogInformation("WaitingMissionMonitorService started - monitoring missions with WaitingForRobot or Executing status");
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -57,7 +58,7 @@ public class WaitingMissionMonitorService : BackgroundService
     }
 
     /// <summary>
-    /// Check all missions with WaitingForRobot status and update their status
+    /// Check all missions with WaitingForRobot or Executing status and update their status
     /// </summary>
     private async Task CheckWaitingMissionsAsync(CancellationToken cancellationToken)
     {
@@ -66,17 +67,18 @@ public class WaitingMissionMonitorService : BackgroundService
         var httpClientFactory = scope.ServiceProvider.GetRequiredService<IHttpClientFactory>();
         var missionOptions = scope.ServiceProvider.GetRequiredService<IOptions<MissionServiceOptions>>().Value;
 
-        // Find all missions with WaitingForRobot status
+        // Find all missions with WaitingForRobot or Executing status
+        var monitoredStatuses = new[] { "WaitingForRobot", "Executing" };
         var waitingMissions = await dbContext.MissionHistories
-            .Where(m => m.Status == "WaitingForRobot")
+            .Where(m => monitoredStatuses.Contains(m.Status))
             .ToListAsync(cancellationToken);
 
         if (waitingMissions.Count == 0)
         {
-            return; // No waiting missions to check
+            return; // No missions to monitor
         }
 
-        _logger.LogDebug("Checking {Count} mission(s) waiting for robot assignment", waitingMissions.Count);
+        _logger.LogDebug("Checking {Count} mission(s) in progress (WaitingForRobot or Executing)", waitingMissions.Count);
 
         foreach (var mission in waitingMissions)
         {
@@ -86,13 +88,13 @@ public class WaitingMissionMonitorService : BackgroundService
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Error checking waiting mission {MissionCode}", mission.MissionCode);
+                _logger.LogWarning(ex, "Error checking mission {MissionCode}", mission.MissionCode);
             }
         }
     }
 
     /// <summary>
-    /// Check a single waiting mission and update its status if it has changed
+    /// Check a single in-progress mission and update its status if it has changed
     /// </summary>
     private async Task CheckAndUpdateMissionAsync(
         ApplicationDbContext dbContext,
@@ -105,14 +107,14 @@ public class WaitingMissionMonitorService : BackgroundService
 
         if (jobStatus == null)
         {
-            _logger.LogDebug("No status returned for waiting mission {MissionCode}", mission.MissionCode);
+            _logger.LogDebug("No status returned for mission {MissionCode}", mission.MissionCode);
             return;
         }
 
         // Check if completed (status 30 = Complete, 35 = ManualComplete)
         if (jobStatus.Status == 30 || jobStatus.Status == 35)
         {
-            _logger.LogInformation("✓ Waiting mission {MissionCode} has completed (status {Status}, robot {RobotId})",
+            _logger.LogInformation("✓ Mission {MissionCode} has completed (status {Status}, robot {RobotId})",
                 mission.MissionCode, jobStatus.Status, jobStatus.RobotId);
 
             mission.Status = "Completed";
@@ -128,7 +130,7 @@ public class WaitingMissionMonitorService : BackgroundService
         // Check if cancelled (status 31)
         else if (jobStatus.Status == 31)
         {
-            _logger.LogInformation("⊘ Waiting mission {MissionCode} was cancelled (status {Status})",
+            _logger.LogInformation("⊘ Mission {MissionCode} was cancelled (status {Status})",
                 mission.MissionCode, jobStatus.Status);
 
             mission.Status = "Cancelled";
@@ -143,7 +145,7 @@ public class WaitingMissionMonitorService : BackgroundService
         // Check if failed (status 60)
         else if (jobStatus.Status == 60)
         {
-            _logger.LogWarning("✗ Waiting mission {MissionCode} failed (status {Status})",
+            _logger.LogWarning("✗ Mission {MissionCode} failed (status {Status})",
                 mission.MissionCode, jobStatus.Status);
 
             mission.Status = "Failed";
@@ -155,10 +157,10 @@ public class WaitingMissionMonitorService : BackgroundService
 
             await UpdateMissionQueueStatusAsync(dbContext, mission.MissionCode, Data.Entities.MissionQueueStatus.Failed, cancellationToken);
         }
-        // Check if robot has been assigned (status 20 with robotId)
-        else if (jobStatus.Status == 20 && !string.IsNullOrEmpty(jobStatus.RobotId))
+        // Check if robot has been assigned (status 20 with robotId) - update from WaitingForRobot to Executing
+        else if (jobStatus.Status == 20 && !string.IsNullOrEmpty(jobStatus.RobotId) && mission.Status == "WaitingForRobot")
         {
-            _logger.LogInformation("→ Waiting mission {MissionCode} now executing on robot {RobotId}",
+            _logger.LogInformation("→ Mission {MissionCode} now executing on robot {RobotId}",
                 mission.MissionCode, jobStatus.RobotId);
 
             // Update status to show it's now executing (not just waiting)

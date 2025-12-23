@@ -87,8 +87,19 @@ public class IoControllerDeviceService : IIoControllerDeviceService
         existing.UpdatedUtc = _timeProvider.GetUtcNow().UtcDateTime;
         existing.UpdatedBy = username;
 
-        // Note: IP, Port, and UnitId are not updated after creation
-        // to prevent breaking channel associations
+        // Update connection properties if provided
+        if (!string.IsNullOrEmpty(device.IpAddress))
+        {
+            existing.IpAddress = device.IpAddress;
+        }
+        if (device.Port > 0)
+        {
+            existing.Port = device.Port;
+        }
+        if (device.UnitId > 0)
+        {
+            existing.UnitId = device.UnitId;
+        }
 
         await _dbContext.SaveChangesAsync(ct);
 

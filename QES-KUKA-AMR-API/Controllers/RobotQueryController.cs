@@ -1,5 +1,6 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -8,6 +9,7 @@ using QES_KUKA_AMR_API.Models;
 using QES_KUKA_AMR_API.Models.Missions;
 using QES_KUKA_AMR_API.Options;
 using QES_KUKA_AMR_API.Services.Auth;
+using QES_KUKA_AMR_API.Services.ErrorNotification;
 
 namespace QES_KUKA_AMR_API.Controllers;
 
@@ -20,17 +22,20 @@ public class RobotQueryController : ControllerBase
     private readonly ILogger<RobotQueryController> _logger;
     private readonly AmrServiceOptions _amrOptions;
     private readonly IExternalApiTokenService _externalApiTokenService;
+    private readonly IErrorNotificationService _errorNotificationService;
 
     public RobotQueryController(
         IHttpClientFactory httpClientFactory,
         ILogger<RobotQueryController> logger,
         IOptions<AmrServiceOptions> amrOptions,
-        IExternalApiTokenService externalApiTokenService)
+        IExternalApiTokenService externalApiTokenService,
+        IErrorNotificationService errorNotificationService)
     {
         _httpClientFactory = httpClientFactory;
         _logger = logger;
         _amrOptions = amrOptions.Value;
         _externalApiTokenService = externalApiTokenService;
+        _errorNotificationService = errorNotificationService;
     }
 
     [HttpPost]
@@ -186,6 +191,29 @@ public class RobotQueryController : ControllerBase
                 "Error while calling robot query endpoint at {Url}",
                 _amrOptions.RobotQueryUrl);
 
+            // Fire-and-forget email notification
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await _errorNotificationService.NotifyRobotQueryErrorAsync(new RobotQueryErrorContext
+                    {
+                        RobotId = request.RobotId,
+                        MapCode = request.MapCode,
+                        RequestUrl = _amrOptions.RobotQueryUrl ?? "N/A",
+                        RequestBody = JsonSerializer.Serialize(request, new JsonSerializerOptions { WriteIndented = true }),
+                        ErrorMessage = httpRequestException.Message,
+                        StackTrace = httpRequestException.StackTrace,
+                        ErrorType = "HttpRequestException",
+                        OccurredUtc = DateTime.UtcNow
+                    });
+                }
+                catch (Exception notifyEx)
+                {
+                    _logger.LogError(notifyEx, "Failed to send robot query error notification");
+                }
+            });
+
             return StatusCode(StatusCodes.Status502BadGateway, new RobotQueryResponse
             {
                 Code = "AMR_SERVICE_HTTP_ERROR",
@@ -196,6 +224,29 @@ public class RobotQueryController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unexpected error while querying robot position");
+
+            // Fire-and-forget email notification
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await _errorNotificationService.NotifyRobotQueryErrorAsync(new RobotQueryErrorContext
+                    {
+                        RobotId = request.RobotId,
+                        MapCode = request.MapCode,
+                        RequestUrl = _amrOptions.RobotQueryUrl ?? "N/A",
+                        RequestBody = JsonSerializer.Serialize(request, new JsonSerializerOptions { WriteIndented = true }),
+                        ErrorMessage = ex.Message,
+                        StackTrace = ex.StackTrace,
+                        ErrorType = ex.GetType().Name,
+                        OccurredUtc = DateTime.UtcNow
+                    });
+                }
+                catch (Exception notifyEx)
+                {
+                    _logger.LogError(notifyEx, "Failed to send robot query error notification");
+                }
+            });
 
             return StatusCode(StatusCodes.Status500InternalServerError, new RobotQueryResponse
             {

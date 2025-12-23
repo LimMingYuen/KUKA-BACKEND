@@ -15,6 +15,7 @@ using QES_KUKA_AMR_API.Models.Jobs;
 using QES_KUKA_AMR_API.Options;
 using QES_KUKA_AMR_API.Services;
 using QES_KUKA_AMR_API.Services.Auth;
+using QES_KUKA_AMR_API.Services.ErrorNotification;
 using QES_KUKA_AMR_API.Services.SavedCustomMissions;
 
 namespace QES_KUKA_AMR_API.Controllers;
@@ -30,6 +31,7 @@ public class MissionsController : ControllerBase
     private readonly ISavedCustomMissionService _savedCustomMissionService;
     private readonly IExternalApiTokenService _externalApiTokenService;
     private readonly ApplicationDbContext _dbContext;
+    private readonly IErrorNotificationService _errorNotificationService;
 
     public MissionsController(
         IHttpClientFactory httpClientFactory,
@@ -37,7 +39,8 @@ public class MissionsController : ControllerBase
         IOptions<MissionServiceOptions> missionOptions,
         ISavedCustomMissionService savedCustomMissionService,
         IExternalApiTokenService externalApiTokenService,
-        ApplicationDbContext dbContext)
+        ApplicationDbContext dbContext,
+        IErrorNotificationService errorNotificationService)
     {
         _httpClientFactory = httpClientFactory;
         _logger = logger;
@@ -45,6 +48,7 @@ public class MissionsController : ControllerBase
         _savedCustomMissionService = savedCustomMissionService;
         _externalApiTokenService = externalApiTokenService;
         _dbContext = dbContext;
+        _errorNotificationService = errorNotificationService;
     }
 
     [HttpPost("save-as-template")]
@@ -251,6 +255,25 @@ public class MissionsController : ControllerBase
         catch (HttpRequestException ex)
         {
             _logger.LogError(ex, "HTTP error submitting mission {MissionCode} to AMR", request.MissionCode);
+
+            // Fire-and-forget email notification
+            _ = Task.Run(async () =>
+            {
+                await _errorNotificationService.NotifyMissionSubmitErrorAsync(new MissionErrorContext
+                {
+                    MissionCode = request.MissionCode ?? "N/A",
+                    TemplateCode = request.TemplateCode,
+                    RequestUrl = _missionOptions.SubmitMissionUrl ?? "N/A",
+                    RequestBody = JsonSerializer.Serialize(request, new JsonSerializerOptions { WriteIndented = true }),
+                    ResponseBody = null,
+                    HttpStatusCode = null,
+                    ErrorMessage = ex.Message,
+                    StackTrace = ex.StackTrace,
+                    ErrorType = "HttpRequestException",
+                    OccurredUtc = DateTime.UtcNow
+                });
+            });
+
             return StatusCode(StatusCodes.Status502BadGateway, new SubmitMissionResponse
             {
                 Success = false,
@@ -261,6 +284,25 @@ public class MissionsController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error submitting mission {MissionCode}", request.MissionCode);
+
+            // Fire-and-forget email notification
+            _ = Task.Run(async () =>
+            {
+                await _errorNotificationService.NotifyMissionSubmitErrorAsync(new MissionErrorContext
+                {
+                    MissionCode = request.MissionCode ?? "N/A",
+                    TemplateCode = request.TemplateCode,
+                    RequestUrl = _missionOptions.SubmitMissionUrl ?? "N/A",
+                    RequestBody = JsonSerializer.Serialize(request, new JsonSerializerOptions { WriteIndented = true }),
+                    ResponseBody = null,
+                    HttpStatusCode = null,
+                    ErrorMessage = ex.Message,
+                    StackTrace = ex.StackTrace,
+                    ErrorType = ex.GetType().Name,
+                    OccurredUtc = DateTime.UtcNow
+                });
+            });
+
             return StatusCode(StatusCodes.Status500InternalServerError, new SubmitMissionResponse
             {
                 Success = false,
@@ -515,6 +557,23 @@ public class MissionsController : ControllerBase
                 httpRequestException,
                 "Error while calling mission job query endpoint at {BaseAddress}",
                 httpClient.BaseAddress);
+
+            // Fire-and-forget email notification
+            _ = Task.Run(async () =>
+            {
+                await _errorNotificationService.NotifyJobQueryErrorAsync(new JobQueryErrorContext
+                {
+                    JobCode = request.JobCode,
+                    RequestUrl = _missionOptions.JobQueryUrl ?? "N/A",
+                    RequestBody = JsonSerializer.Serialize(request, new JsonSerializerOptions { WriteIndented = true }),
+                    ResponseBody = null,
+                    HttpStatusCode = null,
+                    ErrorMessage = httpRequestException.Message,
+                    StackTrace = httpRequestException.StackTrace,
+                    ErrorType = "HttpRequestException",
+                    OccurredUtc = DateTime.UtcNow
+                });
+            });
 
             return StatusCode(StatusCodes.Status502BadGateway, new JobQueryResponse
             {

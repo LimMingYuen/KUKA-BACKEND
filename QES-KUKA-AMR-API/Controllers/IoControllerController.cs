@@ -104,6 +104,9 @@ public class IoControllerController : ControllerBase
         var device = new IoControllerDevice
         {
             DeviceName = request.DeviceName,
+            IpAddress = request.IpAddress ?? string.Empty,
+            Port = request.Port ?? 502,
+            UnitId = request.UnitId ?? 1,
             Description = request.Description,
             IsActive = request.IsActive,
             PollingIntervalMs = request.PollingIntervalMs,

@@ -533,19 +533,18 @@ public class QueueProcessorService : BackgroundService
                     // Note: The WaitingMissionMonitorService will periodically check these missions
                     // and update their status when they complete
                 }
-                else if (jobResult.IsTimeout)
+                else if (jobResult.IsExecuting)
                 {
-                    _logger.LogWarning("⏱ Mission {MissionCode} polling timeout - marking as failed",
-                        mission.MissionCode);
-                    await queueService.UpdateStatusAsync(
-                        mission.Id,
-                        MissionQueueStatus.Failed,
-                        "Job status polling timeout - mission may still be running in external system",
-                        cancellationToken);
+                    _logger.LogInformation("🤖 Mission {MissionCode} is executing on robot {RobotId} - transitioning to background monitoring",
+                        mission.MissionCode, jobResult.JobData?.RobotId ?? selectedRobotId);
 
-                    // Update MissionHistory to Timeout
-                    await UpdateMissionHistoryStatusAsync(dbContext, missionHistory.Id, "Timeout",
-                        selectedRobotId, "Polling timeout", cancellationToken);
+                    // Keep queue status as Assigned - the mission is actively running
+                    // Update MissionHistory to Executing status (not an error)
+                    await UpdateMissionHistoryStatusAsync(dbContext, missionHistory.Id, "Executing",
+                        jobResult.JobData?.RobotId ?? selectedRobotId, null, cancellationToken);
+
+                    // Note: The WaitingMissionMonitorService will periodically check these missions
+                    // and update their status when they complete
                 }
             }
             else
@@ -878,23 +877,34 @@ public class QueueProcessorService : BackgroundService
             }
         }
 
-        // If we timed out but the last known status indicates waiting for robot, treat as WaitingForRobot
-        if (lastKnownStatus.HasValue && IsWaitingForRobotStatus(lastKnownStatus.Value, lastKnownRobotId))
+        // Polling period ended - transition to background monitoring based on robot assignment status
+        if (!string.IsNullOrEmpty(lastKnownRobotId))
         {
+            // Robot is assigned and executing - this is normal for long-running workflows
             _logger.LogInformation(
-                "Job {MissionCode} polling ended while waiting for robot (status {Status}, robotId=null). " +
+                "Job {MissionCode} polling period ended while executing (status {Status}, robot {RobotId}). " +
                 "Will be monitored by WaitingMissionMonitorService.",
-                missionCode, lastKnownStatus.Value);
+                missionCode, lastKnownStatus?.ToString() ?? "unknown", lastKnownRobotId);
+            return new JobPollResult
+            {
+                IsExecuting = true,
+                FinalStatus = lastKnownStatus ?? 0,
+                JobData = new JobDto { RobotId = lastKnownRobotId, Status = lastKnownStatus ?? 0 }
+            };
+        }
+        else
+        {
+            // No robot assigned yet - waiting for robot availability
+            _logger.LogInformation(
+                "Job {MissionCode} polling period ended while waiting for robot (status {Status}). " +
+                "Will be monitored by WaitingMissionMonitorService.",
+                missionCode, lastKnownStatus?.ToString() ?? "unknown");
             return new JobPollResult
             {
                 IsWaitingForRobot = true,
-                FinalStatus = lastKnownStatus.Value
+                FinalStatus = lastKnownStatus ?? 0
             };
         }
-
-        _logger.LogWarning("Job status polling timeout for {MissionCode} after {MaxAttempts} attempts (last status: {LastStatus}, robotId: {RobotId})",
-            missionCode, maxAttempts, lastKnownStatus?.ToString() ?? "unknown", lastKnownRobotId ?? "null");
-        return new JobPollResult { IsTimeout = true };
     }
 
     /// <summary>
@@ -1017,12 +1027,16 @@ public class JobPollResult
     public bool IsCompleted { get; set; }
     public bool IsCancelled { get; set; }
     public bool IsFailed { get; set; }
-    public bool IsTimeout { get; set; }
     /// <summary>
     /// True if the job is waiting for a robot to be assigned in the external AMR system.
     /// This is not an error - the mission is queued and will execute when a robot becomes available.
     /// </summary>
     public bool IsWaitingForRobot { get; set; }
+    /// <summary>
+    /// True if the job has a robot assigned and is actively executing, but polling period ended.
+    /// This is not an error - the mission is running and will be monitored by background service.
+    /// </summary>
+    public bool IsExecuting { get; set; }
     public int FinalStatus { get; set; }
     public string? ErrorMessage { get; set; }
     public JobDto? JobData { get; set; }

@@ -137,15 +137,44 @@ public class IoPollingHostedService : BackgroundService
         IIoControllerDeviceService deviceService,
         CancellationToken ct)
     {
+        var pollStart = DateTime.UtcNow;
+
+        _logger.LogDebug("[Polling] Starting poll for device {DeviceName} (ID: {DeviceId}, {IpAddress}:{Port}, UnitId: {UnitId})",
+            device.DeviceName, device.Id, device.IpAddress, device.Port, device.UnitId);
+
         try
         {
             // Read Digital Inputs
+            _logger.LogDebug("[Polling] Reading DI from {DeviceName}...", device.DeviceName);
             var diResult = await modbusService.ReadDigitalInputsAsync(
                 device.IpAddress, device.Port, device.UnitId, ct);
 
+            if (!diResult.Success)
+            {
+                _logger.LogWarning("[Polling] DI read FAILED for {DeviceName}: {Error}",
+                    device.DeviceName, diResult.ErrorMessage);
+            }
+            else
+            {
+                _logger.LogDebug("[Polling] DI read OK for {DeviceName}: [{States}]",
+                    device.DeviceName, string.Join(",", diResult.ChannelStates.Select(s => s ? "1" : "0")));
+            }
+
             // Read Digital Outputs
+            _logger.LogDebug("[Polling] Reading DO from {DeviceName}...", device.DeviceName);
             var doResult = await modbusService.ReadDigitalOutputsAsync(
                 device.IpAddress, device.Port, device.UnitId, ct);
+
+            if (!doResult.Success)
+            {
+                _logger.LogWarning("[Polling] DO read FAILED for {DeviceName}: {Error}",
+                    device.DeviceName, doResult.ErrorMessage);
+            }
+            else
+            {
+                _logger.LogDebug("[Polling] DO read OK for {DeviceName}: [{States}]",
+                    device.DeviceName, string.Join(",", doResult.ChannelStates.Select(s => s ? "1" : "0")));
+            }
 
             bool connectionSuccess = diResult.Success && doResult.Success;
             string? errorMessage = !connectionSuccess
@@ -154,6 +183,8 @@ public class IoPollingHostedService : BackgroundService
 
             // Update device connection status
             await deviceService.UpdatePollingStatusAsync(device.Id, connectionSuccess, errorMessage, ct);
+
+            var elapsed = (DateTime.UtcNow - pollStart).TotalMilliseconds;
 
             if (connectionSuccess)
             {
@@ -165,11 +196,21 @@ public class IoPollingHostedService : BackgroundService
                 var doChanges = await channelService.UpdateChannelStatesAsync(
                     device.Id, IoChannelType.DigitalOutput, doResult.ChannelStates, ct);
 
+                var totalChanges = diChanges.Count + doChanges.Count;
+                if (totalChanges > 0)
+                {
+                    _logger.LogInformation("[Polling] Device {DeviceName} has {Changes} channel changes (DI: {DiChanges}, DO: {DoChanges})",
+                        device.DeviceName, totalChanges, diChanges.Count, doChanges.Count);
+                }
+
                 // Broadcast changes if any
                 foreach (var channel in diChanges.Concat(doChanges))
                 {
                     await _notificationService.BroadcastChannelChangeAsync(device.Id, channel, ct);
                 }
+
+                _logger.LogDebug("[Polling] Poll completed for {DeviceName} in {ElapsedMs}ms - SUCCESS",
+                    device.DeviceName, elapsed);
             }
             else
             {
@@ -177,14 +218,15 @@ public class IoPollingHostedService : BackgroundService
                 await _notificationService.BroadcastConnectionStatusAsync(
                     device.Id, false, errorMessage, ct);
 
-                _logger.LogWarning("Failed to poll device {DeviceName} ({IpAddress}:{Port}): {Error}",
-                    device.DeviceName, device.IpAddress, device.Port, errorMessage);
+                _logger.LogWarning("[Polling] Poll completed for {DeviceName} in {ElapsedMs}ms - FAILED: {Error}",
+                    device.DeviceName, elapsed, errorMessage);
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error polling device {DeviceName} ({IpAddress}:{Port})",
-                device.DeviceName, device.IpAddress, device.Port);
+            var elapsed = (DateTime.UtcNow - pollStart).TotalMilliseconds;
+            _logger.LogError(ex, "[Polling] Poll EXCEPTION for device {DeviceName} ({IpAddress}:{Port}) after {ElapsedMs}ms: {Message}",
+                device.DeviceName, device.IpAddress, device.Port, elapsed, ex.Message);
 
             // Update device with error status
             await deviceService.UpdatePollingStatusAsync(device.Id, false, ex.Message, ct);
